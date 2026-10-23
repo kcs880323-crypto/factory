@@ -18,6 +18,59 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 
 > **`/plugin install …` 슬래시 명령은 원격(클라우드) 세션 등에서 "`/plugin` isn't available in this environment"로 거부될 수 있습니다.** 같은 일을 하는 터미널 명령 `claude plugin install …`은 동작하며, `install.sh`는 이 터미널 명령을 씁니다.
 
+### 윈도우 PC에서 설치하기 (내 PC의 Claude Code)
+
+`install.sh`는 bash 스크립트라서 **Git Bash**(Git for Windows에 포함) 또는 **WSL**에서 실행합니다. Claude Code 공식 문서 기준으로 윈도우에서는 Git for Windows가 있으면 Claude Code가 명령을 Git Bash로 실행하고, 없으면 PowerShell로 실행합니다. Git for Windows는 필수는 아니지만 이 스크립트를 쓰려면 필요합니다.
+
+**1) 준비물** (필요한 도구만)
+
+| 도구 | 용도 | 받는 곳 |
+|---|---|---|
+| Claude Code | 자비스 본체 | PowerShell: `irm https://claude.ai/install.ps1 \| iex` 또는 `winget install Anthropic.ClaudeCode` (설치 후 새 터미널에서 `claude --version`) |
+| Git for Windows | 저장소 받기, Git Bash | git-scm.com/downloads/win |
+| Node.js 22.20 이상 | 파트 A (npx, npm) | nodejs.org |
+| Python 3.10 이상 | PPT Master | python.org |
+| uv | PowerPoint MCP | docs.astral.sh/uv 의 Windows 설치 항목 |
+| GitHub CLI | `/code-review` | cli.github.com |
+
+**2) 저장소 받기 — 반드시 `core.autocrlf=false`로** (Git Bash에서)
+
+```bash
+git clone -c core.autocrlf=false https://github.com/kcs880323-crypto/factory ~/tools/factory
+```
+
+윈도우의 git은 기본값으로 줄바꿈을 CRLF로 바꿔 받습니다. CRLF 상태의 `install.sh`는 bash에서 `set: pipefail: invalid option name`으로 **시작하자마자 실패**합니다. 이 저장소에는 `.gitattributes`가 있어 이 문제를 막지만, 이미 CRLF로 받았다면 Git Bash에서 한 번 고치세요.
+
+```bash
+sed -i 's/\r$//' ~/tools/factory/jarvis-skills/install.sh
+```
+
+**3) 설치 실행** (Git Bash, 스킬을 쓸 프로젝트 폴더에서)
+
+```bash
+cd /c/Users/<내 이름>/<프로젝트 폴더>
+PPT_PYTHON=python bash ~/tools/factory/jarvis-skills/install.sh --global --with-upstream --with-ppt --with-official-plugins
+```
+
+- `bash`를 앞에 붙여 실행합니다. 윈도우에서는 실행 권한 비트가 무의미합니다.
+- `PPT_PYTHON=python`: 윈도우에는 `python3` 명령이 없거나 Microsoft Store 바로가기일 수 있어 보통 `python`을 씁니다.
+- `--global`은 `C:\Users\<이름>\.claude`에 설치합니다. 어느 폴더에서 Claude Code를 열어도 적용됩니다.
+- 전체 설치하면 GSD와 superpowers가 둘 다 켜져 충돌하므로 하나는 끄세요 (4-2 참고): `claude plugin disable superpowers@claude-plugins-official`
+- 끝나면 Claude Code를 완전히 종료했다가 다시 켭니다.
+
+**자비스에게 맡기려면:** Git for Windows를 설치한 상태에서 Claude Code를 열고 5장의 프롬프트를 붙여넣되, 설치 명령 줄을 위 3)의 명령(`PPT_PYTHON=python bash …`)으로 바꿔 전달하세요.
+
+**Git for Windows 없이 PowerShell만 쓰는 경우:** `install.sh`를 쓸 수 없으므로 2-2, 3-3, 4-3의 수동 명령을 한 줄씩 실행합니다. `npx`, `npm`, `claude plugin …` 명령은 그대로 쓰면 되지만, bash 문법인 PPT Master의 경로 찾기(3-3의 2번)는 PowerShell에서 이렇게 바꿉니다.
+
+```powershell
+$req = Get-ChildItem "$env:USERPROFILE\.claude\plugins\cache\ppt-master\ppt-master\*\ppt-master\requirements.txt" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+python -m pip install -r $req.FullName
+```
+
+**WSL을 쓰는 경우:** WSL 안에서 Claude Code를 설치하면(`curl -fsSL https://claude.ai/install.sh | bash`) 위 파트 A~C의 Linux 절차를 그대로 따릅니다. 이 스크립트가 시험된 환경과 같습니다.
+
+> **윈도우에서는 시험하지 못했습니다.** CRLF 문제는 Linux에서 같은 상태를 흉내 내 재현했고(실패 확인, `\r` 제거 후 정상), 나머지 윈도우 절차는 공식 문서와 일반적인 동작에 근거한 안내입니다. 첫 실행에서 막히면 그 출력을 그대로 알려 주세요.
+
 ---
 
 ## 1. 이 패키지에 들어 있는 것
