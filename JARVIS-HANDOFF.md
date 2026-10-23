@@ -1,9 +1,10 @@
-# 자비스 인수인계: Claude Code 스킬 15종 (필수 5종 + PPT 도구 5종 + 공식 플러그인 5종)
+# 자비스 인수인계: Claude Code 스킬 16종 (필수 5종 + PPT 도구 5종 + 공식 플러그인 5종 + Agent Reach)
 
 > 출처 1: 게으른 빌더(lazyowen.com) 「클로드 코드에 무조건 깔아야 하는 스킬 5개」 (2026-08-13 갱신, PDF 11쪽)
 > 출처 2: 써매(@ssumae.ai) 「PPT 늘 밤티라면 — 클로드로 발표용 장표 만드는 도구 5개」 (2026-10-21 공개, Notion)
 > 출처 3: 사용자가 전달한 공식 마켓(`claude-plugins-official`) 플러그인 설치 명령 5개
-> 목적: 위 자료의 도구 15개를 자비스가 설치·검증하고 바로 쓸 수 있도록 정리한 패키지입니다.
+> 출처 4: 사용자가 전달한 Agent Reach (github.com/Panniantong/Agent-Reach) 저장소와 설치 문서
+> 목적: 위 자료의 도구 16개를 자비스가 설치·검증하고 바로 쓸 수 있도록 정리한 패키지입니다.
 
 ## 0. 한 줄 요약
 
@@ -14,7 +15,9 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 
 설치가 끝나면 **Claude Code를 완전히 종료했다가 다시 켜세요.** 재시작 전에는 새 스킬, 플러그인, MCP 서버, `/gsd-` 명령을 인식하지 못합니다.
 
-필요한 것만 골라 붙이세요: 필수 5종은 `--with-upstream`, PPT 도구는 `--with-ppt`, 공식 플러그인은 `--with-official-plugins`. 옵션 없이 실행하면 안내 스킬 15개만 복사합니다.
+필요한 것만 골라 붙이세요: 필수 5종은 `--with-upstream`, PPT 도구는 `--with-ppt`, 공식 플러그인은 `--with-official-plugins`. 옵션 없이 실행하면 안내 스킬 16개만 복사합니다.
+
+**Agent Reach(`--with-agent-reach`)는 위 한 줄에 일부러 넣지 않았습니다.** 계정 전체에 설치되고 로그인 복사와 관련된 주의점이 있어서, 5장(파트 D)을 읽고 따로 선택하세요.
 
 > **`/plugin install …` 슬래시 명령은 원격(클라우드) 세션 등에서 "`/plugin` isn't available in this environment"로 거부될 수 있습니다.** 같은 일을 하는 터미널 명령 `claude plugin install …`은 동작하며, `install.sh`는 이 터미널 명령을 씁니다.
 
@@ -58,7 +61,7 @@ PPT_PYTHON=python bash ~/tools/factory/jarvis-skills/install.sh --global --with-
 - 전체 설치하면 GSD와 superpowers가 둘 다 켜져 충돌하므로 하나는 끄세요 (4-2 참고): `claude plugin disable superpowers@claude-plugins-official`
 - 끝나면 Claude Code를 완전히 종료했다가 다시 켭니다.
 
-**자비스에게 맡기려면:** Git for Windows를 설치한 상태에서 Claude Code를 열고 5장의 프롬프트를 붙여넣되, 설치 명령 줄을 위 3)의 명령(`PPT_PYTHON=python bash …`)으로 바꿔 전달하세요.
+**자비스에게 맡기려면:** Git for Windows를 설치한 상태에서 Claude Code를 열고 6장의 프롬프트를 붙여넣되, 설치 명령 줄을 위 3)의 명령(`PPT_PYTHON=python bash …`)으로 바꿔 전달하세요.
 
 **Git for Windows 없이 PowerShell만 쓰는 경우:** `install.sh`를 쓸 수 없으므로 2-2, 3-3, 4-3의 수동 명령을 한 줄씩 실행합니다. `npx`, `npm`, `claude plugin …` 명령은 그대로 쓰면 되지만, bash 문법인 PPT Master의 경로 찾기(3-3의 2번)는 PowerShell에서 이렇게 바꿉니다.
 
@@ -95,7 +98,8 @@ jarvis-skills.zip
         ├── jarvis-superpowers/SKILL.md          │ 파트 C: 공식 플러그인 5종
         ├── jarvis-code-review/SKILL.md          │
         ├── jarvis-context7/SKILL.md             │
-        └── jarvis-code-simplifier/SKILL.md      ┘
+        ├── jarvis-code-simplifier/SKILL.md      ┘
+        └── jarvis-agent-reach/SKILL.md          ← 파트 D: Agent Reach (선택)
 ```
 
 ### 꼭 알아 둘 점: 두 종류가 있습니다
@@ -132,12 +136,13 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 
 | 옵션 | 동작 |
 |---|---|
-| (없음) | `jarvis-*` 15개만 `.claude/skills`에 복사 |
+| (없음) | `jarvis-*` 16개만 `.claude/skills`에 복사 |
 | `--global` | 계정 전체(`~/.claude`)에 설치 |
 | `--with-upstream` | + 공식 원본 4개와 GSD 설치 (네트워크 필요) |
 | `--with-browser` | + `agent-browser` 명령줄 도구와 자동화용 크롬 설치 (전역 npm 설치) |
 | `--with-ppt` | + 파트 B의 PPT 도구 설치 (3장 참고) |
 | `--with-official-plugins` | + 파트 C의 공식 마켓 플러그인 5종 설치 (4장 참고) |
+| `--with-agent-reach` | + 파트 D의 Agent Reach 설치 (5장 참고). uv 필요, 계정 전체에 설치 |
 
 스크립트의 약속:
 - 이미 있는 폴더·파일은 **덮어쓰지 않고 건너뜁니다.**
@@ -439,7 +444,64 @@ code-simplifier 에이전트로 방금 수정한 <파일/함수>만 정리해 �
 
 ---
 
-## 5. 자비스에게 그대로 붙여넣을 프롬프트
+## 5. 파트 D — Agent Reach (선택)
+
+내장 검색으로 못 읽는 곳(X/Twitter, Reddit, YouTube·Bilibili 자막, Xiaohongshu, V2EX, 쉐추 시세, LinkedIn·BOSS 채용, GitHub 이슈)을 `agent-reach` 명령 하나로 읽게 해 주는 오픈소스(MIT) 도구입니다. 만든 사람은 개인(Panniantong)이며, README는 중국어, 영문 문서는 `docs/README_en.md`입니다.
+
+> **한국어 README는 찾지 못했습니다.** 전달받은 주소(`docs/README_ko.md`)가 확인 시점에 404였고(3가지 경로 모두), `github.com` 웹 페이지는 시험 환경에서 접속이 막혀 있었습니다. 없는 문서를 요약한 척하지 않고, 영문 문서와 설치되는 스킬 본문을 기준으로 정리했습니다.
+
+### 5-1. 다른 도구와 다른 점 — 설치 전에 사용자에게 알릴 것
+
+| 항목 | 내용 |
+|---|---|
+| **계정 전체 설치** | `~/.agent-reach/`에 도구가 생기고, 스킬이 `~/.agents/skills/agent-reach/`에 설치되며, **`~/.claude`가 있으면 `~/.claude/skills/agent-reach`에 링크**가 만들어집니다(윈도우에서 링크가 안 되면 복사). `--local`로 실행해도 마찬가지입니다. |
+| **제3자 코드 실행** | 개인이 만든 프로젝트의 코드를 내 PC에서 실행합니다. 공식 문서는 `releases/latest`(바뀔 수 있는 파일)를 설치하라고 하는데, 이 패키지는 **같은 릴리스 파일을 v1.6.0으로 고정**했습니다(시험 시점에 두 주소가 같은 파일임을 확인). `agent-reach update`는 최신으로 올립니다. |
+| **이름이 같은 가짜 주의** | PyPI의 `agent-reach`는 이 프로젝트가 **아닙니다.** 공식 문서가 직접 경고합니다. `pip install agent-reach`를 쓰지 마세요. |
+| **로그인 복사** | 로그인이 필요한 채널은 전용 브라우저를 쓰는데, 문서마다 설명이 모순됩니다. 가장 구체적인 문서(`sessions.md`와 설치되는 스킬)는 **"Chrome에 OpenCLI 확장이 연결되어 있으면 처음 쓰는 사이트의 로그인(그 사이트 쿠키만)을 복사"**라고 하고, README는 "처음 쓸 때 Chrome 로그인을 복사"라고만 하며, 문제 해결 문서는 "개인 Chrome 세션은 절대 가져오지 않는다"고 합니다. **복사될 수 있다고 보고** 다루세요. 복사되는 것은 보통 주 계정이고, 프로젝트도 "플랫폼이 자동 접근 계정을 제한할 수 있으니 **부계정**을 권장"합니다. |
+| **외부 서비스** | README에 따르면 웹 페이지는 Jina Reader, 그다음 Exa 순으로 읽습니다. 읽으려는 URL이 이 제3자 서비스로 전송될 수 있습니다. |
+| **"읽기 전용"** | 게시·댓글·좋아요·DM을 하지 않는다는 것은 프로젝트의 설명이며 직접 검증하지 못했습니다. |
+| **채널 등급** | 기본(GitHub, YouTube, Bilibili, V2EX, 웹)은 로그인 없이 쓰고, 선택(Xiaohongshu, Xueqiu, BOSS, Reddit, LinkedIn 등)은 `agent-reach add`로 추가하며 대부분 로그인이 필요하고, **실험(Twitter/X, Facebook, Instagram)은 플랫폼 차단이 심해 언제든 안 될 수 있습니다.** |
+
+### 5-2. 설치
+
+**방법 A. 스크립트** — uv가 필요합니다.
+
+```bash
+bash ~/tools/factory/jarvis-skills/install.sh --with-agent-reach
+```
+
+스크립트는 **기본 채널만** 준비하고, 로그인과 선택 채널은 하지 않습니다. uv가 없으면 실패로 보고하고 **원격 설치 스크립트(`curl … | sh`, `irm … | iex`)를 자동으로 실행하지 않습니다.** uv는 공식 설치 안내(docs.astral.sh/uv)를 보고 직접 설치하세요.
+
+**방법 B. 수동 명령**
+
+```bash
+uv tool install https://github.com/Panniantong/Agent-Reach/releases/download/v1.6.0/agent-reach.zip
+agent-reach setup
+```
+
+- `agent-reach: command not found`면 `uv tool update-shell` 후 새 터미널을 엽니다.
+- 설치 후 Claude Code를 완전히 종료했다가 다시 켭니다.
+
+### 5-3. 확인과 사용
+
+```bash
+agent-reach version            # {"ok": true, "result": {"version": "1.6.0", ...}}
+agent-reach doctor --text      # 채널별 상태 (오프라인)
+agent-reach channels           # 채널별 동작과 사용법
+agent-reach read <링크>         # 링크로 채널 자동 선택
+```
+
+Claude Code에서는 "이 링크 내용 읽어 줘", "Bilibili에서 ○○ 검색해 줘"처럼 말하면 됩니다. 공개 내용은 내장 도구가 먼저 읽고, 부족할 때만 Reach를 씁니다.
+
+### 5-4. 지켜야 할 것 (스킬에 규칙으로 들어 있음)
+- **로그인, 선택 채널 추가, OpenCLI 확장 연결, 로그인 가져오기는 사용자가 명시적으로 요청·동의했을 때만** 합니다. 플랫폼 이름이나 링크만으로 설치·로그인하지 않습니다.
+- 차단·제한(`RATE_LIMITED`, `PLATFORM_BLOCKED`, `NEED_LOGIN`, `BUSY`)이 나오면 **멈춥니다.** 계정이나 백엔드를 바꿔 계속 요청하지 않습니다.
+- 쿠키·토큰·비밀번호와 `~/.agent-reach/` 안의 세션 파일을 읽거나 출력하지 않습니다. 키는 사용자가 자기 터미널에서 직접 입력합니다.
+- 완전 제거는 지울 목록을 먼저 보여 주고 사용자가 확인한 뒤에 합니다.
+
+---
+
+## 6. 자비스에게 그대로 붙여넣을 프롬프트
 
 **파트 A (필수 5종)** — PDF의 「설치부터 검증까지 AI에게 맡기기」 프롬프트를 이 패키지 기준으로 정리한 것입니다.
 
@@ -490,9 +552,25 @@ code-simplifier 에이전트로 방금 수정한 <파일/함수>만 정리해 �
 검증: 위 4번이 통과해야 합니다. 하나라도 실패하면 완료로 보고하지 말고 실패한 명령어와 원인, 다음 조치를 알려 주세요.
 ```
 
+**파트 D (Agent Reach, 선택)**
+
+```text
+역할: Agent Reach(github.com/Panniantong/Agent-Reach)의 설치와 검증을 맡는 담당
+맥락: Agent Reach는 계정 전체에 설치되고, 로그인이 필요한 채널에서는 내 Chrome의 로그인을 복사해 쓸 수 있습니다. 이 위험을 사용자에게 설명하고 동의를 받은 뒤에만 설치합니다. 이번에는 기본 채널(GitHub, YouTube, Bilibili, V2EX, 웹)만 설치하고 로그인과 선택 채널은 하지 않습니다.
+작업: 아래 단계를 순서대로 진행하세요.
+1. 설명과 동의: ① 계정 전체 설치(~/.agent-reach, ~/.claude/skills 링크) ② 개인이 만든 제3자 코드 실행 ③ 웹 읽기가 Jina Reader/Exa 같은 외부 서비스를 거침 ④ 로그인 복사 가능성을 사용자에게 설명하고 설치 동의를 받으세요.
+2. 확인: `agent-reach version`을 실행해 이미 설치되어 있는지 확인하세요(JSON이고 ok가 true면 설치됨). `uv --version`도 확인하세요. uv가 없으면 여기서 멈추고 알려 주세요. 원격 설치 스크립트(curl | sh, irm | iex)는 실행하지 마세요.
+3. 설치: 압축 해제한 jarvis-skills 폴더에서 `bash install.sh --with-agent-reach`를 실행하세요. PyPI의 agent-reach는 이 프로젝트가 아니므로 pip install agent-reach는 절대 실행하지 마세요.
+4. 검증: 스크립트가 출력하는 `OK   Agent Reach 실행됨`과 `OK   Agent Reach 스킬 설치됨`을 확인하고, `agent-reach doctor --text` 결과를 보여 주세요.
+5. Claude Code를 완전히 종료했다가 다시 켜야 한다고 안내하세요.
+제약: 로그인(`agent-reach login`), 선택 채널 추가(`agent-reach add`), Chrome 확장 연결, `--import-existing`은 실행하지 마세요. 쿠키·토큰·비밀번호와 ~/.agent-reach 안의 세션 파일은 읽거나 출력하지 마세요. 기존 파일과 설정을 덮어쓰거나 지우지 마세요.
+출력: 실행한 명령어 목록, 설치된 버전, 남은 오류를 정리해 주세요.
+검증: 위 4번이 통과해야 합니다. 하나라도 실패하면 완료로 보고하지 말고 실패한 명령어와 원인, 다음 조치를 알려 주세요.
+```
+
 ---
 
-## 6. 지켜야 할 규칙
+## 7. 지켜야 할 규칙
 
 1. 이미 설치된 것은 다시 설치하지 않습니다. 기존 파일·설정을 덮어쓰거나 지우지 않습니다.
 2. `.env` 같은 비밀키 파일은 읽지도 출력하지도 않습니다. 스크린샷에도 비밀값이 찍히지 않게 합니다.
@@ -508,10 +586,13 @@ code-simplifier 에이전트로 방금 수정한 <파일/함수>만 정리해 �
 12. **외부 서비스(context7 등)로 보내는 질문에는 비공개 코드, 비밀값, 개인정보를 넣지 않습니다.**
 13. 작업 방식을 바꾸는 플러그인(superpowers)은 사용자에게 설명하고 동의를 받은 뒤 설치합니다. GSD와 같은 프로젝트에서 동시에 켜지 않습니다.
 14. 코드를 직접 고치는 도구(code-simplifier)는 정리 전후 테스트를 돌리고 diff를 검토한 뒤 보고합니다.
+15. **내 로그인 세션을 쓰는 도구(Agent Reach)는 로그인, 선택 채널 추가, 브라우저 확장 연결을 사용자가 명시적으로 동의했을 때만** 합니다. 쿠키·토큰·세션 파일은 읽거나 출력하지 않습니다.
+16. **플랫폼의 차단·제한 신호(`RATE_LIMITED`, `PLATFORM_BLOCKED` 등)는 우회하지 않습니다.** 계정이나 방식을 바꿔 재시도하지 않고 멈춘 뒤 사용자에게 알립니다.
+17. 설치 문서가 "원격 스크립트를 셸에 바로 넘기는 명령"(`curl … | sh`, `irm … | iex`)이나 "최신 파일 설치"를 안내하더라도, 자동으로 실행하지 않고 사용자에게 알린 뒤 승인받습니다. 이름이 비슷한 패키지(PyPI의 `agent-reach`)는 설치하지 않습니다.
 
 ---
 
-## 7. 자주 막히는 곳
+## 8. 자주 막히는 곳
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
@@ -533,16 +614,21 @@ code-simplifier 에이전트로 방금 수정한 <파일/함수>만 정리해 �
 | `Plugin "…" not found in marketplace "claude-plugins-official"` | 공식 마켓이 내려받아져 있지 않음 | `claude plugin marketplace add anthropics/claude-plugins-official` 후 다시 설치 |
 | `claude mcp list`에 context7이 `ERR_PROXY_TUNNEL` | 네트워크 정책이 `mcp.context7.com`을 막음 | 해당 호스트 허용 (설치 문제가 아님) |
 | superpowers 설치 후 질문·절차가 너무 많음 | 의도된 동작 (작업 방식 강제) | 필요 없으면 `claude plugin disable superpowers@claude-plugins-official` |
+| `agent-reach: command not found` | uv가 설치한 실행 파일 폴더가 PATH에 없음 | `uv tool update-shell` 후 새 터미널 (`install.sh`는 uv의 bin 폴더에서도 찾음) |
+| Agent Reach 설치가 `403`으로 실패 | 네트워크가 GitHub 릴리스 파일을 막음 | 해당 호스트 허용. 공식 문서의 `archive/…zip` 주소는 이 환경에서 403이었고 릴리스 파일 주소는 성공 |
+| `agent-reach version`이 JSON이 아니라 한 줄 텍스트 | 1.5 이하 구버전 (또는 다른 프로그램) | 공식 install.md의 업그레이드 절차. 스크립트는 이 경우 실패로 멈춤 |
+| Agent Reach가 `NEED_LOGIN`/`PLATFORM_BLOCKED`/`RATE_LIMITED` | 로그인 필요 또는 플랫폼 제한 | 멈추고 사용자에게 알림. 로그인은 사용자 본인이 전용 창에서. 우회하지 않음 |
 | `/code-review`가 아무 댓글도 안 남김 | 높은 신뢰도의 문제가 없거나, PR이 초안·닫힘·이미 리뷰됨 | 의도된 동작일 수 있음 |
 
 ---
 
-## 8. 이 패키지에 대해 확인한 것과 확인하지 못한 것
+## 9. 이 패키지에 대해 확인한 것과 확인하지 못한 것
 
 ### 확인한 것 (격리된 빈 폴더·빈 HOME에서 실제 실행)
 - **파트 A:** PDF의 `npx skills add` 4개 명령은 모두 그대로 동작하며 `.claude/skills`에 네 폴더가 생겼습니다. GSD(`--claude --local`)는 Node 22.22에서 설치가 끝까지 완료되었고 `commands/gsd-help.md`가 생겼습니다.
 - **파트 B:** `claude plugin marketplace add` + `claude plugin install`로 세 플러그인(document-skills, ppt-master, frontend-slides)이 설치되어 `enabled`로 표시됨을 확인했습니다. PPT Master의 `requirements.txt`를 가상환경에 설치했고, 요구 패키지 19개를 모두 불러올 수 있음을 확인했습니다. PowerPoint MCP는 수정한 명령으로 `claude mcp list`에서 `Connected`가 되는 것까지 확인했습니다. 서버가 MCP `initialize` 요청에 정상 응답하는 것도 확인했습니다.
 - **파트 C:** 빈 HOME에서 `claude plugin marketplace add anthropics/claude-plugins-official` 후 5개 플러그인이 모두 설치되어 `enabled`로 표시됨을 확인했습니다. 설치된 구성 요소(frontend-design 스킬, code-review 명령, code-simplifier 에이전트, context7 MCP 설정, superpowers 스킬 15개와 세션 시작 훅)를 직접 열어 보고 스킬에 반영했습니다. `claude plugin disable/enable`이 동작하는 것도 확인했습니다.
+- **파트 D:** 격리된 HOME에서 Agent Reach v1.6.0을 `uv tool install`로 설치하고 `agent-reach setup`을 실제로 실행했습니다(약 16초, 기본 채널 5/5 준비). `setup`이 `~/.agent-reach/`, `~/.agents/skills/agent-reach/`를 만들고, `~/.claude`가 있을 때 `~/.claude/skills/agent-reach` 링크를 만드는 것을 확인했습니다. 설치되는 스킬 지침 본문을 직접 읽었고(읽기 전용, 대리 로그인 금지, 차단 시 중단), 로그인·선택 채널·브라우저 확장은 실행하지 않았습니다. 공식 문서의 고정 불가능한 `latest` 주소와 `releases/download/v1.6.0/…` 주소가 같은 파일임을 확인했습니다.
 - **`install.sh`:** 첫 설치, 재실행(전부 건너뜀), 로컬·`--global` 범위, 잘못된 옵션, Node 버전 부족, claude CLI 없음, 파이썬 경로 오류, 시스템 파이썬 충돌, `--with-upstream`과 `--with-ppt` 동시 사용, `--with-official-plugins`를 모두 실행했습니다. 실패 상황에서는 모두 `미완료` 목록과 종료 코드 1로 끝났습니다. `jarvis-*` 스킬과 공식 원본이 이름 충돌 없이 함께 설치되었습니다. MCP 연결 판별 로직은 가짜 `claude` 출력(연결됨·실패·이름이 다른 서버)으로 따로 시험했습니다.
 
 ### 파트 A: PDF와 달라진 점 (확인 시점의 최신 상태)
@@ -554,6 +640,7 @@ code-simplifier 에이전트로 방금 수정한 <파일/함수>만 정리해 �
 ### 확인하지 못한 것
 - **PPT를 실제로 만들어 보는 단계.** 도구 설치와 연결까지만 확인했고, 장표 생성 결과(.pptx/.html)의 품질과 실제 동작은 대화형 Claude Code 세션이 필요해서 시험하지 못했습니다. `npm init slidev`도 대화형이라 실행하지 않았고, Node 요구 버전만 확인했습니다.
 - **context7의 실제 연결.** 시험 환경의 네트워크 정책이 `mcp.context7.com`을 막아 `ERR_PROXY_TUNNEL`로 실패했습니다. 설치는 되지만 문서 조회가 실제로 되는지는 확인하지 못했습니다. 연결이 되는 환경에서 `claude mcp list`로 확인해야 합니다. (이 때문에 이 환경에서 `install.sh --with-official-plugins`는 종료 코드 1로 끝납니다. 스크립트가 정확히 보고한 것입니다.)
+- **Agent Reach의 실제 읽기 동작.** 설치와 기본 채널 준비까지만 확인했고, 각 채널로 실제 검색·읽기를 해 보지는 않았습니다(이 환경은 외부 사이트 접속이 제한적). 선택 채널(`agent-reach add`)의 설치 과정, 로그인 창, Chrome 로그인 복사가 실제로 어떻게 동작하는지도 확인하지 못했습니다. **로그인 복사에 대한 문서 간 모순**(`sessions.md`·스킬은 확장 연결 시 복사, 문제 해결 문서는 "절대 가져오지 않음")은 직접 풀지 못했습니다. 한국어 README(`docs/README_ko.md`)는 찾지 못했습니다. 공식 문서의 `archive/refs/tags/…zip` 주소(되돌리기에 쓰임)는 이 환경에서 403이라 시험하지 못했습니다.
 - **파트 C 도구의 실제 사용 결과.** `/code-review`는 실행하면 GitHub PR에 댓글이 게시되므로 실제 PR에 돌려 보지 않았습니다. superpowers의 작업 방식 강제가 새 세션에서 어떻게 나타나는지, code-simplifier의 실제 정리 결과, frontend-design의 디자인 결과도 대화형 세션이 필요해서 시험하지 못했습니다.
 - `--with-browser`(전역 npm 설치, 자동화용 크롬 다운로드)의 실제 설치, `install.sh --global --with-upstream`(`--global --with-ppt`는 확인함).
 - `npx skills find` 검색 결과. 시험 환경에서 `skills.sh` 접속이 막혀 "No skills found"만 출력되었습니다.
@@ -563,7 +650,7 @@ code-simplifier 에이전트로 방금 수정한 <파일/함수>만 정리해 �
 
 ---
 
-## 9. 공식 자료
+## 10. 공식 자료
 
 | 이름 | 주소 |
 |---|---|
@@ -578,6 +665,7 @@ code-simplifier 에이전트로 방금 수정한 <파일/함수>만 정리해 �
 | PowerPoint MCP | github.com/GongRzhe/Office-PowerPoint-MCP-Server |
 | 공식 마켓 플러그인 (frontend-design, code-review, code-simplifier, context7) | github.com/anthropics/claude-plugins-official |
 | Superpowers | github.com/obra/superpowers |
+| Agent Reach | github.com/Panniantong/Agent-Reach · `docs/install.md` · `docs/troubleshooting.md` · `docs/README_en.md` |
 | Context7 | context7.com |
 | Claude Code 스킬 문서 | code.claude.com/docs/en/skills |
 | Node.js / uv | nodejs.org · docs.astral.sh/uv |

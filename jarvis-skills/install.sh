@@ -9,7 +9,9 @@
 #                                          frontend-slides 플러그인과 PowerPoint MCP 서버 (claude CLI 필요)
 #   ./install.sh --with-official-plugins + 공식 마켓 플러그인 5종: frontend-design, superpowers,
 #                                          code-review, context7, code-simplifier (claude CLI 필요)
+#   ./install.sh --with-agent-reach      + Agent Reach (uv 필요, 기본 채널만). 계정 전체(~/.agent-reach)에 설치됨
 #   환경변수 PPT_PYTHON=<python 경로>    PPT Master 부품을 설치할 파이썬 (기본 python3, 가상환경용)
+#   환경변수 AGENT_REACH_URL=<주소>      Agent Reach 설치 주소 (기본: 시험한 v1.6.0 릴리스 파일로 고정)
 #
 # 원칙: 이미 있는 폴더·파일은 덮어쓰지 않고 건너뛴다. 마지막에 항상 검증하고,
 #       하나라도 실패하면 완료로 보고하지 않고 종료 코드 1을 돌려준다.
@@ -21,12 +23,17 @@ WITH_UPSTREAM=0
 WITH_BROWSER=0
 WITH_PPT=0
 WITH_OFFICIAL=0
+WITH_AGENT_REACH=0
 
 JARVIS_SKILLS=(
   jarvis-agent-browser jarvis-find-skills jarvis-gsd jarvis-design-taste jarvis-mcp-builder
   jarvis-ppt-document-skills jarvis-ppt-master jarvis-ppt-frontend-slides jarvis-ppt-slidev jarvis-ppt-powerpoint-mcp
   jarvis-frontend-design jarvis-superpowers jarvis-code-review jarvis-context7 jarvis-code-simplifier
+  jarvis-agent-reach
 )
+# 공식 문서의 'releases/latest/download/agent-reach.zip' 대신 같은 릴리스 파일을 버전으로 고정한다
+# (v1.6.0 이 latest 일 때 두 주소는 같은 파일임을 확인함. 바뀔 수 있는 최신 파일을 그대로 실행하지 않기 위해).
+AGENT_REACH_URL="${AGENT_REACH_URL:-https://github.com/Panniantong/Agent-Reach/releases/download/v1.6.0/agent-reach.zip}"
 UPSTREAM_SKILLS=(agent-browser find-skills design-taste-frontend mcp-builder)
 PPT_PLUGINS=(document-skills@anthropic-agent-skills ppt-master@ppt-master frontend-slides@frontend-slides)
 OFFICIAL_PLUGINS=(
@@ -44,6 +51,7 @@ for arg in "$@"; do
     --with-browser) WITH_BROWSER=1 ;;
     --with-ppt) WITH_PPT=1 ;;
     --with-official-plugins) WITH_OFFICIAL=1 ;;
+    --with-agent-reach) WITH_AGENT_REACH=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "알 수 없는 옵션: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -96,6 +104,18 @@ mcp_connected() { # <줄 시작 패턴, 예: 'ppt:*'>
       $1) case "$line" in *Connected*) return 0 ;; esac ;;
     esac
   done <<<"$listing"
+  return 1
+}
+
+# agent-reach 실행 파일을 찾는다. uv 는 ~/.local/bin 에 설치하는데 PATH 에 없을 수 있어 그 폴더도 확인한다.
+agent_reach_bin() {
+  local bin_dir
+  if command -v agent-reach >/dev/null 2>&1; then command -v agent-reach; return 0; fi
+  bin_dir="$(uv tool dir --bin 2>/dev/null || true)"
+  if [ -n "$bin_dir" ]; then
+    if [ -x "$bin_dir/agent-reach" ]; then printf '%s\n' "$bin_dir/agent-reach"; return 0; fi
+    if [ -x "$bin_dir/agent-reach.exe" ]; then printf '%s\n' "$bin_dir/agent-reach.exe"; return 0; fi
+  fi
   return 1
 }
 
@@ -237,7 +257,32 @@ if [ "$WITH_OFFICIAL" -eq 1 ]; then
   fi
 fi
 
-# 6) 검증
+# 6) Agent Reach — 계정 전체에 설치된다 (~/.agent-reach, 그리고 ~/.claude 가 있으면 ~/.claude/skills/agent-reach 링크).
+#    기본 채널만 준비하고, 로그인과 선택 채널(agent-reach add/login)은 사용자 동의 없이 하지 않는다.
+if [ "$WITH_AGENT_REACH" -eq 1 ]; then
+  step "7. Agent Reach 설치"
+  AR="$(agent_reach_bin || true)"
+  if [ -n "$AR" ]; then
+    ar_version="$("$AR" version 2>&1 || true)"
+    case "$ar_version" in
+      *'"ok": true'*) say "건너뜀 (이미 있음): Agent Reach" ;;
+      *) fail "이미 있는 agent-reach 가 1.6 이전 버전이거나 다른 프로그램입니다. 공식 install.md 의 업그레이드 절차를 따르세요. (PyPI 의 agent-reach 는 이 프로젝트가 아닙니다.)" ;;
+    esac
+  elif ! command -v uv >/dev/null 2>&1; then
+    fail "uv 가 없습니다. 공식 설치 안내(docs.astral.sh/uv)를 보고 설치한 뒤 다시 실행하세요. 원격 설치 스크립트는 자동으로 실행하지 않습니다. (Agent Reach)"
+  else
+    ar_log="$(mktemp)"
+    if uv tool install "$AGENT_REACH_URL" && AR="$(agent_reach_bin)" && "$AR" setup >"$ar_log" 2>&1; then
+      say "설치 완료: Agent Reach (기본 채널: GitHub, YouTube, Bilibili, V2EX, 웹). 로그인·선택 채널은 설치하지 않았습니다."
+      rm -f "$ar_log"
+    else
+      fail "Agent Reach 설치 실패 (위의 uv 오류, 또는 setup 출력 로그: $ar_log)"
+    fi
+  fi
+  say "참고: Agent Reach 는 로그인이 필요한 사이트에서 내 Chrome 의 로그인을 복사해 쓸 수 있습니다. 로그인·선택 채널은 사용자 동의 후에만 진행하세요 (jarvis-agent-reach 스킬 참고)."
+fi
+
+# 7) 검증
 step "검증"
 for s in "${JARVIS_SKILLS[@]}"; do
   if [ -f "$TARGET/$s/SKILL.md" ]; then say "OK   $s"; else fail "$s 의 SKILL.md 가 없음"; fi
@@ -270,6 +315,18 @@ if [ "$WITH_OFFICIAL" -eq 1 ] && have_claude; then
     say "OK   MCP context7 연결됨"
   else
     fail "context7 MCP 가 연결되지 않음. mcp.context7.com 접속이 네트워크 정책(방화벽·프록시)에서 허용되는지 확인하세요 (claude mcp list)."
+  fi
+fi
+
+if [ "$WITH_AGENT_REACH" -eq 1 ]; then
+  AR="$(agent_reach_bin || true)"
+  if [ -z "$AR" ]; then
+    fail "agent-reach 실행 파일을 찾을 수 없음"
+  else
+    ar_version="$("$AR" version 2>&1 || true)"
+    ar_skill="$("$AR" skill 2>&1 || true)"
+    case "$ar_version" in *'"ok": true'*) say "OK   Agent Reach 실행됨" ;; *) fail "agent-reach version 이 정상 응답하지 않음" ;; esac
+    case "$ar_skill" in *'"installed": true'*) say "OK   Agent Reach 스킬 설치됨" ;; *) fail "Agent Reach 스킬이 설치되지 않음 (agent-reach skill 로 확인)" ;; esac
   fi
 fi
 
