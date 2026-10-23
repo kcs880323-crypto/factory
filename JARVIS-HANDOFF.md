@@ -1,19 +1,22 @@
-# 자비스 인수인계: Claude Code 스킬 10종 (필수 5종 + PPT 도구 5종)
+# 자비스 인수인계: Claude Code 스킬 15종 (필수 5종 + PPT 도구 5종 + 공식 플러그인 5종)
 
 > 출처 1: 게으른 빌더(lazyowen.com) 「클로드 코드에 무조건 깔아야 하는 스킬 5개」 (2026-08-13 갱신, PDF 11쪽)
 > 출처 2: 써매(@ssumae.ai) 「PPT 늘 밤티라면 — 클로드로 발표용 장표 만드는 도구 5개」 (2026-10-21 공개, Notion)
-> 목적: 위 두 자료의 도구 10개를 자비스가 설치·검증하고 바로 쓸 수 있도록 정리한 패키지입니다.
+> 출처 3: 사용자가 전달한 공식 마켓(`claude-plugins-official`) 플러그인 설치 명령 5개
+> 목적: 위 자료의 도구 15개를 자비스가 설치·검증하고 바로 쓸 수 있도록 정리한 패키지입니다.
 
 ## 0. 한 줄 요약
 
 ```bash
 cd <작업할 프로젝트 폴더>
-unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream --with-ppt   # 계정 전체는 --global 추가
+unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream --with-ppt --with-official-plugins   # 계정 전체는 --global 추가
 ```
 
 설치가 끝나면 **Claude Code를 완전히 종료했다가 다시 켜세요.** 재시작 전에는 새 스킬, 플러그인, MCP 서버, `/gsd-` 명령을 인식하지 못합니다.
 
-필수 5종만 필요하면 `--with-upstream`만, PPT 도구만 필요하면 `--with-ppt`만 붙이세요. 옵션 없이 실행하면 안내 스킬 10개만 복사합니다.
+필요한 것만 골라 붙이세요: 필수 5종은 `--with-upstream`, PPT 도구는 `--with-ppt`, 공식 플러그인은 `--with-official-plugins`. 옵션 없이 실행하면 안내 스킬 15개만 복사합니다.
+
+> **`/plugin install …` 슬래시 명령은 원격(클라우드) 세션 등에서 "`/plugin` isn't available in this environment"로 거부될 수 있습니다.** 같은 일을 하는 터미널 명령 `claude plugin install …`은 동작하며, `install.sh`는 이 터미널 명령을 씁니다.
 
 ---
 
@@ -34,7 +37,12 @@ jarvis-skills.zip
         ├── jarvis-ppt-master/SKILL.md           │ 파트 B: PPT 도구 5종
         ├── jarvis-ppt-frontend-slides/SKILL.md  │
         ├── jarvis-ppt-slidev/SKILL.md           │
-        └── jarvis-ppt-powerpoint-mcp/SKILL.md   ┘
+        ├── jarvis-ppt-powerpoint-mcp/SKILL.md   ┘
+        ├── jarvis-frontend-design/SKILL.md      ┐
+        ├── jarvis-superpowers/SKILL.md          │ 파트 C: 공식 플러그인 5종
+        ├── jarvis-code-review/SKILL.md          │
+        ├── jarvis-context7/SKILL.md             │
+        └── jarvis-code-simplifier/SKILL.md      ┘
 ```
 
 ### 꼭 알아 둘 점: 두 종류가 있습니다
@@ -42,7 +50,7 @@ jarvis-skills.zip
 | 구분 | 설명 |
 |---|---|
 | **`jarvis-*` 스킬 (이 zip에 들어 있음)** | 두 자료와 각 공식 문서를 바탕으로 **새로 작성한 안내 스킬**입니다. 설치 여부 확인 → 설치 → 검증 → 사용법 → 지켜야 할 것을 한곳에 모았습니다. |
-| **공식 원본 (zip에 없음)** | 각 제작자가 만든 실제 스킬·플러그인·서버입니다. `install.sh`의 `--with-upstream`, `--with-ppt` 또는 아래 수동 명령으로 설치합니다. |
+| **공식 원본 (zip에 없음)** | 각 제작자가 만든 실제 스킬·플러그인·서버입니다. `install.sh`의 `--with-upstream`, `--with-ppt`, `--with-official-plugins` 또는 아래 수동 명령으로 설치합니다. |
 
 `jarvis-*` 스킬은 공식 원본을 **대체하지 않습니다.** 폴더 이름에 `jarvis-` 접두어를 붙여서 원본과 이름이 충돌하거나 서로를 덮어쓰지 않습니다.
 
@@ -71,11 +79,12 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 
 | 옵션 | 동작 |
 |---|---|
-| (없음) | `jarvis-*` 10개만 `.claude/skills`에 복사 |
+| (없음) | `jarvis-*` 15개만 `.claude/skills`에 복사 |
 | `--global` | 계정 전체(`~/.claude`)에 설치 |
 | `--with-upstream` | + 공식 원본 4개와 GSD 설치 (네트워크 필요) |
 | `--with-browser` | + `agent-browser` 명령줄 도구와 자동화용 크롬 설치 (전역 npm 설치) |
 | `--with-ppt` | + 파트 B의 PPT 도구 설치 (3장 참고) |
+| `--with-official-plugins` | + 파트 C의 공식 마켓 플러그인 5종 설치 (4장 참고) |
 
 스크립트의 약속:
 - 이미 있는 폴더·파일은 **덮어쓰지 않고 건너뜁니다.**
@@ -292,7 +301,92 @@ document-skills 로 [우리 가게] 소개 PPT 6장 만들어줘. 표지는 사�
 
 ---
 
-## 4. 자비스에게 그대로 붙여넣을 프롬프트
+## 4. 파트 C — 공식 마켓 플러그인 5종
+
+Claude Code 공식 마켓 `claude-plugins-official`의 플러그인 5개입니다. 전달받은 명령은 `/plugin install <이름>@claude-plugins-official` 형태입니다. **5개는 성격이 서로 많이 다릅니다.** 특히 `superpowers`는 Claude의 작업 방식을 바꾸고, `code-review`는 GitHub에 댓글을 게시합니다. 설치 전에 4-2의 주의사항을 사용자에게 전하세요.
+
+### 4-1. 한눈에 보기
+
+| # | 플러그인 | 만든 곳 | 제공하는 것 | 자비스용 스킬 |
+|---|---|---|---|---|
+| 1 | **frontend-design** | Anthropic | 디자인 지침 스킬 (뻔한 AI 디자인 회피) | `jarvis-frontend-design` |
+| 2 | **superpowers** | obra (외부 개발자) | 스킬 15개 + 세션 시작 훅 (브레인스토밍·TDD·디버깅·리뷰 절차) | `jarvis-superpowers` |
+| 3 | **code-review** | Anthropic | `/code-review` 명령 (PR 자동 리뷰) | `jarvis-code-review` |
+| 4 | **context7** | Upstash (외부) | 원격 MCP 서버 (`resolve-library-id`, `query-docs`) | `jarvis-context7` |
+| 5 | **code-simplifier** | Anthropic | `code-simplifier` 에이전트 (코드 정리) | `jarvis-code-simplifier` |
+
+### 4-2. 설치 전에 사용자에게 꼭 알릴 것
+
+| 플러그인 | 알릴 내용 |
+|---|---|
+| **superpowers** | **작업 방식을 강제로 바꿉니다.** 세션을 시작할 때마다(시작, `/clear`, 컨텍스트 압축) 훅이 "스킬이 조금이라도 적용되면 무조건 먼저 호출하라"는 지침을 주입합니다. 무엇을 만들자고 하면 코드 전에 브레인스토밍부터 하고, 구현은 TDD를 따르게 합니다. 작은 수정에도 절차가 늘어납니다. 외부 개발자가 만든 코드가 매 세션 실행되므로 신뢰 여부는 사용자가 정합니다. **GSD(파트 A)와 같은 프로젝트에서 같이 켜지 마세요.** 둘 다 자체 작업 방식을 강제해서 충돌합니다. 끄기: `claude plugin disable superpowers@claude-plugins-official` |
+| **code-review** | **실행하면 GitHub PR에 댓글을 게시합니다** (`gh pr comment`). 외부에 보이는 행동이라 대상 PR을 사용자에게 확인받고 실행합니다. GitHub CLI(`gh`)와 로그인이 필요합니다. 닫힌 PR, 초안 PR, 이미 리뷰한 PR은 건너뜁니다. |
+| **context7** | **질문이 외부 서버(`mcp.context7.com`)로 전송됩니다.** 사내 코드나 비밀값을 질문에 넣지 않습니다. 방화벽·프록시에서 이 호스트가 허용되어야 합니다. 기본은 익명이고, 한도를 늘리려면 `CONTEXT7_API_KEY` 환경변수를 설정합니다. |
+| **code-simplifier** | **코드를 직접 수정합니다.** 에이전트 지침에 JS/TS·React 위주의 스타일 선호가 들어 있어 프로젝트 규칙과 어긋날 수 있습니다. 정리 전후 테스트를 돌리고 diff를 검토합니다. |
+| **frontend-design** | `jarvis-design-taste`(Taste)와 **같은 작업에 같이 쓰지 않습니다.** 작은 화면·컴포넌트는 이쪽, 페이지 한 장을 통째로 디자인할 때는 Taste가 맞습니다. |
+
+### 4-3. 설치
+
+**방법 A. 스크립트 (권장)**
+
+```bash
+cd <작업할 프로젝트 폴더>
+unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-official-plugins
+```
+
+**방법 B. 수동 명령** (`/plugin install …`과 같은 일을 하는 터미널 명령)
+
+```bash
+claude plugin marketplace add anthropics/claude-plugins-official     # 공식 마켓이 아직 없을 때만
+claude plugin install frontend-design@claude-plugins-official
+claude plugin install superpowers@claude-plugins-official
+claude plugin install code-review@claude-plugins-official
+claude plugin install context7@claude-plugins-official
+claude plugin install code-simplifier@claude-plugins-official
+```
+
+- 마켓이 내려받아져 있지 않으면 `Plugin "…" not found in marketplace "claude-plugins-official"` 오류가 납니다. 위 첫 줄로 마켓을 등록한 뒤 다시 설치하세요.
+- 프로젝트에만 설치하려면 `--scope local`, 계정 전체는 기본값입니다.
+- 설치 후 Claude Code를 완전히 종료했다가 다시 켭니다. `superpowers`의 작업 방식 지침은 **새 세션부터** 적용됩니다.
+
+### 4-4. 설치 확인
+
+```bash
+claude plugin list      # 5개가 모두 enabled
+claude mcp list         # plugin:context7:context7 … √ Connected
+```
+
+`context7`이 `Connected`가 아니면 설치 문제가 아니라 네트워크 정책이 서버 접속을 막은 것입니다. 완료로 보고하지 말고 막힌 호스트(`mcp.context7.com`)를 사용자에게 알리세요.
+
+### 4-5. 써 보기
+
+**frontend-design**
+```text
+<만들 화면 설명>을 만들어 줘. 대상은 <누구>, 이 화면의 핵심 역할은 <무엇>.
+frontend-design 스킬의 기준을 따르고 흔한 템플릿 같은 느낌은 피해 줘.
+```
+
+**superpowers** — 따로 부를 명령이 없습니다. 새 세션에서 "<기능>을 만들자"고 하면 브레인스토밍부터 시작하는지 확인합니다.
+
+**code-review** — 대상 PR을 확인받은 뒤:
+```text
+/code-review
+```
+
+**context7**
+```text
+Next.js 15 의 <기능> 사용법을 context7 로 확인해서, 지금 버전 기준으로 코드를 작성해 줘.
+```
+
+**code-simplifier** — 테스트가 통과한 상태에서:
+```text
+code-simplifier 에이전트로 방금 수정한 <파일/함수>만 정리해 줘.
+동작은 바꾸지 말고, 이 프로젝트의 CLAUDE.md 와 기존 코드 스타일을 따라 줘.
+```
+
+---
+
+## 5. 자비스에게 그대로 붙여넣을 프롬프트
 
 **파트 A (필수 5종)** — PDF의 「설치부터 검증까지 AI에게 맡기기」 프롬프트를 이 패키지 기준으로 정리한 것입니다.
 
@@ -326,9 +420,26 @@ document-skills 로 [우리 가게] 소개 PPT 6장 만들어줘. 표지는 사�
 검증: 위 3번이 모두 통과해야 합니다. 하나라도 실패하면 완료로 보고하지 말고 실패한 명령어와 원인, 다음 조치를 알려 주세요.
 ```
 
+**파트 C (공식 플러그인 5종)**
+
+```text
+역할: 클로드 코드 공식 마켓 플러그인 5개(frontend-design, superpowers, code-review, context7, code-simplifier)의 설치와 검증을 맡는 담당
+맥락: 이 중 superpowers는 Claude의 작업 방식을 바꾸고, code-review는 GitHub PR에 댓글을 게시하고, context7은 외부 서버에 질문을 보냅니다. 사용자가 이 동작을 알고 동의한 뒤에만 설치합니다.
+입력: <운영체제와 셸>, <설치할 플러그인: 전체 또는 일부>, <GSD를 쓰는 프로젝트인지 여부>
+작업: 아래 단계를 순서대로 진행하세요.
+1. 설명과 동의: 위 세 가지 동작을 사용자에게 먼저 설명하고 설치 동의를 받으세요. 이 프로젝트가 GSD를 쓰면 superpowers는 설치하지 않도록 권하세요(작업 방식 충돌).
+2. 확인: `claude plugin list`와 `claude mcp list`로 이미 설치된 것을 확인하세요. 이미 있는 것은 다시 설치하지 마세요.
+3. 설치: 압축 해제한 jarvis-skills 폴더에서 `./install.sh --with-official-plugins`를 실행하세요(계정 전체는 `--global`). `/plugin install` 슬래시 명령이 거부되는 환경에서는 `claude plugin install <이름>@claude-plugins-official` 터미널 명령을 쓰면 됩니다.
+4. 검증: `claude plugin list`에서 5개가 enabled인지, `claude mcp list`에서 context7이 Connected인지 확인하세요. context7이 연결되지 않으면 설치 실패가 아니라 네트워크 차단일 수 있으니, 막힌 호스트(mcp.context7.com)를 알려 주세요.
+5. 설치 후 Claude Code를 완전히 종료했다가 다시 켜야 한다고 안내하세요. superpowers는 새 세션부터 적용됩니다.
+제약: 기존 파일과 설정을 덮어쓰거나 지우지 마세요. 사용자 확인 없이 code-review를 실행해 PR에 댓글을 게시하지 마세요. context7 질문에 비밀값이나 비공개 코드를 넣지 마세요. 설치된 플러그인 파일을 수정하지 마세요.
+출력: 실행한 명령어 목록, 설치된 항목, 건너뛴 항목, 남은 오류를 정리해 주세요.
+검증: 위 4번이 통과해야 합니다. 하나라도 실패하면 완료로 보고하지 말고 실패한 명령어와 원인, 다음 조치를 알려 주세요.
+```
+
 ---
 
-## 5. 지켜야 할 규칙
+## 6. 지켜야 할 규칙
 
 1. 이미 설치된 것은 다시 설치하지 않습니다. 기존 파일·설정을 덮어쓰거나 지우지 않습니다.
 2. `.env` 같은 비밀키 파일은 읽지도 출력하지도 않습니다. 스크린샷에도 비밀값이 찍히지 않게 합니다.
@@ -340,10 +451,14 @@ document-skills 로 [우리 가게] 소개 PPT 6장 만들어줘. 표지는 사�
 8. **PPT·발표 자료의 수치와 사실은 사용자가 준 자료만 씁니다.** 가격, 별점, 매출, 일정을 지어내지 않고, 없으면 자리표시자로 두고 알립니다.
 9. 사용자의 원본 .pptx·문서는 수정하지 않고 새 파일로 저장하며, 같은 이름의 파일을 덮어쓰지 않습니다.
 10. 사진·이미지는 출처와 사용 가능 여부를 함께 알립니다.
+11. **GitHub에 글을 게시하는 동작(`/code-review`의 PR 댓글 등)은 실행 전에 대상을 사용자에게 확인받습니다.** 한 번의 허락은 다른 PR로 이어지지 않습니다.
+12. **외부 서비스(context7 등)로 보내는 질문에는 비공개 코드, 비밀값, 개인정보를 넣지 않습니다.**
+13. 작업 방식을 바꾸는 플러그인(superpowers)은 사용자에게 설명하고 동의를 받은 뒤 설치합니다. GSD와 같은 프로젝트에서 동시에 켜지 않습니다.
+14. 코드를 직접 고치는 도구(code-simplifier)는 정리 전후 테스트를 돌리고 diff를 검토한 뒤 보고합니다.
 
 ---
 
-## 6. 자주 막히는 곳
+## 7. 자주 막히는 곳
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
@@ -361,15 +476,21 @@ document-skills 로 [우리 가게] 소개 PPT 6장 만들어줘. 표지는 사�
 | PPT Master `pip` 실패 (`installed by debian` 등) | 시스템 파이썬 충돌 | 가상환경 + `PPT_PYTHON` |
 | `claude mcp list`에 `CONNECTION_CLOSED` | `--with 'mcp<2'` 누락 | 3-3의 5번 명령으로 다시 등록 |
 | frontend-slides 설치 중 SSH 오류 | 짧은 `owner/repo` 형태 사용 | HTTPS 전체 주소로 |
+| `/plugin isn't available in this environment` | 원격(클라우드) 세션 등에서는 슬래시 명령 `/plugin`을 쓸 수 없음 | 같은 일을 하는 터미널 명령 `claude plugin install …` 사용 |
+| `Plugin "…" not found in marketplace "claude-plugins-official"` | 공식 마켓이 내려받아져 있지 않음 | `claude plugin marketplace add anthropics/claude-plugins-official` 후 다시 설치 |
+| `claude mcp list`에 context7이 `ERR_PROXY_TUNNEL` | 네트워크 정책이 `mcp.context7.com`을 막음 | 해당 호스트 허용 (설치 문제가 아님) |
+| superpowers 설치 후 질문·절차가 너무 많음 | 의도된 동작 (작업 방식 강제) | 필요 없으면 `claude plugin disable superpowers@claude-plugins-official` |
+| `/code-review`가 아무 댓글도 안 남김 | 높은 신뢰도의 문제가 없거나, PR이 초안·닫힘·이미 리뷰됨 | 의도된 동작일 수 있음 |
 
 ---
 
-## 7. 이 패키지에 대해 확인한 것과 확인하지 못한 것
+## 8. 이 패키지에 대해 확인한 것과 확인하지 못한 것
 
 ### 확인한 것 (격리된 빈 폴더·빈 HOME에서 실제 실행)
 - **파트 A:** PDF의 `npx skills add` 4개 명령은 모두 그대로 동작하며 `.claude/skills`에 네 폴더가 생겼습니다. GSD(`--claude --local`)는 Node 22.22에서 설치가 끝까지 완료되었고 `commands/gsd-help.md`가 생겼습니다.
 - **파트 B:** `claude plugin marketplace add` + `claude plugin install`로 세 플러그인(document-skills, ppt-master, frontend-slides)이 설치되어 `enabled`로 표시됨을 확인했습니다. PPT Master의 `requirements.txt`를 가상환경에 설치했고, 요구 패키지 19개를 모두 불러올 수 있음을 확인했습니다. PowerPoint MCP는 수정한 명령으로 `claude mcp list`에서 `Connected`가 되는 것까지 확인했습니다. 서버가 MCP `initialize` 요청에 정상 응답하는 것도 확인했습니다.
-- **`install.sh`:** 첫 설치, 재실행(전부 건너뜀), 로컬·`--global` 범위, 잘못된 옵션, Node 버전 부족, claude CLI 없음, 파이썬 경로 오류, 시스템 파이썬 충돌, `--with-upstream`과 `--with-ppt` 동시 사용을 모두 실행했습니다. 실패 상황에서는 모두 `미완료` 목록과 종료 코드 1로 끝났습니다. `jarvis-*` 10개와 공식 원본이 이름 충돌 없이 함께 설치되었습니다.
+- **파트 C:** 빈 HOME에서 `claude plugin marketplace add anthropics/claude-plugins-official` 후 5개 플러그인이 모두 설치되어 `enabled`로 표시됨을 확인했습니다. 설치된 구성 요소(frontend-design 스킬, code-review 명령, code-simplifier 에이전트, context7 MCP 설정, superpowers 스킬 15개와 세션 시작 훅)를 직접 열어 보고 스킬에 반영했습니다. `claude plugin disable/enable`이 동작하는 것도 확인했습니다.
+- **`install.sh`:** 첫 설치, 재실행(전부 건너뜀), 로컬·`--global` 범위, 잘못된 옵션, Node 버전 부족, claude CLI 없음, 파이썬 경로 오류, 시스템 파이썬 충돌, `--with-upstream`과 `--with-ppt` 동시 사용, `--with-official-plugins`를 모두 실행했습니다. 실패 상황에서는 모두 `미완료` 목록과 종료 코드 1로 끝났습니다. `jarvis-*` 스킬과 공식 원본이 이름 충돌 없이 함께 설치되었습니다. MCP 연결 판별 로직은 가짜 `claude` 출력(연결됨·실패·이름이 다른 서버)으로 따로 시험했습니다.
 
 ### 파트 A: PDF와 달라진 점 (확인 시점의 최신 상태)
 - **GSD 최신판(v1.18.0)은 Node 24 이상을 요구한다고 경고(`EBADENGINE`)합니다.** PDF는 22.20 이상이라고 안내합니다. 시험에서는 Node 22에서도 설치가 완료되었지만, 문제가 생기면 Node를 24 이상으로 올리세요.
@@ -379,6 +500,8 @@ document-skills 로 [우리 가게] 소개 PPT 6장 만들어줘. 표지는 사�
 
 ### 확인하지 못한 것
 - **PPT를 실제로 만들어 보는 단계.** 도구 설치와 연결까지만 확인했고, 장표 생성 결과(.pptx/.html)의 품질과 실제 동작은 대화형 Claude Code 세션이 필요해서 시험하지 못했습니다. `npm init slidev`도 대화형이라 실행하지 않았고, Node 요구 버전만 확인했습니다.
+- **context7의 실제 연결.** 시험 환경의 네트워크 정책이 `mcp.context7.com`을 막아 `ERR_PROXY_TUNNEL`로 실패했습니다. 설치는 되지만 문서 조회가 실제로 되는지는 확인하지 못했습니다. 연결이 되는 환경에서 `claude mcp list`로 확인해야 합니다. (이 때문에 이 환경에서 `install.sh --with-official-plugins`는 종료 코드 1로 끝납니다. 스크립트가 정확히 보고한 것입니다.)
+- **파트 C 도구의 실제 사용 결과.** `/code-review`는 실행하면 GitHub PR에 댓글이 게시되므로 실제 PR에 돌려 보지 않았습니다. superpowers의 작업 방식 강제가 새 세션에서 어떻게 나타나는지, code-simplifier의 실제 정리 결과, frontend-design의 디자인 결과도 대화형 세션이 필요해서 시험하지 못했습니다.
 - `--with-browser`(전역 npm 설치, 자동화용 크롬 다운로드)의 실제 설치, `install.sh --global --with-upstream`(`--global --with-ppt`는 확인함).
 - `npx skills find` 검색 결과. 시험 환경에서 `skills.sh` 접속이 막혀 "No skills found"만 출력되었습니다.
 - Claude Code 재시작 후 스킬 인식과 `/gsd-new-project`, `/frontend-slides:frontend-slides` 실제 동작.
@@ -387,7 +510,7 @@ document-skills 로 [우리 가게] 소개 PPT 6장 만들어줘. 표지는 사�
 
 ---
 
-## 8. 공식 자료
+## 9. 공식 자료
 
 | 이름 | 주소 |
 |---|---|
@@ -400,6 +523,9 @@ document-skills 로 [우리 가게] 소개 PPT 6장 만들어줘. 표지는 사�
 | frontend-slides | github.com/zarazhangrui/frontend-slides |
 | Slidev | github.com/slidevjs/slidev · sli.dev |
 | PowerPoint MCP | github.com/GongRzhe/Office-PowerPoint-MCP-Server |
+| 공식 마켓 플러그인 (frontend-design, code-review, code-simplifier, context7) | github.com/anthropics/claude-plugins-official |
+| Superpowers | github.com/obra/superpowers |
+| Context7 | context7.com |
 | Claude Code 스킬 문서 | code.claude.com/docs/en/skills |
 | Node.js / uv | nodejs.org · docs.astral.sh/uv |
 | 원본 가이드 1 | lazyowen.com/guides/claude-code-skills-5-0813 |
