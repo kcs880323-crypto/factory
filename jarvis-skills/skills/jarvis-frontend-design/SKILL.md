@@ -34,6 +34,17 @@ claude plugin install frontend-design@claude-plugins-official
 Claude Code 대화창에서는 `/plugin install frontend-design@claude-plugins-official`을 입력한다 (원격·자동화 환경에서는 슬래시 명령을 못 쓰는 경우가 있어 위 터미널 명령이 같은 일을 한다).
 프로젝트에만 설치하려면 `--scope local`, 설치 후에는 Claude Code를 완전히 종료했다가 다시 켠다.
 
+### 설치 경로가 두 가지다 — 같은 스킬이므로 하나만 쓴다
+
+| 경로 | 명령 | 호출 이름 |
+|---|---|---|
+| **A. 공식 마켓 플러그인** (위) | `claude plugin install frontend-design@claude-plugins-official` | 플러그인 이름이 붙는다 (`/플러그인:스킬` 형태) |
+| **B. 스킬 저장소에서 단독 설치** | `npx --yes skills@latest add anthropics/skills --skill frontend-design --agent claude-code --yes --copy` (또는 `install.sh --with-design-skills`) | 스킬 이름 그대로 |
+
+- 두 경로의 `SKILL.md`는 **내용이 완전히 같다** (2026-10-23에 해시로 확인).
+- **둘 다 설치하면 같은 지침이 중복**된다. 한쪽만 쓴다. `install.sh --with-design-skills`는 플러그인이 이미 있으면 단독 설치를 건너뛰고, `--with-official-plugins`는 단독 스킬이 이미 있으면 중복 경고를 출력한다.
+- 이 스킬의 자매 도구로 `jarvis-theme-factory`(완성물에 색·글꼴 테마 적용), `jarvis-web-design-guidelines`(UI 코드 검토)가 있다.
+
 ## 3. 사용
 
 만들 화면과 함께 **무엇을 위한 화면인지(대상, 핵심 역할)** 를 알려 준다. 스킬은 주제가 불분명하면 먼저 주제·대상·핵심 역할을 제안하고 확인을 받도록 되어 있다.

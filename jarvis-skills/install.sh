@@ -9,6 +9,8 @@
 #                                          frontend-slides 플러그인과 PowerPoint MCP 서버 (claude CLI 필요)
 #   ./install.sh --with-official-plugins + 공식 마켓 플러그인 5종: frontend-design, superpowers,
 #                                          code-review, context7, code-simplifier (claude CLI 필요)
+#   ./install.sh --with-design-skills    + 디자인 스킬 3종: frontend-design, theme-factory, web-design-guidelines
+#                                          (frontend-design 은 공식 플러그인이 이미 있으면 건너뜀)
 #   ./install.sh --with-agent-reach      + Agent Reach (uv 필요, 기본 채널만). 계정 전체(~/.agent-reach)에 설치됨
 #   환경변수 PPT_PYTHON=<python 경로>    PPT Master 부품을 설치할 파이썬 (기본 python3, 가상환경용)
 #   환경변수 AGENT_REACH_URL=<주소>      Agent Reach 설치 주소 (기본: 시험한 v1.6.0 릴리스 파일로 고정)
@@ -24,12 +26,14 @@ WITH_BROWSER=0
 WITH_PPT=0
 WITH_OFFICIAL=0
 WITH_AGENT_REACH=0
+WITH_DESIGN=0
 
 JARVIS_SKILLS=(
   jarvis-agent-browser jarvis-find-skills jarvis-gsd jarvis-design-taste jarvis-mcp-builder
   jarvis-ppt-document-skills jarvis-ppt-master jarvis-ppt-frontend-slides jarvis-ppt-slidev jarvis-ppt-powerpoint-mcp
   jarvis-frontend-design jarvis-superpowers jarvis-code-review jarvis-context7 jarvis-code-simplifier
   jarvis-agent-reach
+  jarvis-theme-factory jarvis-web-design-guidelines
 )
 # 공식 문서의 'releases/latest/download/agent-reach.zip' 대신 같은 릴리스 파일을 버전으로 고정한다
 # (v1.6.0 이 latest 일 때 두 주소는 같은 파일임을 확인함. 바뀔 수 있는 최신 파일을 그대로 실행하지 않기 위해).
@@ -52,6 +56,7 @@ for arg in "$@"; do
     --with-ppt) WITH_PPT=1 ;;
     --with-official-plugins) WITH_OFFICIAL=1 ;;
     --with-agent-reach) WITH_AGENT_REACH=1 ;;
+    --with-design-skills) WITH_DESIGN=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "알 수 없는 옵션: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -81,6 +86,23 @@ step() { printf '\n== %s ==\n' "$*"; }
 fail() { FAILURES+=("$*"); printf '실패: %s\n' "$*" >&2; }
 
 have_claude() { command -v claude >/dev/null 2>&1; }
+
+# npx skills 로 스킬 하나를 설치한다. 이미 있으면 건너뛴다. 저장소는 반드시 --skill 로 하나만 고른다.
+install_skill() { # <이름> <npx 인자...>
+  local name="$1"; shift
+  if [ -e "$TARGET/$name" ]; then say "건너뜀 (이미 있음): $name"; return; fi
+  if npx --yes skills@latest add "$@" --agent claude-code --yes --copy ${SKILL_FLAGS[@]+"${SKILL_FLAGS[@]}"}; then
+    say "설치 완료: $name"
+  else
+    fail "스킬 설치 실패: $name"
+  fi
+}
+
+plugin_installed() { # <플러그인@마켓>
+  local listing
+  listing="$(claude plugin list 2>/dev/null || true)"
+  grep -q -F "$1" <<<"$listing"
+}
 
 # 플러그인 하나를 설치한다. 이미 있으면 건너뛰고, 마켓이 없을 때만 등록한다.
 # (결과를 변수에 담아 here-string 으로 grep 한다: pipefail 아래에서 grep -q 의 SIGPIPE 오탐을 피하기 위해)
@@ -157,15 +179,6 @@ if [ "$WITH_UPSTREAM" -eq 1 ]; then
     fail "Node.js 22.20 이상이 필요합니다 (현재: $(node --version 2>/dev/null || echo '없음')). https://nodejs.org 에서 LTS를 설치하세요."
   else
     say "Node $(node --version) 확인"
-    install_skill() { # <이름> <npx 인자...>
-      local name="$1"; shift
-      if [ -e "$TARGET/$name" ]; then say "건너뜀 (이미 있음): $name"; return; fi
-      if npx --yes skills@latest add "$@" --agent claude-code --yes --copy ${SKILL_FLAGS[@]+"${SKILL_FLAGS[@]}"}; then
-        say "설치 완료: $name"
-      else
-        fail "스킬 설치 실패: $name"
-      fi
-    }
     install_skill agent-browser        vercel-labs/agent-browser
     install_skill find-skills          vercel-labs/skills --skill find-skills
     install_skill design-taste-frontend https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend
@@ -248,6 +261,9 @@ if [ "$WITH_OFFICIAL" -eq 1 ]; then
   if ! have_claude; then
     fail "claude CLI 가 없습니다 (https://claude.com/claude-code). 공식 플러그인 설치를 건너뜁니다."
   else
+    if [ -e "$TARGET/frontend-design" ]; then
+      say "주의: frontend-design 이 이미 단독 스킬($TARGET/frontend-design)로 설치되어 있습니다. 플러그인 버전과 내용이 같아 중복되니 한쪽만 쓰세요."
+    fi
     for id in "${OFFICIAL_PLUGINS[@]}"; do
       install_plugin anthropics/claude-plugins-official "$id"
     done
@@ -257,10 +273,29 @@ if [ "$WITH_OFFICIAL" -eq 1 ]; then
   fi
 fi
 
-# 6) Agent Reach — 계정 전체에 설치된다 (~/.agent-reach, 그리고 ~/.claude 가 있으면 ~/.claude/skills/agent-reach 링크).
+# 6) 디자인 스킬 3종 (npx skills). frontend-design 은 공식 마켓 플러그인과 내용이 같아서(해시 동일 확인),
+#    플러그인이 이미 설치되어 있으면 중복을 피해 건너뛴다.
+if [ "$WITH_DESIGN" -eq 1 ]; then
+  step "7. 디자인 스킬 설치"
+  if ! node_ok; then
+    fail "Node.js 22.20 이상이 필요합니다 (현재: $(node --version 2>/dev/null || echo '없음')). https://nodejs.org 에서 LTS를 설치하세요."
+  else
+    install_skill theme-factory          anthropics/skills --skill theme-factory
+    install_skill web-design-guidelines  vercel-labs/agent-skills --skill web-design-guidelines
+    if have_claude && plugin_installed frontend-design@claude-plugins-official; then
+      say "건너뜀 (공식 플러그인으로 이미 설치됨): frontend-design"
+    else
+      install_skill frontend-design      anthropics/skills --skill frontend-design
+    fi
+    say "참고: web-design-guidelines 는 검토할 때마다 원격 규칙 파일(main 브랜치)을 읽어 와 그대로 따릅니다. 고정 주소와 안전 규칙은 jarvis-web-design-guidelines 스킬을 따르세요."
+    say "참고: theme-factory 의 테마 글꼴(DejaVu, FreeSans 등)은 한글을 지원하지 않습니다. 한글 문서에는 한글 글꼴을 따로 정하세요."
+  fi
+fi
+
+# 7) Agent Reach — 계정 전체에 설치된다 (~/.agent-reach, 그리고 ~/.claude 가 있으면 ~/.claude/skills/agent-reach 링크).
 #    기본 채널만 준비하고, 로그인과 선택 채널(agent-reach add/login)은 사용자 동의 없이 하지 않는다.
 if [ "$WITH_AGENT_REACH" -eq 1 ]; then
-  step "7. Agent Reach 설치"
+  step "8. Agent Reach 설치"
   AR="$(agent_reach_bin || true)"
   if [ -n "$AR" ]; then
     ar_version="$("$AR" version 2>&1 || true)"
@@ -282,7 +317,7 @@ if [ "$WITH_AGENT_REACH" -eq 1 ]; then
   say "참고: Agent Reach 는 로그인이 필요한 사이트에서 내 Chrome 의 로그인을 복사해 쓸 수 있습니다. 로그인·선택 채널은 사용자 동의 후에만 진행하세요 (jarvis-agent-reach 스킬 참고)."
 fi
 
-# 7) 검증
+# 8) 검증
 step "검증"
 for s in "${JARVIS_SKILLS[@]}"; do
   if [ -f "$TARGET/$s/SKILL.md" ]; then say "OK   $s"; else fail "$s 의 SKILL.md 가 없음"; fi
@@ -315,6 +350,19 @@ if [ "$WITH_OFFICIAL" -eq 1 ] && have_claude; then
     say "OK   MCP context7 연결됨"
   else
     fail "context7 MCP 가 연결되지 않음. mcp.context7.com 접속이 네트워크 정책(방화벽·프록시)에서 허용되는지 확인하세요 (claude mcp list)."
+  fi
+fi
+
+if [ "$WITH_DESIGN" -eq 1 ]; then
+  for s in theme-factory web-design-guidelines; do
+    if [ -f "$TARGET/$s/SKILL.md" ]; then say "OK   $s"; else fail "$s 의 SKILL.md 가 없음"; fi
+  done
+  if [ -f "$TARGET/frontend-design/SKILL.md" ]; then
+    say "OK   frontend-design (단독 스킬)"
+  elif have_claude && plugin_installed frontend-design@claude-plugins-official; then
+    say "OK   frontend-design (공식 플러그인)"
+  else
+    fail "frontend-design 이 설치되지 않음 (단독 스킬도 공식 플러그인도 없음)"
   fi
 fi
 
