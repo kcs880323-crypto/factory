@@ -69,7 +69,9 @@ node "<PLUGIN_ROOT>/skills/hyperframes/scripts/plugin-cli.mjs" init <slug> --ski
 cp audio/narration.wav audio/timing.json <slug>/assets/
 ```
 
-`<PLUGIN_ROOT>`는 `jarvis-hyperframes` 스킬의 방식으로 찾는다. 그다음 **`reference/bee-dance/build_video.py`의 구조를 가져와** 이 주제의 장면을 만든다 (그대로 복사하지 않는다).
+`<PLUGIN_ROOT>`는 `jarvis-hyperframes` 스킬의 방식으로 찾는다. 그다음 참고 예시의 구조를 가져와 이 주제의 장면을 만든다 (그대로 복사하지 않는다).
+- `reference/bee-dance/build_video.py`: 장면을 갈아 끼우는 구성(꿀벌이 장면 사이를 이어 감), 길 따라 움직이기, 점선 그리기.
+- `reference/octopus-hearts/build_video.py`: **한 장면이 15초 동안 하나의 도표를 키우는 구성**(문어 몸속에 장기가 하나씩 등장), 피 알갱이 흐름(`offset-path`), 심장 박동 함수(`beats`), 장면 3개로 줄인 구성.
 
 **구성:** 배경(`bg`) + 칩(주제 이름, 상단 좌측) + **장면 3~5개** + 자막(`captions`) + 오디오 1개. 장면은 `compositions/<이름>.html` 하위 구성으로, 호스트 id = 장면 root의 `data-composition-id` = 타임라인 키가 같아야 한다.
 
@@ -85,6 +87,8 @@ cp audio/narration.wav audio/timing.json <slug>/assets/
 - 장면 안에서는 `fromTo`를 쓴다. 같은 대상에 `fromTo`를 여러 번 쓰면 `immediateRender: false`를 주고, 쉬는 상태는 `tl.set(..., 0)`으로 만든다 (아니면 마지막 `from` 값이 처음부터 적용된다).
 - 점선을 그려 넣을 때는 **마스크 경로**를 쓴다(점선 자체의 `strokeDashoffset`을 움직이면 점이 흘러갈 뿐이다). 실선은 `pathLength="100" stroke-dasharray="100 120"`, `strokeDashoffset 100→0` (간격이 길이보다 길어야 둥근 끝점이 안 보인다).
 - 길을 따라 움직이는 물체는 CSS `offset-path: path(...)` + `offsetDistance` 트윈. 몸을 흔들거나 날갯짓은 `repeat`를 **유한 횟수**로(`repeat: -1` 금지). `onUpdate` 같은 콜백으로 화면을 바꾸지 않는다.
+- **위치를 정하지 않은 `position:absolute` 0×0 요소는 화면 왼쪽 위(0,0)에 남아 작은 점으로 보인다** (일시정지 표시가 그랬다). 움직이는 물체 안의 부품(심장, 표시)은 그 물체의 자식으로 넣어서 함께 움직이게 한다.
+- 파이썬 문자열 서식(`%`)과 CSS의 `%`(`offset-distance: 0%`)가 충돌한다. 자리표시자는 `__이름__` + `.replace()`로.
 - 렌더 때 **CDN을 쓰지 않는다** (GSAP는 `assets/gsap.min.js`). 글꼴은 각 장면 파일 안에서 `@font-face`.
 - 장면 겹침, 자막 위치, 좌표 계산은 `snapshot`으로 눈으로 확인하고 고친다.
 
@@ -128,6 +132,6 @@ node "<PLUGIN_ROOT>/skills/hyperframes/scripts/plugin-cli.mjs" render
 | 자막이 서로 겹침 | 절 사이 간격(`--intra`, `--inter`)을 늘리거나 자막 클립 길이를 줄인다 |
 | `ffmpeg`/`npm`이 없다 | 사용자에게 알려 설치하게 한다 (윈도우: `winget install Gyan.FFmpeg`) |
 
-시험한 범위: 리눅스에서 `setup_tts.py`를 빈 상태에서 실행, 절 12개 음성 합성(24.7초), `build_track.py`(30초 자동 결정), `prepare_assets.py`, 참고 예시로 만든 프로젝트의 `check` 통과, 꿀벌 영상의 `verify_video.py` 전부 합격. 시험하지 못한 범위: **윈도우**, 꿀벌이 아닌 **다른 주제를 이 스킬만으로 처음부터 끝까지 만든 것**, 음성의 발음·억양(들어 보지 못함).
+시험한 범위: 리눅스에서 `setup_tts.py`를 빈 상태에서 실행, 절 12개 음성 합성(24.7초), `build_track.py`(30초 자동 결정), `prepare_assets.py`, 참고 예시로 만든 프로젝트의 `check` 통과, 꿀벌 영상의 `verify_video.py` 전부 합격. **이 스킬의 절차로 두 번째 영상 「문어의 심장은 세 개」(30초)를 처음부터 끝까지 만들었다**: 주제 무작위 선택, 웹 검색으로 사실 확인과 `SOURCES.md`, 음성, 화면, `check` 오류 0, `snapshot` 눈 확인과 수정, 렌더(GPU 없는 환경에서 약 2분 40초), `verify_video.py` 전부 합격. 시험하지 못한 범위: **윈도우**, 음성의 발음·억양(들어 보지 못함), 웹 검색 원문 페이지 직접 열람(이 환경에서 접속 실패, 검색 요약으로만 확인).
 
 공식 자료: <https://github.com/k2-fsa/sherpa-onnx> · <https://github.com/heygen-com/hyperframes> · Pretendard <https://github.com/orioncactus/pretendard>

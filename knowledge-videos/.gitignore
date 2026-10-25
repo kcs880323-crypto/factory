@@ -1,0 +1,7 @@
+# 지식영상 프로젝트의 생성물은 올리지 않는다. clauses.json, build_video.py, SOURCES.md 로 다시 만들 수 있다.
+*/proj/
+*/clauses/
+*/audio/
+*/render*.log
+*/check*.json
+*.mp4
