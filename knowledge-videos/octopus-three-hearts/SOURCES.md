@@ -9,3 +9,5 @@
 | 피의 산소 운반 단백질이 철이 아니라 구리 기반(헤모시아닌)이라 푸른빛 | [Wikipedia, Octopus](https://en.wikipedia.org/wiki/Octopus), [ScienceABC](https://www.scienceabc.com/nature/animals/why-do-octopuses-have-three-hearts) | |
 | 차갑고 산소가 적은 환경에서는 헤모시아닌이 더 효율적 | [Wikipedia, Octopus](https://en.wikipedia.org/wiki/Octopus) (검색 요약) | |
 | 헤엄칠 때 몸 심장이 멈춘다고 알려져 있어 주로 바닥을 기어 다닌다 | [Wikipedia, Octopus](https://en.wikipedia.org/wiki/Octopus), [ScienceABC](https://www.scienceabc.com/nature/animals/why-do-octopuses-have-three-hearts) | **널리 반복되는 설명이지만 1차 연구를 확인하지 못했습니다.** 그래서 대본에 "알려져 있어서"라고 썼습니다. |
+
+새 목소리(Supertonic 3)에 맞춰 낭독 길이를 줄이려고 2a·4a의 표현만 줄였습니다 ("아가미 옆에서" 삭제, "철이 아니라" → "철 대신"). 위 표의 사실 주장은 그대로입니다.
