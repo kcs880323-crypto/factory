@@ -1,4 +1,4 @@
-# 자비스 인수인계: Claude Code 스킬 25종 (필수 5 + PPT 5 + 공식 플러그인 5 + Agent Reach 1 + 디자인 보강 2 + REA·Graphify 2 + 영상 제작 5)
+# 자비스 인수인계: Claude Code 스킬 26종 (필수 5 + PPT 5 + 공식 플러그인 5 + Agent Reach 1 + 디자인 보강 2 + REA·Graphify 2 + 영상 제작 5 + 지식영상 1)
 
 > 출처 1: 게으른 빌더(lazyowen.com) 「클로드 코드에 무조건 깔아야 하는 스킬 5개」 (2026-08-13 갱신, PDF 11쪽)
 > 출처 2: 써매(@ssumae.ai) 「PPT 늘 밤티라면 — 클로드로 발표용 장표 만드는 도구 5개」 (2026-10-21 공개, Notion)
@@ -18,7 +18,7 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 
 설치가 끝나면 **Claude Code를 완전히 종료했다가 다시 켜세요.** 재시작 전에는 새 스킬, 플러그인, MCP 서버, `/gsd-` 명령을 인식하지 못합니다.
 
-필요한 것만 골라 붙이세요: 필수 5종은 `--with-upstream`, PPT 도구는 `--with-ppt`, 공식 플러그인은 `--with-official-plugins`, 디자인 보강은 `--with-design-skills`, 앱 분석(REA)은 `--with-rea`, 코드베이스 지도(Graphify)는 `--with-graphify`, 영상 제작 도구는 `--with-video-skills`(HyperFrames·Lemo-Opuscar·Collage B-roll)와 `--with-onetake`(비상업 용도일 때만). 옵션 없이 실행하면 안내 스킬 25개만 복사합니다.
+필요한 것만 골라 붙이세요: 필수 5종은 `--with-upstream`, PPT 도구는 `--with-ppt`, 공식 플러그인은 `--with-official-plugins`, 디자인 보강은 `--with-design-skills`, 앱 분석(REA)은 `--with-rea`, 코드베이스 지도(Graphify)는 `--with-graphify`, 영상 제작 도구는 `--with-video-skills`(HyperFrames·Lemo-Opuscar·Collage B-roll)와 `--with-onetake`(비상업 용도일 때만). 옵션 없이 실행하면 안내 스킬 26개만 복사합니다.
 
 **Agent Reach(`--with-agent-reach`)는 위 한 줄에 일부러 넣지 않았습니다.** 계정 전체에 설치되고 로그인 복사와 관련된 주의점이 있어서, 5장(파트 D)을 읽고 따로 선택하세요.
 
@@ -115,7 +115,8 @@ jarvis-skills.zip
         ├── jarvis-onetake/SKILL.md              │
         ├── jarvis-collage-broll/SKILL.md        │
         ├── jarvis-claude-animation-base/SKILL.md │
-        └── jarvis-lemo-opuscar/SKILL.md         ┘
+        ├── jarvis-lemo-opuscar/SKILL.md         ┘
+        └── jarvis-knowledge-video/              ← "지식영상 생성" 반복 사용 스킬 (SKILL.md + scripts/ + reference/)
 ```
 
 ### 꼭 알아 둘 점: 두 종류가 있습니다
@@ -152,7 +153,7 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 
 | 옵션 | 동작 |
 |---|---|
-| (없음) | `jarvis-*` 25개만 `.claude/skills`에 복사 |
+| (없음) | `jarvis-*` 26개만 `.claude/skills`에 복사 |
 | `--global` | 계정 전체(`~/.claude`)에 설치 |
 | `--with-upstream` | + 공식 원본 4개와 GSD 설치 (네트워크 필요) |
 | `--with-browser` | + `agent-browser` 명령줄 도구와 자동화용 크롬 설치 (전역 npm 설치) |
@@ -718,6 +719,24 @@ claude plugin install lemo-opuscar@lemolab --scope user
 | 스타일 수 | 문서마다 다릅니다(저장소 README 59개, 확인 시점의 폴더 60개). 저장소가 계속 늘어나므로 `styles/README.md`가 기준 |
 | 공통: "유료 Claude 플랜" | 이 항목은 확인하지 못했습니다. Claude Code를 이미 쓰고 있으면 충족되는 조건으로 보았습니다 |
 
+### 8-5. "지식영상 생성": 같은 영상을 계속 만들기 (`jarvis-knowledge-video`)
+
+「꿀벌의 8자 춤」(30초) 영상을 만든 방법을 **반복해서 쓸 수 있는 스킬**로 묶었습니다. 사용자가 **"지식영상 생성"**이라고 말하면(주제를 같이 말해도 되고, 말하지 않으면 자비스가 무작위로 고릅니다) 30~40초짜리 한국어 나레이션·자막 지식 영상을 만듭니다.
+
+| 단계 | 하는 일 |
+|---|---|
+| 주제 | 준 주제 또는 무작위. `knowledge-videos/ledger.json`에 있는 주제와 겹치지 않게 |
+| 사실 확인 | 확실한 것과 출처로 확인한 것만 쓰고 `SOURCES.md`에 기록. 확인 못 하면 못 했다고 보고 |
+| 대본 | 5줄(훅 → 정답 → 원리 → 한 가지 더 → 마무리), 절 12개 안팎, 낭독문과 자막문을 따로 (`clauses.json`) |
+| 음성 | `scripts/setup_tts.py`가 `~/.jarvis-knowledge-video`에 가상환경과 한국어 음성 모델(약 67MB, SHA-256 고정)을 한 번만 설치, `tts_clauses.py`와 `build_track.py`가 나레이션 한 트랙(−16 LUFS)과 절별 시각표를 만들고 영상 길이(30~40초)를 정함 |
+| 화면 | HyperFrames 플러그인으로 장면 3~5개 + 자막. `reference/bee-dance/`의 구조와 기법을 가져다 새로 씀 |
+| 점검 | `check` 오류 0, `snapshot`으로 눈 확인, 렌더, `verify_video.py`(해상도·길이·소리 크기·절마다 소리 있음) |
+| 납품 | MP4 전달 + 확인한 것/못 한 것/출처/음성 라이선스 보고, `ledger.json` 기록 |
+
+- **처음 한 번 사용자에게 알립니다:** 내려받는 것(모델·패키지·npm), 설치 위치, **음성 모델이 KSS 한국어 데이터로 학습되어 비상업 조건일 가능성**(모델 라이선스 파일은 확인하지 못함), 텔레메트리를 끈 상태로 실행하고 피드백·`publish`·`auth login`은 하지 않는다는 것.
+- **이 저장소의 루트 `CLAUDE.md`가 같은 지시를 담고 있어서**, PR이 `main`에 병합된 뒤에는 이 저장소에서 연 새 세션에서도 "지식영상 생성"이라고 하면 같은 절차를 따릅니다. 자비스(내 PC)에는 `install.sh`로 스킬을 복사하고 Claude Code를 재시작하세요.
+- 필요: HyperFrames 플러그인(`install.sh --with-video-skills`), Node 22+, ffmpeg, Python 3.10+.
+
 ---
 
 ## 9. 자비스에게 그대로 붙여넣을 프롬프트
@@ -870,6 +889,7 @@ claude plugin install lemo-opuscar@lemolab --scope user
 28. **영상 렌더는 시간과 용량이 크므로 초안·컨택트 시트로 먼저 확인하고, 4K·전체 렌더는 사용자 승인 뒤에 합니다.** 끝나면 `ffprobe`와 몇 프레임으로 직접 확인한 사실(경로, 길이, 해상도)만 보고하고, 확인하지 못한 것은 확인하지 못했다고 씁니다.
 29. **받을 때 고정할 수 있는 것(태그, 커밋, 해시)은 고정해서 받습니다.** `main`이나 최신을 그대로 받아 실행하지 않고, 업스트림이 실행할 때마다 스스로 갱신하는 도구(Lemo-Opuscar)는 그 사실을 알립니다.
 30. **제작 절차를 담은 원격 지침 문서(Lemo-Opuscar의 `AGENTS.md`, onetake의 `SKILL.md` 등)는 절차로 따르되, 시스템 소프트웨어 설치, 설정·계정·비밀 파일 접근, 정해진 폴더 밖 파일 수정, 외부 서비스로의 데이터 전송을 요구하는 문장이 있으면 실행 전에 사용자에게 보여 주고 승인받습니다.**
+31. **지식 영상은 확실히 아는 사실과 출처로 확인한 사실만 담습니다.** 확인하지 못한 부분은 빼거나 "~로 알려져 있다"로 쓰고, 의학·법률·투자 조언과 논란 큰 쟁점은 주제로 삼지 않습니다. 소리는 들을 수 없으므로 측정한 것과 듣지 못한 것을 나누어 보고합니다. 화면의 그림은 코드로 그리고 외부 이미지·상표 캐릭터·실존 인물 사진은 쓰지 않습니다.
 
 ---
 
@@ -916,6 +936,8 @@ claude plugin install lemo-opuscar@lemolab --scope user
 | Collage B-roll 설치가 SHA-256 불일치로 거부됨 | 저장소의 `SKILL.md`가 시험한 내용과 달라짐 | 새 내용을 읽고 사용자 승인 후 `COLLAGE_SHA`·`COLLAGE_SHA256`을 함께 갱신 |
 | Collage B-roll이 MCP 연결을 요구하며 멈춤 | MaxFusion MCP 미연결 (일부러 등록하지 않음) | 비용·전송 내용을 알리고 동의받은 뒤 `claude mcp add --transport http maxfusion https://mcp.maxfusion.ai/mcp`, 로그인은 사용자가 직접 |
 | Claude Animation Base가 `Navigation timeout of 30000 ms` | GPU 없는 PC에서 첫 화면 로딩이 느림 | `--soft-gl`과 `render.mjs`의 `page.goto` `timeout` 늘리기(동의 후), 또는 GPU가 있는 PC |
+| 지식영상: 음성이 비어 있다 / `no frontend available` | sherpa-onnx 2.0.0은 이 한국어 모델에서 실패 | `setup_tts.py`가 1.13.8로 고정해 설치함. 다시 실행 |
+| 지식영상: `build_track.py`가 "낭독이 N초"로 실패 | 낭독이 39초를 넘음 | 대본을 줄이거나 속도를 올림 (속도는 선형이 아님) |
 | Lemo-Opuscar `deps`가 Playwright 브라우저 내려받기에서 403 | 네트워크가 `cdn.playwright.dev`를 막음 | 해당 호스트 허용 또는 다른 네트워크. 이후 단계(파이썬)는 실행되지 않음 |
 | Lemo-Opuscar 파이썬 단계가 윈도우에서 실패 | 라이브러리 스크립트가 `.venv/bin/python`(유닉스 경로)을 가정 (추정) | WSL에서 실행 |
 
@@ -932,6 +954,7 @@ claude plugin install lemo-opuscar@lemolab --scope user
 - **파트 F (Graphify):** 격리된 HOME에서 `uv tool install graphifyy`(0.9.95)와 `graphify install`을 실행했습니다. 스킬 설치와 함께 전역 `~/.claude/CLAUDE.md`에 섹션이 추가되고 기존 내용은 보존되며 두 번 실행해도 하나만 남는 것, `graphify uninstall`이 그 섹션을 남기는 것을 확인했습니다. 샘플 코드 3파일에서 `graphify update`가 키 없이 약 2초에 `graph.json`, `graph.html`, `GRAPH_REPORT.md`를 만들고 `god-nodes`·`query`가 올바른 호출 관계를 답했으며, 그동안 외부 접속 시도(프록시 실패 기록)가 없었습니다. 패키지 소스에서 텔레메트리 라이브러리는 찾지 못했습니다. 생성된 `graph.html`이 `unpkg.com`의 스크립트를 불러오는 것도 확인했습니다.
 - **파트 E:** 격리된 폴더에서 `npx skills add`로 `theme-factory`, `web-design-guidelines`, `frontend-design`이 설치됨을 확인했습니다. `theme-factory`는 `SKILL.md`·`LICENSE.txt`·`theme-showcase.pdf`·`themes/`(10개)를 포함합니다. 단독 `frontend-design`과 공식 플러그인판의 `SKILL.md`는 해시가 같았습니다. `web-design-guidelines`가 읽어 오는 원격 규칙 파일(`command.md`, 8,055바이트·191줄)을 직접 읽었고 검토 규칙과 출력 형식뿐이었으며, 고정 커밋 주소의 파일이 `main`과 같음을 확인했습니다(2026-10-23). 테마 글꼴(DejaVu, FreeSans 계열)이 한글 지원 글꼴 목록에 없음을 이 환경의 fontconfig로 확인했습니다. 스크립트는 첫 설치, 재실행, 플러그인이 이미 있을 때 `frontend-design` 건너뛰기, Node 버전 부족, 중복 경고, 옵션 없을 때 건드리지 않기를 시험했습니다.
 - **파트 G:** 격리된 HOME에서 **① HyperFrames**를 `#v0.8.197` 태그로 마켓에 등록하고(커밋 해시로는 등록되지 않음을 확인) 플러그인을 설치해 버전 0.8.197을 확인했습니다. 플러그인 실행기로 `init` → `check` → `render`를 실행해 **1920×1080, 30fps, 10초 H.264 MP4**를 만들었습니다(시험 환경의 Chrome이 jsDelivr에 접속하지 못해 GSAP를 로컬 파일로 바꾼 뒤 성공. 바꾸기 전에는 `sub_timeline_script_failure`로 막힘). 텔레메트리가 기본으로 켜져 있음을 `telemetry status`로 확인하고 수집 항목·피드백·`publish` 문서를 읽었습니다. **② onetake**는 고정 커밋을 얕게 받아 라이브러리 단위 테스트 전부 통과(`ALL PASS`)를 확인하고, 파이썬 패키지를 가상환경에 설치한 뒤 템플릿 합성의 **2초 초안 렌더**(1920×1080, 30fps, 60프레임, 페이지 오류 없음)를 만들었습니다(playwright를 설치된 브라우저에 맞춘 1.56.0으로). **③ Collage B-roll**은 고정 커밋의 `SKILL.md`를 받아 기존에 읽은 내용과 같음을 확인하고, 명령·주소·키 관련 문장을 검색했으며, SHA-256을 계산해 설치 스크립트에 넣었습니다. **④ Claude Animation Base**는 고정 커밋을 받아 `npm ci --ignore-scripts`(46개 패키지, 설치 스크립트 있는 패키지 없음)를 실행하고 데모 장면의 **컨택트 시트 2장(0초·3초)을 렌더**해 그림을 확인했습니다(GPU 없는 소프트웨어 렌더, 로딩 제한을 늘려서, 프레임당 약 55초). **⑤ Lemo-Opuscar**는 플러그인을 설치하고 `setup.sh`로 라이브러리를 내려받아(약 31MB, 시험 시점 커밋 `413a6bd6`) `deps`의 npm 설치까지 실행했고, 설치 스크립트가 따르는 `LEMO_OPUSCAR_HOME` 고정 방식(직접 복제한 폴더는 갱신되지 않음)도 확인했습니다. `install.sh`는 `--with-video-skills --with-onetake`의 첫 설치, 재실행(전부 건너뜀), `--global`, 옵션 없음(25개만 복사), 해시 불일치·잘못된 커밋·claude CLI 없음의 실패 보고(종료 코드 1, 남은 폴더 없음)를 시험했습니다.
+- **지식영상 생성 스킬:** 빈 상태에서 `setup_tts.py`(가상환경, 패키지, 모델 내려받기와 SHA-256 확인, 약 52초), 절 12개 음성 합성(낭독 24.7초), `build_track.py`(영상 길이 30초 자동 결정, −16 LUFS 정규화), `prepare_assets.py`(GSAP·한글 글꼴), 참고 예시 생성기로 만든 프로젝트의 `check` 통과, 이미 만든 꿀벌 영상의 `verify_video.py` 전부 합격을 확인했습니다. 보조 스크립트는 파이썬(표준 라이브러리 + 가상환경 패키지)으로 써서 운영체제 경로 차이를 코드로 처리했지만 리눅스에서만 실행했습니다.
 - **`install.sh`:** 첫 설치, 재실행(전부 건너뜀), 로컬·`--global` 범위, 잘못된 옵션, Node 버전 부족, claude CLI 없음, 파이썬 경로 오류, 시스템 파이썬 충돌, `--with-upstream`과 `--with-ppt` 동시 사용, `--with-official-plugins`를 모두 실행했습니다. 실패 상황에서는 모두 `미완료` 목록과 종료 코드 1로 끝났습니다. `jarvis-*` 스킬과 공식 원본이 이름 충돌 없이 함께 설치되었습니다. MCP 연결 판별 로직은 가짜 `claude` 출력(연결됨·실패·이름이 다른 서버)으로 따로 시험했습니다.
 
 ### 파트 A: PDF와 달라진 점 (확인 시점의 최신 상태)
@@ -946,6 +969,7 @@ claude plugin install lemo-opuscar@lemolab --scope user
 - **REA의 실제 분석 동작.** 설치·등록·연결까지만 확인했고, 실제 앱을 분석해 본 적은 없습니다(허가된 대상과 대화형 세션이 필요). Node 22.22.0은 문서의 요구(22.23.4+)보다 낮은데 설치와 MCP 연결은 되었지만 분석 기능은 확인하지 못했습니다. Hopper/Ghidra/IDA 같은 분석 엔진은 설치하지 않았습니다. REA의 `rea uninstall`과 업데이트 절차는 시험하지 않았습니다(Claude Code 제거는 문서의 방법을 옮겨 적음).
 - **Graphify의 의미 추출.** 코드만 있는 샘플(LLM 없는 AST 경로)만 시험했습니다. 문서·PDF·이미지를 서브에이전트로 처리하는 경로와 Gemini 경로, `--watch`, `--mcp`, `hook install`, `claude install`, URL·GitHub 가져오기는 시험하지 못했습니다. README의 "토큰 71.5배 절감" 같은 수치는 검증하지 못했습니다. `graphify` PyPI 이름이 `graphifyy`(y 두 개)이며 README가 임시 이름이라고 하는 점, 저장소 주소가 `safishamsi/graphify`와 `Graphify-Labs/graphify`로 모두 같은 내용을 반환하는 점(이전된 것으로 보임)은 확인만 했고 이유는 확인하지 못했습니다.
 - **파트 G 도구들의 실제 영상 제작.** 도구가 모델과 함께 콘티를 만들고 영상을 완성하는 대화형 과정은 시험하지 못했습니다. 렌더 단계만 확인했습니다. **①** HyperFrames의 데스크톱 앱(Studio), `media-use`의 HeyGen 기능, `publish`, `feedback`, 윈도우. **②** onetake의 내레이션(Kokoro, Whisper), 4K 최종 렌더, `record_footage.py`(실제 페이지 녹화), `analyze_ref.py`(opencv 필요), 윈도우. **③** Collage B-roll은 MaxFusion 계정이 없어 **실제로 영상을 만들어 보지 못했고** MaxFusion의 요금과 이용 약관도 확인하지 못했습니다. **④** Claude Animation Base의 전체 MP4 렌더(ffmpeg 묶기)와 GPU 렌더, 모델이 새 장면을 만드는 과정, 캐릭터(Clawd)의 권리. **⑤** Lemo-Opuscar는 `deps`가 시험 환경의 네트워크 차단(`cdn.playwright.dev`)에서 멈춰 **파이썬 단계, 음성·음악 단계, 실제 영상 제작을 시험하지 못했습니다.** 윈도우에서 파이썬 단계가 실패할 것이라는 설명은 코드를 읽은 추정입니다. 소개 글의 "유료 Claude 플랜" 조건과 "Opus 5.5"에서만 재현된다는 저장소의 설명도 확인하지 못했습니다.
+- **지식영상 생성 스킬로 꿀벌이 아닌 다른 주제를 처음부터 끝까지 만든 것**, 윈도우에서의 실행, 음성의 발음·억양(들어 보지 못함), 음성 모델의 라이선스 파일. 스킬은 꿀벌 영상을 만든 방식을 옮겨 적고 보조 스크립트를 따로 시험한 것입니다.
 - **파트 E 도구의 실제 사용 결과.** 테마를 실제 장표에 입힌 결과, `web-design-guidelines`로 실제 코드를 검토한 결과는 시험하지 못했습니다(대화형 세션 필요). 원격 규칙 파일이 앞으로 바뀌어도 고정 주소는 지금 읽은 내용을 유지하지만, 원본 스킬이 `main` 주소를 안내하는 것은 이 패키지가 바꿀 수 없어서 **자비스가 `jarvis-web-design-guidelines`의 고정 주소 규칙을 따르는지**는 실제 세션에서 확인하지 못했습니다. 원문 링크 중 `skills.sh`의 단독 설치 명령 페이지는 이 환경에서 접속하지 않았고, `npx skills add … --skill web-design-guidelines` 명령으로 대신 확인했습니다.
 - **Agent Reach의 실제 읽기 동작.** 설치와 기본 채널 준비까지만 확인했고, 각 채널로 실제 검색·읽기를 해 보지는 않았습니다(이 환경은 외부 사이트 접속이 제한적). 선택 채널(`agent-reach add`)의 설치 과정, 로그인 창, Chrome 로그인 복사가 실제로 어떻게 동작하는지도 확인하지 못했습니다. **로그인 복사에 대한 문서 간 모순**(`sessions.md`·스킬은 확장 연결 시 복사, 문제 해결 문서는 "절대 가져오지 않음")은 직접 풀지 못했습니다. 한국어 README(`docs/README_ko.md`)는 찾지 못했습니다. 공식 문서의 `archive/refs/tags/…zip` 주소(되돌리기에 쓰임)는 이 환경에서 403이라 시험하지 못했습니다.
 - **파트 C 도구의 실제 사용 결과.** `/code-review`는 실행하면 GitHub PR에 댓글이 게시되므로 실제 PR에 돌려 보지 않았습니다. superpowers의 작업 방식 강제가 새 세션에서 어떻게 나타나는지, code-simplifier의 실제 정리 결과, frontend-design의 디자인 결과도 대화형 세션이 필요해서 시험하지 못했습니다.
@@ -982,6 +1006,8 @@ claude plugin install lemo-opuscar@lemolab --scope user
 | Collage B-roll | github.com/MegaTroll222/VOX-COLLAGE-BROLL · 원작 github.com/pyang5166/gbro-collage-broll · maxfusion.ai |
 | Claude Animation Base | github.com/JohnHeibel/ClaudeAnimationBase · p5.brush github.com/acamposuribe/p5.brush |
 | Lemo-Opuscar | github.com/lemomo-ai/lemo-opuscar · lemomo-ai.github.io/lemo-opuscar · 스타일 목록 `styles/README.md` |
+| 지식영상 음성 | github.com/k2-fsa/sherpa-onnx (`tts-models` 릴리스의 `vits-mimic3-ko_KO-kss_low`) · Mimic3 voices github.com/MycroftAI/mimic3-voices |
+| Pretendard (글꼴, OFL-1.1) | github.com/orioncactus/pretendard · npm `pretendard` |
 | Context7 | context7.com |
 | Claude Code 스킬 문서 | code.claude.com/docs/en/skills |
 | Node.js / uv | nodejs.org · docs.astral.sh/uv |

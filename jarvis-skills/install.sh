@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Jarvis 스킬 25종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
+# Jarvis 스킬 26종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
 #
-#   ./install.sh                         jarvis-* 스킬 25개를 현재 폴더의 .claude/skills 에 복사
+#   ./install.sh                         jarvis-* 스킬 26개를 현재 폴더의 .claude/skills 에 복사
 #   ./install.sh --global                계정 전체(~/.claude/skills)에 복사
 #   ./install.sh --with-upstream         + 공식 스킬 원본 4개와 GSD 설치 (네트워크 필요)
 #   ./install.sh --with-browser          + agent-browser 명령줄 도구와 자동화용 크롬 설치
@@ -60,6 +60,7 @@ JARVIS_SKILLS=(
   jarvis-theme-factory jarvis-web-design-guidelines
   jarvis-rea jarvis-graphify
   jarvis-hyperframes jarvis-onetake jarvis-collage-broll jarvis-claude-animation-base jarvis-lemo-opuscar
+  jarvis-knowledge-video
 )
 # 공식 문서의 'releases/latest/download/agent-reach.zip' 대신 같은 릴리스 파일을 버전으로 고정한다
 # (v1.6.0 이 latest 일 때 두 주소는 같은 파일임을 확인함. 바뀔 수 있는 최신 파일을 그대로 실행하지 않기 위해).
@@ -507,6 +508,7 @@ if [ "$WITH_VIDEO" -eq 1 ]; then
   fi
   install_collage
   say "참고: Collage B-roll 은 MaxFusion MCP(제3자 유료 서비스)가 있어야 동작합니다. 동의 없이 등록하지 않았습니다 (jarvis-collage-broll 스킬 참고)."
+  say "참고: '지식영상 생성'(jarvis-knowledge-video)은 HyperFrames 플러그인과 Node 22+, ffmpeg, Python 3.10+ 가 필요합니다. 처음 쓸 때 음성 모델(약 67MB) 등을 ~/.jarvis-knowledge-video 에 내려받습니다 (스킬이 먼저 알리고 동의를 받습니다)."
   say "영상 도구를 쓰려면 Claude Code를 완전히 종료했다가 다시 켜세요."
 fi
 
