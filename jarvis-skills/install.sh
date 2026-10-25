@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Jarvis 스킬 30종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
+# Jarvis 스킬 32종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
 #
-#   ./install.sh                         jarvis-* 스킬 30개를 현재 폴더의 .claude/skills 에 복사
+#   ./install.sh                         jarvis-* 스킬 32개를 현재 폴더의 .claude/skills 에 복사
 #   ./install.sh --global                계정 전체(~/.claude/skills)에 복사
 #   ./install.sh --with-upstream         + 공식 스킬 원본 4개와 GSD 설치 (네트워크 필요)
 #   ./install.sh --with-browser          + agent-browser 명령줄 도구와 자동화용 크롬 설치
@@ -20,8 +20,12 @@
 #                                          Collage B-roll 의 SKILL.md(커밋·해시 고정). MaxFusion MCP 는 등록하지 않음 (claude CLI·curl 필요)
 #   ./install.sh --with-onetake          + onetake(고정 커밋 복제, 약 225MB). 비상업 용도 전용 라이선스(PolyForm Noncommercial)
 #   ./install.sh --with-uiux             + UI UX Pro Max 플러그인(v2.15.0 태그 고정, 디자인 규칙부터 정하는 도구). 스킬 7개가 함께 들어오고 파이썬 3 필요 (claude CLI 필요)
-#   ./install.sh --with-ruflo            + Ruflo(멀티 에이전트): npm 전역 설치(v3.63.0 고정, 약 1.7GB) + ruflo-core 플러그인(태그 고정) + 안전 설정 3개를
-#                                          Claude Code 설정 파일의 env 에 추가 (자동 업데이트·명령 기록·npx 대체 끔). claude CLI, Node 20+ 필요
+#   ./install.sh --with-ruflo            + Ruflo(멀티 에이전트): npm 전역 설치(v3.63.0 고정, 약 1.7GB) + ruflo-core 플러그인(태그 고정) + 안전 설정 4개를
+#                                          Claude Code 설정 파일의 env 에 추가 (자동 업데이트·명령 기록·npx 대체·funnel 메시지 조회 끔). claude CLI, Node 20+ 필요
+#   ./install.sh --with-jarvis-core      + 메인 자비스 운영 방식(대화는 계속하고 일은 서브 세션에 위임, 비서 규칙, 안전 규칙) 블록을
+#                                          <설정 폴더>/CLAUDE.md 에 덧붙임 (백업, 이미 있으면 건너뜀). 위임·비서 도구의 시험도 실행
+#   ./install.sh --with-devices          + 갤럭시탭·아이폰 화면 조작의 안전 훅 2개를 Claude Code 설정 파일에 추가 (백업, python3 필요)
+#                                          adb·Tailscale·Mac 은 설치하지 않음 (jarvis-device-control 스킬 참고)
 #   (Claude Animation Base 는 프로젝트 폴더가 필요한 스타터 킷이라 설치하지 않음: jarvis-claude-animation-base 스킬 참고)
 #   환경변수 PPT_PYTHON=<python 경로>    PPT Master 부품을 설치할 파이썬 (기본 python3, 가상환경용)
 #   환경변수 REA_VERSION=<버전>          REA npm 버전 (기본: 시험한 6.7.0)
@@ -51,6 +55,8 @@ WITH_VIDEO=0
 WITH_ONETAKE=0
 WITH_UIUX=0
 WITH_RUFLO=0
+WITH_CORE=0
+WITH_DEVICES=0
 # 직접 시험한 버전으로 고정한다 (바뀔 수 있는 최신 버전을 그대로 실행하지 않기 위해).
 REA_VERSION="${REA_VERSION:-6.7.0}"
 GRAPHIFY_SPEC="${GRAPHIFY_SPEC:-graphifyy==0.9.95}"
@@ -73,6 +79,7 @@ JARVIS_SKILLS=(
   jarvis-secretary jarvis-skill-learner
   jarvis-ui-ux-pro-max
   jarvis-ruflo
+  jarvis-dispatch jarvis-device-control
 )
 # 공식 문서의 'releases/latest/download/agent-reach.zip' 대신 같은 릴리스 파일을 버전으로 고정한다
 # (v1.6.0 이 latest 일 때 두 주소는 같은 파일임을 확인함. 바뀔 수 있는 최신 파일을 그대로 실행하지 않기 위해).
@@ -102,6 +109,8 @@ for arg in "$@"; do
     --with-onetake) WITH_ONETAKE=1 ;;
     --with-uiux) WITH_UIUX=1 ;;
     --with-ruflo) WITH_RUFLO=1 ;;
+    --with-jarvis-core) WITH_CORE=1 ;;
+    --with-devices) WITH_DEVICES=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "알 수 없는 옵션: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -567,10 +576,10 @@ fi
 #     (a) npm 전역에 고정 버전을 설치한다: 플러그인의 훅·MCP 가 npx 로 "최신"을 받아 실행하는 경로를 막기 위해서다.
 #         3.5.2 이하의 preinstall 은 npm 캐시를 지운 이력이 있어 고정 버전만 쓴다.
 #     (b) 마켓을 태그로 고정해 ruflo-core 하나만 설치한다 (마켓의 나머지 46개 플러그인은 설치하지 않는다).
-#     (c) 설정 파일의 env 에 안전 설정 3개를 넣는다 (백업, 이미 있는 키는 그대로 둠).
-RUFLO_ENV_KEYS=(CLAUDE_FLOW_AUTO_UPDATE CLAUDE_FLOW_HOOKS_RECORD_COMMANDS RUFLO_HOOK_SKIP_NPX)
+#     (c) 설정 파일의 env 에 안전 설정 4개를 넣는다 (백업, 이미 있는 키는 그대로 둠).
+RUFLO_ENV_KEYS=(CLAUDE_FLOW_AUTO_UPDATE CLAUDE_FLOW_HOOKS_RECORD_COMMANDS RUFLO_HOOK_SKIP_NPX RUFLO_FUNNEL)
 
-ruflo_settings() { # 설정 파일에 env 키 3개를 추가한다. 이미 있는 키는 두고 알린다.
+ruflo_settings() { # 설정 파일에 env 키 4개를 추가한다. 이미 있는 키는 두고 알린다.
   node - "$SETTINGS_FILE" <<'NODE_EOF'
 const fs = require('fs'), path = require('path');
 const f = process.argv[2];
@@ -580,7 +589,7 @@ if (fs.existsSync(f)) {
   catch (e) { console.error('설정 파일을 JSON 으로 읽을 수 없어 건드리지 않습니다: ' + f); process.exit(3); }
 }
 if (!s.env || typeof s.env !== 'object' || Array.isArray(s.env)) s.env = {};
-const want = { CLAUDE_FLOW_AUTO_UPDATE: 'false', CLAUDE_FLOW_HOOKS_RECORD_COMMANDS: 'false', RUFLO_HOOK_SKIP_NPX: '1' };
+const want = { CLAUDE_FLOW_AUTO_UPDATE: 'false', CLAUDE_FLOW_HOOKS_RECORD_COMMANDS: 'false', RUFLO_HOOK_SKIP_NPX: '1', RUFLO_FUNNEL: '0' };
 let changed = false;
 for (const [k, v] of Object.entries(want)) {
   if (!(k in s.env)) { s.env[k] = v; changed = true; console.log('설정 추가: ' + k + '=' + v); }
@@ -590,7 +599,7 @@ if (changed) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileS
 NODE_EOF
 }
 
-ruflo_settings_ok() { # 3개 키가 설정 파일 env 에 모두 있는가
+ruflo_settings_ok() { # 4개 키가 설정 파일 env 에 모두 있는가
   [ -f "$SETTINGS_FILE" ] && node -e '
     const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); const e = s.env || {};
     process.exit(process.argv.slice(2).every(k => k in e) ? 0 : 1)' "$SETTINGS_FILE" "${RUFLO_ENV_KEYS[@]}" 2>/dev/null
@@ -625,6 +634,75 @@ if [ "$WITH_RUFLO" -eq 1 ]; then
     say "참고: Ruflo 의 계정 로그인, 클라우드 라우팅, 학습 데이터 공유, 사용 통계 동의는 하지 않았습니다. init·doctor --fix·daemon 도 실행하지 않았습니다."
     say "Ruflo 를 쓰려면 Claude Code를 완전히 종료했다가 다시 켜세요."
   fi
+fi
+
+# 15) 메인 자비스 운영 방식 — CLAUDE.md 에 표시를 붙여 한 블록을 덧붙인다 (이미 있으면 건너뜀, 파일이 있으면 먼저 백업).
+CORE_BEGIN="<!-- JARVIS-CORE:BEGIN (jarvis-skills install.sh --with-jarvis-core 가 넣은 블록. 지우려면 BEGIN~END 사이를 지우세요) -->"
+CORE_END="<!-- JARVIS-CORE:END -->"
+CORE_FILE="$BASE/CLAUDE.md"
+py_bin() { # 파이썬 실행 파일 이름 (python3, python 순서)
+  if command -v python3 >/dev/null 2>&1; then echo python3; elif command -v python >/dev/null 2>&1; then echo python; else return 1; fi
+}
+if [ "$WITH_CORE" -eq 1 ]; then
+  step "15. 메인 자비스 운영 방식"
+  if [ ! -f "$HERE/templates/jarvis-core.md" ]; then
+    fail "templates/jarvis-core.md 가 없습니다 ($HERE/templates)"
+  elif [ -f "$CORE_FILE" ] && grep -q -F "JARVIS-CORE:BEGIN" "$CORE_FILE"; then
+    say "건너뜀 (이미 있음): $CORE_FILE 의 JARVIS-CORE 블록"
+  else
+    mkdir -p "$BASE"
+    if [ -f "$CORE_FILE" ]; then
+      CORE_BACKUP="$CORE_FILE.bak-$(date +%Y%m%d%H%M%S)"
+      cp "$CORE_FILE" "$CORE_BACKUP" && say "백업: $CORE_BACKUP"
+    fi
+    { [ -s "$CORE_FILE" ] && printf '\n'; printf '%s\n' "$CORE_BEGIN"; cat "$HERE/templates/jarvis-core.md"; printf '%s\n' "$CORE_END"; } >> "$CORE_FILE" \
+      && say "추가: $CORE_FILE (메인 자비스 운영 방식)" || fail "CLAUDE.md 에 쓰지 못했습니다: $CORE_FILE"
+  fi
+  say "참고: 위임 기록은 ~/.jarvis-dispatch 에, 비서 설정은 ~/.jarvis-secretary 에 저장됩니다 (저장소 밖, 나만 읽게). 서브 세션마다 구독 사용량이 따로 듭니다."
+  say "새 운영 방식은 Claude Code를 새로 시작한 세션부터 적용됩니다."
+fi
+
+# 16) 기기 화면 조작 안전 훅 — adb·Tailscale·Mac 은 설치하지 않는다. 훅 2개(직접 adb 막기, 기기 MCP 도구 시간표 확인)만 설정 파일에 추가한다.
+devices_hooks() { # 설정 파일에 PreToolUse 훅 2개를 추가한다 (이미 있으면 건너뜀)
+  "$1" - "$SETTINGS_FILE" "$2" "$3" <<'PY_EOF'
+import json, os, sys
+f, py, script = sys.argv[1], sys.argv[2], sys.argv[3]
+s = {}
+if os.path.exists(f):
+    try: s = json.load(open(f, encoding="utf-8"))
+    except ValueError: print("설정 파일을 JSON 으로 읽을 수 없어 건드리지 않습니다: " + f, file=sys.stderr); sys.exit(3)
+if not isinstance(s.get("hooks"), dict): s["hooks"] = {}
+arr = s["hooks"].setdefault("PreToolUse", [])
+def has(group): return any(script in " ".join(map(str, h.get("args", []))) + str(h.get("command", "")) for h in group.get("hooks", []))
+if any(has(g) for g in arr):
+    print("이미 있음(그대로 둠): device_guard_hook"); sys.exit(0)
+hook = {"type": "command", "command": py, "args": [script]}
+arr.append({"matcher": "Bash", "hooks": [dict(hook)]})
+arr.append({"matcher": "^mcp__(iphone|ios|wda|android|mobile|phone|tablet|device)", "hooks": [dict(hook)]})
+os.makedirs(os.path.dirname(f) or ".", exist_ok=True)
+json.dump(s, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=2); open(f, "a").write("\n")
+print("훅 추가: Bash(직접 adb 막기), 기기 MCP 도구(켜 둔 시간 확인)")
+PY_EOF
+}
+if [ "$WITH_DEVICES" -eq 1 ]; then
+  step "16. 기기 화면 조작 안전 훅"
+  PYB="$(py_bin || true)"
+  DEV_SCRIPT="$TARGET/jarvis-device-control/scripts/device_guard_hook.py"
+  if [ -z "$PYB" ]; then
+    fail "파이썬 3 가 없습니다 (자동으로 설치하지 않습니다). https://www.python.org 에서 설치한 뒤 다시 실행하세요. (기기 조작 훅)"
+  elif [ ! -f "$DEV_SCRIPT" ]; then
+    fail "훅 스크립트가 없습니다 ($DEV_SCRIPT). 먼저 스킬이 복사되어야 합니다."
+  else
+    if [ -f "$SETTINGS_FILE" ]; then
+      DEV_BACKUP="$SETTINGS_FILE.bak-$(date +%Y%m%d%H%M%S)"
+      cp "$SETTINGS_FILE" "$DEV_BACKUP" && say "설정 백업: $DEV_BACKUP"
+    fi
+    PYABS="$(command -v "$PYB")"
+    devices_hooks "$PYB" "$PYABS" "$DEV_SCRIPT" || fail "기기 조작 훅을 설정 파일에 쓰지 못했습니다 ($SETTINGS_FILE)"
+  fi
+  say "참고: adb(Android platform-tools), Tailscale, Mac(아이폰용)은 설치하지 않았습니다. 연결·ACL·페어링은 사용자와 함께 jarvis-device-control 스킬 1·2번을 따릅니다."
+  say "참고: 기기는 사용자가 켜(arm) 준 시간 안에서만 조작합니다. 실제 기기로는 아직 시험하지 못했습니다 (jarvis-device-control 스킬 '시험한 범위')."
+  say "훅은 Claude Code를 다시 시작한 뒤부터 적용됩니다."
 fi
 
 # 검증
@@ -736,6 +814,30 @@ if [ "$WITH_UIUX" -eq 1 ]; then
   fi
 fi
 
+if [ "$WITH_CORE" -eq 1 ]; then
+  if [ -f "$CORE_FILE" ] && grep -q -F "JARVIS-CORE:BEGIN" "$CORE_FILE" && grep -q -F "JARVIS-CORE:END" "$CORE_FILE"; then say "OK   $CORE_FILE 에 JARVIS-CORE 블록"; else fail "$CORE_FILE 에 JARVIS-CORE 블록이 없음"; fi
+  PYB="$(py_bin || true)"
+  if [ -z "$PYB" ]; then
+    fail "파이썬 3 가 없어 위임·비서 도구의 시험을 실행할 수 없음"
+  else
+    JARVIS_DISPATCH_HOME="$(mktemp -d)" "$PYB" -I "$TARGET/jarvis-dispatch/scripts/dispatch_store.py" selftest >/tmp/jarvis-st1.$$ 2>&1 && say "OK   위임 장부 시험: $(tail -n 1 /tmp/jarvis-st1.$$)" || fail "위임 장부 시험 실패 ($(tail -n 1 /tmp/jarvis-st1.$$ 2>/dev/null))"
+    "$PYB" -I "$TARGET/jarvis-secretary/scripts/secretary_store.py" selftest >/tmp/jarvis-st2.$$ 2>&1 && say "OK   비서 판정 시험: $(tail -n 1 /tmp/jarvis-st2.$$)" || fail "비서 판정 시험 실패 ($(tail -n 1 /tmp/jarvis-st2.$$ 2>/dev/null))"
+    rm -f /tmp/jarvis-st1.$$ /tmp/jarvis-st2.$$
+  fi
+fi
+
+if [ "$WITH_DEVICES" -eq 1 ]; then
+  PYB="$(py_bin || true)"
+  if [ -z "$PYB" ]; then
+    fail "파이썬 3 가 없어 기기 안전장치를 확인할 수 없음"
+  else
+    if "$PYB" -c 'import json,sys; s=json.load(open(sys.argv[1])); g=s["hooks"]["PreToolUse"]; sys.exit(0 if sum("device_guard_hook.py" in " ".join(map(str,h.get("args",[]))) for x in g for h in x["hooks"])>=2 else 1)' "$SETTINGS_FILE" 2>/dev/null; then say "OK   기기 안전 훅 2개가 $SETTINGS_FILE 에 있음"; else fail "기기 안전 훅이 $SETTINGS_FILE 에 없음"; fi
+    JARVIS_DEVICES_HOME="$(mktemp -d)" "$PYB" -I "$TARGET/jarvis-device-control/scripts/device_ctl.py" selftest >/tmp/jarvis-st3.$$ 2>&1 && say "OK   기기 조작 안전장치 시험: $(tail -n 1 /tmp/jarvis-st3.$$)" || fail "기기 조작 안전장치 시험 실패 ($(tail -n 1 /tmp/jarvis-st3.$$ 2>/dev/null))"
+    "$PYB" -I "$TARGET/jarvis-device-control/scripts/device_guard_hook.py" selftest >/tmp/jarvis-st4.$$ 2>&1 && say "OK   기기 보호 훅 시험: $(tail -n 1 /tmp/jarvis-st4.$$)" || fail "기기 보호 훅 시험 실패 ($(tail -n 1 /tmp/jarvis-st4.$$ 2>/dev/null))"
+    rm -f /tmp/jarvis-st3.$$ /tmp/jarvis-st4.$$
+  fi
+fi
+
 if [ "$WITH_RUFLO" -eq 1 ]; then
   ruflo_now="$(ruflo --version 2>/dev/null | sed -n 's/^ruflo v\{0,1\}\([0-9][0-9.]*\).*/\1/p' | head -n 1 || true)"
   if [ "$ruflo_now" = "$RUFLO_VERSION" ]; then say "OK   ruflo $ruflo_now"; else fail "ruflo 가 고정 버전($RUFLO_VERSION)이 아님 (현재: ${ruflo_now:-없음})"; fi
@@ -744,7 +846,7 @@ if [ "$WITH_RUFLO" -eq 1 ]; then
   else
     fail "claude CLI 가 없어 ruflo-core 플러그인을 확인할 수 없음"
   fi
-  if ruflo_settings_ok; then say "OK   Ruflo 안전 설정 3개가 $SETTINGS_FILE 의 env 에 있음"; else fail "Ruflo 안전 설정(${RUFLO_ENV_KEYS[*]})이 $SETTINGS_FILE 의 env 에 모두 있지 않음"; fi
+  if ruflo_settings_ok; then say "OK   Ruflo 안전 설정 4개가 $SETTINGS_FILE 의 env 에 있음"; else fail "Ruflo 안전 설정(${RUFLO_ENV_KEYS[*]})이 $SETTINGS_FILE 의 env 에 모두 있지 않음"; fi
 fi
 
 if [ "$WITH_AGENT_REACH" -eq 1 ]; then

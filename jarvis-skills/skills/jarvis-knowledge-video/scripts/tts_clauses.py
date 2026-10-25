@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
 """절(clause)마다 나레이션 WAV 를 만든다. 반드시 setup_tts.py 가 만든 가상환경 파이썬으로, -I 를 붙여 실행한다.
 
-  <PY> -I tts_clauses.py <모델 폴더> <clauses.json> <출력 폴더> [속도=1.25] [톤=bright]
+  <PY> -I tts_clauses.py <모델 폴더> <clauses.json> <출력 폴더> [속도] [톤] [목소리=6]
+
+모델 폴더로 엔진이 정해진다 (setup_tts.py 가 출력하는 MODEL= 이 Supertonic, KSS_MODEL= 이 옛 KSS):
+  Supertonic 2 (기본)  속도 기본 1.4, 목소리 번호 0~9 (아래 표). 44.1kHz. 추론 단계 5
+  KSS (옛 음성)        속도 기본 1.25, 목소리 번호는 무시 (한 명)
+
+Supertonic 목소리 (직접 측정한 음높이로 구분. 번호 순서는 문서가 아니라 측정 기준):
+  0~4  여성 음역 (평균 약 160~260Hz).  1 = 가장 밝고 높음(평균 260Hz), 0·2 = 또렷
+  5~9  남성 음역 (평균 약 100~160Hz).  6 = 받아쓰기 시험에서 가장 또렷하고 빠르게 해도 덜 무너짐(기본), 5 = 조금 더 밝음
 
 clauses.json: [{"id":"1a","line":1,"spoken":"낭독문","caption":"자막문"}, ...]
   spoken  소리 내어 읽는 글 (숫자는 읽는 형태로: 천구백칠십삼 년, 8자는 팔자)
   caption 화면에 보이는 글 (숫자 그대로 써도 된다)
 
-톤 (음성 모델은 목소리가 하나뿐이라 합성 뒤에 ffmpeg 로 높낮이와 음색을 바꾼다. 낭독 길이는 그대로):
-  natural  합성 그대로
-  bright   밝고 명랑하게: 음높이 +2 반음, 3kHz 근처와 고음을 살짝 키우고 가볍게 눌러 고르게 한다 (기본)
+톤 (합성 뒤에 ffmpeg 로 높낮이와 음색을 바꾼다. 낭독 길이는 그대로):
+  natural  합성 그대로 (Supertonic 기본: 이미 또렷하고, 아래 처리를 하면 받아쓰기 오류가 늘었다. 목소리 6 에서 20.8% → 28.1%)
+  bright   음높이 +2 반음, 3kHz 근처와 고음을 살짝 키우고 가볍게 눌러 고르게 한다 (KSS 기본)
   cheer    더 밝고 높게: 음높이 +3.5 반음 (같은 처리)
-참고: 이 모델은 느낌표(!)를 읽지 못하고 건너뛴다 ("Skip unknown phonemes U+0021"). 느낌표로 억양을 바꿀 수는 없다.
+참고: KSS 는 느낌표(!)를 읽지 못하고 건너뛴다 ("Skip unknown phonemes U+0021"). 느낌표로 억양을 바꿀 수는 없다.
 """
 import json, pathlib, shutil, subprocess, sys, wave
 import numpy as np
@@ -21,8 +29,12 @@ TONES = {"natural": None, "bright": 2.0, "cheer": 3.5}
 EQ = "equalizer=f=3200:width_type=o:width=1.2:g=3,highshelf=f=5500:g=3,acompressor=threshold=-20dB:ratio=2.5:attack=5:release=80:makeup=2,alimiter=limit=0.95"
 
 model_dir, clauses_json, out_dir = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
-speed = float(sys.argv[4]) if len(sys.argv) > 4 else 1.25
-tone = sys.argv[5] if len(sys.argv) > 5 else "bright"
+is_st = (pathlib.Path(model_dir) / "duration_predictor.int8.onnx").exists()      # Supertonic 인가, KSS 인가
+speed = float(sys.argv[4]) if len(sys.argv) > 4 else (1.4 if is_st else 1.25)
+tone = sys.argv[5] if len(sys.argv) > 5 else ("natural" if is_st else "bright")
+voice = int(sys.argv[6]) if len(sys.argv) > 6 else 6
+if is_st and not 0 <= voice <= 9:
+    raise SystemExit("Supertonic 목소리 번호는 0~9 입니다.")
 if tone not in TONES:
     raise SystemExit(f"톤은 {', '.join(TONES)} 중 하나여야 합니다: {tone}")
 out_dir.mkdir(parents=True, exist_ok=True)
@@ -45,14 +57,24 @@ def shift(src, dst, sr):
     subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-af", af, "-ar", str(sr), "-ac", "1", "-c:a", "pcm_s16le", str(dst)], check=True)
 
 
-cfg = sherpa_onnx.OfflineTtsConfig(model=sherpa_onnx.OfflineTtsModelConfig(
-    vits=sherpa_onnx.OfflineTtsVitsModelConfig(
-        model=f"{model_dir}/ko_KO-kss_low.onnx", tokens=f"{model_dir}/tokens.txt", data_dir=f"{model_dir}/espeak-ng-data"),
-    num_threads=2))
+if is_st:
+    D = model_dir
+    cfg = sherpa_onnx.OfflineTtsConfig(model=sherpa_onnx.OfflineTtsModelConfig(
+        supertonic=sherpa_onnx.OfflineTtsSupertonicModelConfig(
+            duration_predictor=f"{D}/duration_predictor.int8.onnx", text_encoder=f"{D}/text_encoder.int8.onnx",
+            vector_estimator=f"{D}/vector_estimator.int8.onnx", vocoder=f"{D}/vocoder.int8.onnx",
+            tts_json=f"{D}/tts.json", unicode_indexer=f"{D}/unicode_indexer.bin", voice_style=f"{D}/voice.bin"),
+        num_threads=2))
+    gen = sherpa_onnx.GenerationConfig(); gen.sid = voice; gen.speed = speed; gen.num_steps = 5; gen.extra = {"lang": "ko"}
+else:
+    cfg = sherpa_onnx.OfflineTtsConfig(model=sherpa_onnx.OfflineTtsModelConfig(
+        vits=sherpa_onnx.OfflineTtsVitsModelConfig(
+            model=f"{model_dir}/ko_KO-kss_low.onnx", tokens=f"{model_dir}/tokens.txt", data_dir=f"{model_dir}/espeak-ng-data"),
+        num_threads=2))
 tts = sherpa_onnx.OfflineTts(cfg)
 total = 0.0
 for c in json.load(open(clauses_json, encoding="utf-8")):
-    a = tts.generate(c["spoken"], sid=0, speed=speed)
+    a = tts.generate(c["spoken"], gen) if is_st else tts.generate(c["spoken"], sid=0, speed=speed)
     x = np.asarray(a.samples, dtype=np.float32)
     if len(x) == 0:
         raise SystemExit(f"{c['id']}: 음성이 비어 있습니다. 낭독문을 확인하세요: {c['spoken']}")
@@ -60,12 +82,12 @@ for c in json.load(open(clauses_json, encoding="utf-8")):
     dst = out_dir / f"{c['id']}.wav"
     raw = dst if semis is None else out_dir / f"{c['id']}.raw.wav"
     with wave.open(str(raw), "wb") as w:
-        w.setnchannels(1); w.setsampwidth(2); w.setframerate(tts.sample_rate); w.writeframes(pcm.tobytes())
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(a.sample_rate); w.writeframes(pcm.tobytes())
     if semis is not None:
-        shift(raw, dst, tts.sample_rate)
+        shift(raw, dst, a.sample_rate)
         raw.unlink()
     with wave.open(str(dst)) as w:
         d = w.getnframes() / w.getframerate()
     total += d
     print(f"{c['id']} {d:.2f}s")
-print(f"낭독 합계 {total:.2f}s (속도 {speed}, 톤 {tone})")
+print(f"낭독 합계 {total:.2f}s (엔진 {'Supertonic 목소리 ' + str(voice) if is_st else 'KSS'}, 속도 {speed}, 톤 {tone})")

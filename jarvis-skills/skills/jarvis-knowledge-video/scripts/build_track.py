@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """절별 WAV 를 간격을 두고 이어 붙여 나레이션 한 트랙과 절별 시각표(timing.json)를 만든다.
 
-  <PY> -I build_track.py <clauses.json> <절 WAV 폴더> <출력 폴더> [--lead 0.5] [--intra 0.18] [--inter 0.5] [--min 30] [--max 40]
+  <PY> -I build_track.py <clauses.json> <절 WAV 폴더> <출력 폴더> [--lead 0.5] [--intra 0.14] [--inter 0.4] [--min 35] [--max 45]
 
 출력: <출력 폴더>/narration.wav (48kHz 모노, ffmpeg loudnorm -16 LUFS), duration.txt,
       timing.json (자막 단위: cap_join 절은 앞 절에 합쳐진다), clauses_timing.json (절마다), parts.json (오프닝·본편·엔딩 구간)
@@ -15,8 +15,8 @@ import numpy as np
 ap = argparse.ArgumentParser()
 ap.add_argument("clauses"); ap.add_argument("clause_dir"); ap.add_argument("out_dir")
 ap.add_argument("--lead", type=float, default=0.5)    # 영상 시작 후 첫 낭독까지
-ap.add_argument("--intra", type=float, default=0.18)  # 같은 줄 안 절 사이
-ap.add_argument("--inter", type=float, default=0.5)   # 줄 사이
+ap.add_argument("--intra", type=float, default=0.14)  # 같은 줄 안 절 사이
+ap.add_argument("--inter", type=float, default=0.4)   # 줄 사이
 ap.add_argument("--min", type=float, default=35.0, dest="tmin")
 ap.add_argument("--max", type=float, default=45.0, dest="tmax")
 ap.add_argument("--tail", type=float, default=2.0)

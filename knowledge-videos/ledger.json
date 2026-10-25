@@ -9,8 +9,8 @@
   {
     "topic": "문어의 심장은 세 개",
     "date": "2026-10-25",
-    "seconds": 43,
+    "seconds": 45,
     "file": "octopus-three-hearts/octopus-three-hearts-charles-2026-10-25.mp4",
-    "note": "찰스(사용자가 만든 오리 박사 그림) 오프닝·엔딩 + 밝은 톤(bright) 음성, 43초 판(v3). 30초 판과 이전 SVG 찰스 판은 대화로만 전달. 소스(clauses.json, build_video.py, SOURCES.md)만 저장소에 있고 MP4는 올리지 않음"
+    "note": "찰스(사용자가 만든 오리 박사 그림) 오프닝·엔딩 + Supertonic 2 목소리 6(속도 1.4, natural), 45초 판(v4). 이전 판(43초, KSS bright)과 30초 판은 대화로만 전달. 소스(clauses.json, build_video.py, SOURCES.md)만 저장소에 있고 MP4는 올리지 않음"
   }
 ]
