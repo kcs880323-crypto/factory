@@ -11,6 +11,6 @@
     "date": "2026-10-25",
     "seconds": 45,
     "file": "octopus-three-hearts/octopus-three-hearts-charles-2026-10-25.mp4",
-    "note": "찰스(사용자가 만든 오리 박사 그림) 오프닝·엔딩 + Supertonic 2 목소리 6(속도 1.4, natural), 45초 판(v4). 이전 판(43초, KSS bright)과 30초 판은 대화로만 전달. 소스(clauses.json, build_video.py, SOURCES.md)만 저장소에 있고 MP4는 올리지 않음"
+    "note": "찰스(사용자가 만든 오리 박사 그림) 오프닝·엔딩 + 이전 기본 목소리(Supertonic 2 목소리 6, 속도 1.4, natural), 45초 판(v4). 이후 기본 목소리가 Supertonic 3 목소리 5(속도 1.2)로 바뀌어, 이 대본(본편 181자)은 새 기본으로는 45초를 넘으므로 다시 만들려면 본편을 줄여야 한다. 이전 판(43초, KSS bright)과 30초 판은 대화로만 전달. 소스(clauses.json, build_video.py, SOURCES.md)만 저장소에 있고 MP4는 올리지 않음"
   }
 ]
