@@ -1,0 +1,46 @@
+{
+ "bg": [
+  253,
+  224,
+  110
+ ],
+ "poses": {
+  "idea": {
+   "file": "pose-idea.png",
+   "w": 746,
+   "h": 940,
+   "fx": 405,
+   "fy": 920,
+   "marks": {
+    "bulb": [
+     121,
+     134
+    ]
+   }
+  },
+  "hug": {
+   "file": "pose-hug.png",
+   "w": 575,
+   "h": 863,
+   "fx": 311,
+   "fy": 842,
+   "marks": {}
+  },
+  "wave": {
+   "file": "pose-wave.png",
+   "w": 760,
+   "h": 905,
+   "fx": 370,
+   "fy": 884,
+   "marks": {}
+  },
+  "like": {
+   "file": "pose-like.png",
+   "w": 726,
+   "h": 911,
+   "fx": 397,
+   "fy": 887,
+   "marks": {}
+  }
+ }
+}
