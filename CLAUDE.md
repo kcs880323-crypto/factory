@@ -5,3 +5,4 @@
   - 처음 한 번(`~/.jarvis-knowledge-video`가 없을 때)은 SKILL.md 0번의 알림과 동의를 거친다.
   - 영상은 HyperFrames 플러그인으로 만든다 (`jarvis-skills/skills/jarvis-hyperframes/SKILL.md`). 설치되어 있지 않으면 `bash jarvis-skills/install.sh --with-video-skills`를 안내한다.
   - 만든 뒤 `knowledge-videos/ledger.json`에 기록한다. MP4 파일은 저장소에 올리지 않는다 (사용자가 요청하지 않는 한).
+- 예약, 가격 비교, 일정·메일, 브리핑, 문서·회의 요약 같은 **비서 업무 요청**은 `jarvis-skills/skills/jarvis-secretary/SKILL.md`의 절차를 따른다 (제안형 대화, 위임 한도 판정 `secretary_store.py decide`, 결제·민감정보는 하지 않음). "이거 배워", "다음부터 이렇게 해줘"는 `jarvis-skills/skills/jarvis-skill-learner/SKILL.md`를 따른다.
