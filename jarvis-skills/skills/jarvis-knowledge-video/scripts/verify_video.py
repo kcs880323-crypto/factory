@@ -2,12 +2,15 @@
 """렌더한 영상을 측정해서 합격/불합격을 알려 준다 (소리는 들을 수 없고 측정만 한다).
 
   python verify_video.py <영상.mp4> <timing.json>
-검사: 1920x1080 30fps H.264, 오디오 있음, 길이 30~40초, 소리 크기 -17~-13 LUFS, 절마다 소리가 들어 있음(RMS > -35 dBFS).
+검사: 1920x1080 30fps H.264, 오디오 있음, 길이 35~45초(--min/--max 로 바꿈), 소리 크기 -17~-13 LUFS, 자막 단위마다 소리가 들어 있음(RMS > -35 dBFS).
 """
 import json, re, subprocess, sys
 import numpy as np
 
-video, timing_path = sys.argv[1], sys.argv[2]
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+video, timing_path = args[0], args[1]
+opt = {a.split("=")[0]: float(a.split("=")[1]) for a in sys.argv[1:] if a.startswith("--") and "=" in a}
+DMIN, DMAX = opt.get("--min", 35.0), opt.get("--max", 45.1)
 timing = json.load(open(timing_path, encoding="utf-8"))
 pr = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", video], capture_output=True, text=True, check=True).stdout)
 v = next(s for s in pr["streams"] if s["codec_type"] == "video")
@@ -20,7 +23,7 @@ def check(ok, msg):
 check((v["width"], v["height"]) == (1920, 1080), f"해상도 {v['width']}x{v['height']}")
 check(v["r_frame_rate"] == "30/1" and v["codec_name"] == "h264", f"{v['codec_name']} {v['r_frame_rate']}")
 check(au is not None, "오디오 스트림 있음")
-check(30.0 <= dur <= 40.1, f"길이 {dur:.2f}초")
+check(DMIN <= dur <= DMAX, f"길이 {dur:.2f}초 (기준 {DMIN:g}~{DMAX:g})")
 if au:
     out = subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-i", video, "-af", "ebur128=peak=true", "-f", "null", "-"], capture_output=True, text=True).stderr
     summ = out[out.rfind("Summary:"):]

@@ -5,3 +5,6 @@
 */render*.log
 */check*.json
 *.mp4
+*/audio_full/
+*/clauses_full/
+*/clauses-full.json

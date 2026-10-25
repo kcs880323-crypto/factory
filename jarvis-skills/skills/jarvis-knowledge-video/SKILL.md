@@ -1,11 +1,24 @@
 ---
 name: jarvis-knowledge-video
-description: "Trigger phrase: 지식영상 생성 (knowledge video). Use when the user says '지식영상 생성' (optionally with a topic or length), or asks for a 30-40 second Korean knowledge-sharing explainer video with voice narration and captions like the bee waggle dance video. Picks a topic (given or random, no repeats), writes a fact-checked script, synthesizes Korean narration locally, builds a 1920x1080 video with the HyperFrames plugin, verifies it by measurement, and delivers the MP4. 지식 공유 짧은 영상(나레이션+자막) 자동 제작."
+description: "Trigger phrase: 지식영상 생성 (knowledge video). Use when the user says '지식영상 생성' (optionally with a topic or length), or asks for a 35-45 second Korean knowledge-sharing explainer video (30 s body plus the fixed Charles opening and ending) with voice narration and captions like the bee waggle dance video. Picks a topic (given or random, no repeats), writes a fact-checked script, synthesizes Korean narration locally, builds a 1920x1080 video with the HyperFrames plugin, verifies it by measurement, and delivers the MP4. 지식 공유 짧은 영상(나레이션+자막) 자동 제작."
 ---
 
-# 지식영상 생성: 30~40초 지식 공유 영상 만들기
+# 지식영상 생성: 찰스의 30초 지식 영상 만들기
 
-사용자가 **"지식영상 생성"**이라고 말하면 이 절차대로 영상 한 편을 만듭니다. 「꿀벌의 8자 춤」(30초)이 첫 번째 예시입니다. 주제를 같이 말하면(예: "지식영상 생성: 무지개") 그 주제로, 말하지 않으면 **내가 고릅니다.** 길이는 30~40초, 한국어 나레이션과 자막, 1920×1080, 30fps, 설명이 한 장면씩 자라는 구성입니다.
+사용자가 **"지식영상 생성"**이라고 말하면 이 절차대로 영상 한 편을 만듭니다. 주제를 같이 말하면(예: "지식영상 생성: 무지개") 그 주제로, 말하지 않으면 **내가 고릅니다.** 한국어 나레이션과 자막, 1920×1080, 30fps, 설명이 한 장면씩 자라는 본편에 **찰스의 고정 오프닝과 엔딩**이 앞뒤로 붙고, 전체 길이는 **35~45초**(본편 낭독 25초 안팎 + 오프닝·엔딩 약 11초)입니다. 첫 예시는 「꿀벌의 8자 춤」(30초, 오프닝·엔딩 도입 전)과 「문어의 심장은 세 개」(44초, 찰스 포함)입니다.
+
+## 찰스 (채널 캐릭터)와 고정 문구
+
+채널 이름은 **찰스**, 캐릭터 **찰스**는 노란 콩 모양 몸통에 둥근 뿔테 안경, 머리 위 아이디어 안테나 세 가닥, 남색 나비넥타이를 한 지식 전도사입니다 (`assets/charles/charles-sheet.png`, `charles.svg`). 문구는 **사용자가 정한 것이라 한 글자도 바꾸지 않는다.**
+
+| 구간 | 문구 | 화면 |
+|---|---|---|
+| 오프닝 | **"30초만 주면, 지식 하나 드릴게요. 찰스입니다!"** | 찰스가 손을 흔들며 말하고, "30초" → "지식 하나" → 전구(아이디어) → "찰스입니다!" 판이 낭독에 맞춰 등장 |
+| 엔딩 | **"알아두면 언젠가 쓴다! 오늘의 지식공유가 유익했다면 좋아요와 구독, 찰스였습니다!"** | "알아두면 언젠가 쓴다!" → 점선 자리에서 "좋아요"(엄지) → "구독"(종 울림) 버튼이 채워짐 → "찰스였습니다!"를 손 흔들며 2초 이상 유지 |
+
+- 찰스의 **입은 낭독 소리 크기에 맞춰** 프레임마다 벌어진다 (`charles.mouth_track`). 눈 깜빡임, 몸 흔들림, 손 흔들기는 유한 횟수 트윈이다.
+- 오프닝·엔딩 장면은 `scripts/charles.py`의 `write_scenes`가 만든다. 주제마다 새로 그리지 않는다. 본편 색과 상관없이 찰스 고유의 남색 바탕과 노란색을 쓴다.
+- 오프닝·엔딩 약 11초가 고정이므로 **본편 낭독은 약 25초 이내**(공백 제외 150~200자)로 쓴다. 40초 안에 끝내고 싶으면 본편을 22초 안팎으로 줄인다.
 
 이 스킬은 **HyperFrames 플러그인**(`jarvis-hyperframes` 스킬, `install.sh --with-video-skills`)을 쓴다. 영상 제작 규칙은 그 플러그인의 `/hyperframes:hyperframes`가 가진 것이 우선한다.
 
@@ -33,7 +46,7 @@ description: "Trigger phrase: 지식영상 생성 (knowledge video). Use when th
 - 웹 검색이 가능하면 핵심 주장마다 신뢰할 만한 출처 하나 이상을 찾아 **`SOURCES.md`**(주장 → 출처 주소)에 적는다. 가능하지 않으면 "출처는 확인하지 못했다"고 보고에 쓴다.
 - 확인되지 않는 부분은 빼거나 "~로 알려져 있다"로 쓴다. 그럴듯하게 지어내지 않는다.
 
-## 3. 대본: 5줄, 절(clause) 12개 안팎
+## 3. 대본(본편): 5줄, 절(clause) 12개 안팎
 
 | 줄 | 역할 | 예(꿀벌) |
 |---|---|---|
@@ -43,8 +56,8 @@ description: "Trigger phrase: 지식영상 생성 (knowledge video). Use when th
 | 4 | 한 가지 더 | 흔드는 시간이 길수록 멉니다. |
 | 5 | 마무리: 한 문장 + 출처 있는 사실 | 이 발견으로 카를 폰 프리슈는 1973년 노벨상을 받았습니다. |
 
-- 낭독문은 공백 제외 **약 170~240자**(꿀벌 영상: 174자 → 낭독 24.7초, 속도 1.25). 줄마다 **절을 짧게 끊어** 화면이 낭독에 맞춰 등장할 단서가 되게 한다.
-- `clauses.json`에 절마다 `spoken`(소리 내어 읽는 글)과 `caption`(자막)을 따로 쓴다. 숫자와 기호는 읽는 형태로: `1973년` → `천구백칠십삼 년`, `8자` → `팔자`. 자막에는 원래 표기를 쓴다. 예시: `reference/bee-dance/clauses.json`.
+- 본편 낭독문은 공백 제외 **약 150~200자**(문어 영상: 본편 낭독 약 25초, 속도 1.25). 줄마다 **절을 짧게 끊어** 화면이 낭독에 맞춰 등장할 단서가 되게 한다.
+- `clauses.json`에 절마다 `spoken`(소리 내어 읽는 글)과 `caption`(자막)을 따로 쓴다. 숫자와 기호는 읽는 형태로: `1973년` → `천구백칠십삼 년`, `8자` → `팔자`. 자막에는 원래 표기를 쓴다. 본편만 쓴다 (오프닝·엔딩 절은 다음 단계에서 붙는다). 예시: `reference/octopus-hearts/clauses.json`.
 - 화면의 글을 낭독이 그대로 반복하지 않는다. 화면은 **그림**이 말하고, 글은 라벨 정도만.
 
 ## 4. 음성과 시각표
@@ -53,11 +66,12 @@ description: "Trigger phrase: 지식영상 생성 (knowledge video). Use when th
 S=<이 스킬 폴더>/scripts            # 설치된 jarvis-knowledge-video/scripts
 python "$S/setup_tts.py"            # 처음 한 번 (이미 있으면 아무것도 받지 않음). 마지막 줄 PY=…, MODEL=… 를 읽는다
 PY=<위의 PY>; MODEL=<위의 MODEL>
-"$PY" -I "$S/tts_clauses.py" "$MODEL" clauses.json clauses 1.25        # 절마다 wav
-"$PY" -I "$S/build_track.py" clauses.json clauses audio                # audio/narration.wav, timing.json, duration.txt
+"$PY" -I "$S/make_clauses.py" clauses.json clauses-full.json            # 본편 앞뒤에 찰스의 오프닝·엔딩 절을 붙인다
+"$PY" -I "$S/tts_clauses.py" "$MODEL" clauses-full.json clauses 1.25    # 절마다 wav
+"$PY" -I "$S/build_track.py" clauses-full.json clauses audio           # audio/ 에 narration.wav, timing.json(자막), clauses_timing.json(절별), parts.json(오프닝·본편·엔딩), duration.txt
 ```
 
-- `build_track.py`가 영상 길이(30~40초)를 정해 `duration.txt`에 쓴다. **낭독이 39초를 넘어 실패하면** 대본을 줄이거나 속도를 올린다 (속도는 선형이 아니다: 1.0→1.25는 약 11% 짧아졌다). 속도 1.4 이상은 알아듣기 어려울 수 있다.
+- `build_track.py`가 영상 길이(35~45초)를 정해 `duration.txt`에 쓴다. 마지막 장면을 2초 이상 보여 주려고 낭독이 끝난 뒤 2초를 더한다. **낭독이 43초를 넘어 실패하면** 본편 대본을 줄이거나 속도를 올린다 (속도는 선형이 아니다: 1.0→1.25는 약 11% 짧아졌다). 속도 1.4 이상은 알아듣기 어려울 수 있다.
 - 나레이션은 **`loudnorm`으로 −16 LUFS**에 맞춰진다. 영상에 넣을 때는 `data-volume="0.85"`.
 
 ## 5. 화면 만들기 (HyperFrames)
@@ -66,17 +80,18 @@ PY=<위의 PY>; MODEL=<위의 MODEL>
 export HYPERFRAMES_NO_TELEMETRY=1 DO_NOT_TRACK=1
 node "<PLUGIN_ROOT>/skills/hyperframes/scripts/plugin-cli.mjs" init <slug> --skip-skills --non-interactive
 "$PY" -I "$S/prepare_assets.py" <slug>      # gsap.min.js(로컬), Pretendard woff2 3종 (CDN 쓰지 않음)
-cp audio/narration.wav audio/timing.json <slug>/assets/
+cp audio/narration.wav audio/timing.json audio/clauses_timing.json audio/parts.json audio/duration.txt <slug>/assets/
 ```
 
 `<PLUGIN_ROOT>`는 `jarvis-hyperframes` 스킬의 방식으로 찾는다. 그다음 참고 예시의 구조를 가져와 이 주제의 장면을 만든다 (그대로 복사하지 않는다).
 - `reference/bee-dance/build_video.py`: 장면을 갈아 끼우는 구성(꿀벌이 장면 사이를 이어 감), 길 따라 움직이기, 점선 그리기.
-- `reference/octopus-hearts/build_video.py`: **한 장면이 15초 동안 하나의 도표를 키우는 구성**(문어 몸속에 장기가 하나씩 등장), 피 알갱이 흐름(`offset-path`), 심장 박동 함수(`beats`), 장면 3개로 줄인 구성.
+- `reference/octopus-hearts/build_video.py`: **찰스 오프닝·엔딩이 붙은 완성형.** 한 장면이 15초 동안 하나의 도표를 키우는 구성(문어 몸속에 장기가 하나씩 등장), 피 알갱이 흐름(`offset-path`), 심장 박동 함수(`beats`), 장면 3개. **본편 장면은 본편 시각(전체 시각에서 `OFF`를 뺀 값)으로 쓰고 호스트 `data-start`에만 `OFF`를 더한다** (오프닝 길이가 바뀌어도 장면 코드를 안 고친다). `charles.write_scenes(proj, 절별 시각, narration.wav, 전체 길이, OFF)`가 오프닝·엔딩 호스트를 돌려준다.
+- `reference/bee-dance/`는 오프닝·엔딩 도입 **전**의 예시다 (장면 구성과 기법만 참고).
 
 **구성:** 배경(`bg`) + 칩(주제 이름, 상단 좌측) + **장면 3~5개** + 자막(`captions`) + 오디오 1개. 장면은 `compositions/<이름>.html` 하위 구성으로, 호스트 id = 장면 root의 `data-composition-id` = 타임라인 키가 같아야 한다.
 
 **연출 규칙**
-- **목소리가 시계다.** 각 요소는 `timing.json`의 절 시작 시각에 맞춰 등장한다. 한 장면의 모든 것이 처음에 다 나와 있으면 슬라이드가 된다.
+- **목소리가 시계다.** 각 요소는 `clauses_timing.json`의 절 시작 시각(본편 시각 = 전체 시각 − `OFF`)에 맞춰 등장한다. 한 장면의 모든 것이 처음에 다 나와 있으면 슬라이드가 된다.
 - **하나의 도표가 자란다.** 가장 단순한 그림에서 시작해 낭독이 부분을 말할 때마다 하나씩 더한다. 장면이 바뀌어도 같은 물체를 이어서 쓴다(꿀벌: 벌이 장면 1에서 3까지 그대로 춤을 춘다).
 - 색: 어두운 바탕 + 주제 색 1개(꿀벌: 꿀색 `#F6B21A`) + 크림색 글자. 글꼴 Pretendard(800/700/400). **글자는 28px 이상**, 자막은 56px 700, 하단 `top: 884px`.
 - 마지막 한 줄(핵심 요약)은 낭독이 끝나기 전에 띄워 **2초 이상 유지**한다. 브랜드 끝 카드는 없다.
@@ -115,6 +130,7 @@ node "<PLUGIN_ROOT>/skills/hyperframes/scripts/plugin-cli.mjs" render
 
 ## 지켜야 할 것
 
+- **오프닝·엔딩 문구와 찰스의 모습은 사용자가 정한 것이다.** 바꾸지 않는다. 바꾸고 싶으면 사용자에게 제안하고 `reference/charles/*.json`과 `assets/charles/`를 함께 고친다.
 - 사실은 확실한 것만. 확인 못 한 것을 그럴듯하게 쓰지 않는다.
 - 동의 없이 외부 서비스(HeyGen, MaxFusion, 온라인 음성 합성 등)를 쓰지 않는다. 텔레메트리를 켜지 않고, 피드백 전송·`publish`·`auth login`을 하지 않는다.
 - `~/.jarvis-knowledge-video`와 `knowledge-videos/` 밖의 파일을 고치지 않는다. 기존 영상·프로젝트를 덮어쓰지 않는다 (같은 이름이면 `-2`를 붙인다).
@@ -132,6 +148,6 @@ node "<PLUGIN_ROOT>/skills/hyperframes/scripts/plugin-cli.mjs" render
 | 자막이 서로 겹침 | 절 사이 간격(`--intra`, `--inter`)을 늘리거나 자막 클립 길이를 줄인다 |
 | `ffmpeg`/`npm`이 없다 | 사용자에게 알려 설치하게 한다 (윈도우: `winget install Gyan.FFmpeg`) |
 
-시험한 범위: 리눅스에서 `setup_tts.py`를 빈 상태에서 실행, 절 12개 음성 합성(24.7초), `build_track.py`(30초 자동 결정), `prepare_assets.py`, 참고 예시로 만든 프로젝트의 `check` 통과, 꿀벌 영상의 `verify_video.py` 전부 합격. **이 스킬의 절차로 두 번째 영상 「문어의 심장은 세 개」(30초)를 처음부터 끝까지 만들었다**: 주제 무작위 선택, 웹 검색으로 사실 확인과 `SOURCES.md`, 음성, 화면, `check` 오류 0, `snapshot` 눈 확인과 수정, 렌더(GPU 없는 환경에서 약 2분 40초), `verify_video.py` 전부 합격. 시험하지 못한 범위: **윈도우**, 음성의 발음·억양(들어 보지 못함), 웹 검색 원문 페이지 직접 열람(이 환경에서 접속 실패, 검색 요약으로만 확인).
+시험한 범위: 리눅스에서 `setup_tts.py`를 빈 상태에서 실행, 음성 합성, `build_track.py`(35~45초 자동 결정, 자막 합치기, 오프닝·본편·엔딩 구간), `make_clauses.py`, `prepare_assets.py`, 꿀벌 영상(30초)과 **찰스 오프닝·엔딩이 붙은 「문어의 심장은 세 개」(44초)**를 처음부터 끝까지 만들어 `check` 오류 0, `snapshot` 눈 확인, 렌더, `verify_video.py` 전부 합격(−14.7 LUFS, 절 마다 소리 있음). 시험하지 못한 범위: **윈도우**, 음성의 발음·억양과 **입 모양이 소리와 맞게 움직이는지**(캡처한 프레임에서 입이 벌어진 장면만 확인), 음성이 "찰스"라는 캐릭터에 어울리는지(KSS 모델은 여성 화자로 알고 있음), 웹 검색 원문 페이지 직접 열람.
 
 공식 자료: <https://github.com/k2-fsa/sherpa-onnx> · <https://github.com/heygen-com/hyperframes> · Pretendard <https://github.com/orioncactus/pretendard>

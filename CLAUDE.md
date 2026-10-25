@@ -1,6 +1,7 @@
 # 이 저장소에서 Claude가 따를 것
 
-- 사용자가 **"지식영상 생성"**이라고 말하면 `jarvis-skills/skills/jarvis-knowledge-video/SKILL.md`를 읽고 그 절차대로 30~40초 지식 공유 영상(한국어 나레이션 + 자막)을 만든다.
+- 사용자가 **"지식영상 생성"**이라고 말하면 `jarvis-skills/skills/jarvis-knowledge-video/SKILL.md`를 읽고 그 절차대로 지식 공유 영상(한국어 나레이션 + 자막, 찰스의 고정 오프닝·엔딩 포함 35~45초)을 만든다.
+  - 오프닝 "30초만 주면, 지식 하나 드릴게요. 찰스입니다!" / 엔딩 "알아두면 언젠가 쓴다! 오늘의 지식공유가 유익했다면 좋아요와 구독, 찰스였습니다!"는 사용자가 정한 고정 문구이고 캐릭터 찰스는 `jarvis-skills/skills/jarvis-knowledge-video/assets/charles/`에 있다. 바꾸지 않는다.
   - 주제를 말하지 않으면 `knowledge-videos/ledger.json`에 없는 주제를 무작위로 고른다.
   - 처음 한 번(`~/.jarvis-knowledge-video`가 없을 때)은 SKILL.md 0번의 알림과 동의를 거친다.
   - 영상은 HyperFrames 플러그인으로 만든다 (`jarvis-skills/skills/jarvis-hyperframes/SKILL.md`). 설치되어 있지 않으면 `bash jarvis-skills/install.sh --with-video-skills`를 안내한다.

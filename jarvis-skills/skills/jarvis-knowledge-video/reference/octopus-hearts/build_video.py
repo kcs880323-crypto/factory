@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
 """「문어의 심장은 세 개」 HyperFrames 프로젝트 생성기. 사용: python3 -I build_video.py <프로젝트 폴더>
-입력: assets/timing.json (build_track.py), 출력: index.html, compositions/*.html"""
+입력: assets/{timing,clauses_timing,parts}.json, duration.txt, narration.wav (build_track.py), 출력: index.html, compositions/*.html
+오프닝·엔딩(찰스)은 jarvis-knowledge-video 의 scripts/charles.py 가 만든다.  사용: python3 -I build_video.py <프로젝트 폴더> [scripts 폴더]"""
 import json, math, pathlib, sys
 
 proj = pathlib.Path(sys.argv[1]); (proj / "compositions").mkdir(exist_ok=True)
-timing = json.load(open(proj / "assets" / "timing.json", encoding="utf-8"))
-T = {r["id"]: r for r in timing}
-TOTAL = 30.0
+A = proj / "assets"
+timing = json.load(open(A / "timing.json", encoding="utf-8"))               # 자막 단위 (전체 영상 기준 시각)
+raw = {r["id"]: r for r in json.load(open(A / "clauses_timing.json", encoding="utf-8"))}
+parts = json.load(open(A / "parts.json", encoding="utf-8"))
+TOTAL = float((A / "duration.txt").read_text().strip())
+OFF = parts["body"]["start"] - 0.5      # 본편의 0초가 전체 영상의 몇 초인가 (본편 첫 절은 본편 시각 0.5초에 있다)
+sys.path.insert(0, sys.argv[2] if len(sys.argv) > 2 else str(pathlib.Path(__file__).resolve().parents[2] / "jarvis-skills/skills/jarvis-knowledge-video/scripts"))
+import charles
+# 본편 장면은 본편 시각(OFF 를 뺀 값)으로 쓴다. 장면 호스트의 data-start 에만 OFF 를 더한다.
+T = {k: {**v, "start": v["start"] - OFF, "end": v["end"] - OFF} for k, v in raw.items() if v["part"] == "body"}
+ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 시각
 
 GROUND, CORAL, HEART, DARK, O2C, TEAL, CREAM = "#07121b", "#F26B5B", "#FF4D6D", "#3B7BE0", "#8FE9FF", "#3DD6C6", "#EAF4F8"
 FONTS = """
@@ -125,7 +134,7 @@ for k in ("B1", "B2", "B3"):
     for j in range(2): pts += particle(f"an-{k}{j}", P[k], O2C)
 
 an_body = f"""    <div id="an-glow"></div>
-    <div id="an-title">문어의 심장은 몇 개일까?</div>
+    <div id="an-title" data-layout-allow-overlap>문어의 심장은 몇 개일까?</div>
     <svg id="an-body" viewBox="0 0 1920 1080">
       {''.join(arms)}
       <ellipse cx="960" cy="640" rx="150" ry="48" fill="{CORAL}" opacity="0.95"/>
@@ -321,7 +330,8 @@ sw_js = COMMON_JS + f"""
     beats("#sw-hearr", {c['5b']['start'] + 0.6:.2f}, 5, 0.58);
     tl.fromTo("#sw-lr", {{ opacity: 0, filter: "blur(8px)" }}, {{ opacity: 1, filter: "blur(0px)", duration: 0.35, ease: "power3.out" }}, g(S5b + 0.7));
     // the one idea in one line, held to the end (2+ s)
-    tl.fromTo("#sw-recap", {{ opacity: 0, filter: "blur(8px)" }}, {{ opacity: 1, filter: "blur(0px)", duration: 0.45, ease: "power3.out" }}, g({TOTAL - 2.6:.2f}));
+    tl.fromTo("#sw-recap", {{ opacity: 0, filter: "blur(8px)" }}, {{ opacity: 1, filter: "blur(0px)", duration: 0.45, ease: "power3.out" }}, g({c['5b']['start'] + 0.0:.2f}));
+    tl.to("#sw-all", {{ opacity: 0, filter: "blur(8px)", duration: 0.3, ease: "power2.in" }}, g({ES:.2f}));
 """
 
 for name, start, body, css, js, wrap in (
@@ -339,7 +349,7 @@ cap_css = f"""
 """
 def cs(r): return max(r["start"] - 0.04, 0.05)
 cap_body = "\n".join(
-    f'    <div class="cap clip" id="cap-{r["id"]}" data-start="{cs(r):.2f}" data-duration="{(r["end"] + 0.10) - cs(r):.2f}" data-track-index="{i % 4}"><span class="cap-pill" id="capp-{r["id"]}">{r["caption"]}</span></div>'
+    f'    <div class="cap clip" id="cap-{r["id"]}" data-start="{cs(r):.2f}" data-duration="{(r["end"] + 0.10) - cs(r):.2f}" data-track-index="{i % 6}"><span class="cap-pill" id="capp-{r["id"]}">{r["caption"]}</span></div>'
     for i, r in enumerate(timing))
 cap_js = "\n".join(
     f'    tl.fromTo("#capp-{r["id"]}", {{ opacity: 0, y: 10 }}, {{ opacity: 1, y: 0, duration: 0.12, ease: "power3.out" }}, {cs(r):.2f});\n'
@@ -381,6 +391,7 @@ bub_js = "\n".join(f'    tl.fromTo("#bb{i}", {{ y: 0 }}, {{ y: -{140 + (i % 5) *
   </script>
 </template>
 """, encoding="utf-8")
+HOSTS, _ = charles.write_scenes(proj, raw, A / "narration.wav", TOTAL, OFF)
 (proj / "compositions" / "chip.html").write_text(f"""<template>
   <style>{FONTS}
     #root {{ position: absolute; inset: 0; font-family: 'Pretendard', sans-serif; }}
@@ -413,10 +424,11 @@ bub_js = "\n".join(f'    tl.fromTo("#bb{i}", {{ y: 0 }}, {{ y: -{140 + (i % 5) *
   <body>
     <div id="root" data-composition-id="main" data-start="0" data-duration="{TOTAL:g}" data-width="1920" data-height="1080">
       <div id="bg" data-composition-id="bg" data-composition-src="compositions/bg.html" data-start="0" data-duration="{TOTAL:g}" data-track-index="0" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
-      <div id="anatomy" data-composition-id="anatomy" data-composition-src="compositions/anatomy.html" data-start="0" data-duration="15.25" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
-      <div id="blood" data-composition-id="blood" data-composition-src="compositions/blood.html" data-start="14.8" data-duration="8.9" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
-      <div id="swim" data-composition-id="swim" data-composition-src="compositions/swim.html" data-start="23.3" data-duration="{TOTAL - 23.3:.2f}" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
-      <div id="chip" data-composition-id="chip" data-composition-src="compositions/chip.html" data-start="2.3" data-duration="{TOTAL - 2.3:.1f}" data-track-index="2" data-track-kind="graphics" data-width="1920" data-height="1080" style="z-index: 80"></div>
+      <div id="anatomy" data-composition-id="anatomy" data-composition-src="compositions/anatomy.html" data-start="{OFF:.2f}" data-duration="15.25" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+      <div id="blood" data-composition-id="blood" data-composition-src="compositions/blood.html" data-start="{OFF + 14.8:.2f}" data-duration="8.9" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+      <div id="swim" data-composition-id="swim" data-composition-src="compositions/swim.html" data-start="{OFF + 23.3:.2f}" data-duration="{ES + 0.4 - 23.3:.2f}" data-track-index="1" data-track-kind="graphics" data-width="1920" data-height="1080"></div>
+      {HOSTS}
+      <div id="chip" data-composition-id="chip" data-composition-src="compositions/chip.html" data-start="{OFF + 2.3:.2f}" data-duration="{ES - 2.3:.2f}" data-track-index="2" data-track-kind="graphics" data-width="1920" data-height="1080" style="z-index: 80"></div>
       <div id="captions" data-composition-id="captions" data-composition-src="compositions/captions.html" data-start="0" data-duration="{TOTAL:g}" data-track-index="4" data-track-kind="captions" data-width="1920" data-height="1080" style="z-index: 90"></div>
       <audio id="vo" src="assets/narration.wav" data-start="0" data-duration="{TOTAL:g}" data-track-index="9" data-volume="0.85"></audio>
     </div>

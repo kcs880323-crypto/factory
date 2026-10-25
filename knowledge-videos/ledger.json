@@ -9,8 +9,8 @@
   {
     "topic": "문어의 심장은 세 개",
     "date": "2026-10-25",
-    "seconds": 30,
-    "file": "octopus-three-hearts/octopus-three-hearts-2026-10-25.mp4",
-    "note": "두 번째 영상. 소스(clauses.json, build_video.py, SOURCES.md)만 저장소에 있고 MP4는 올리지 않음"
+    "seconds": 44,
+    "file": "octopus-three-hearts/octopus-three-hearts-charles-2026-10-25.mp4",
+    "note": "찰스 오프닝·엔딩 포함 44초 판(v2). 30초 판(오프닝·엔딩 없음)도 만들었으나 대화로만 전달. 소스(clauses.json, build_video.py, SOURCES.md)만 저장소에 있고 MP4는 올리지 않음"
   }
 ]
