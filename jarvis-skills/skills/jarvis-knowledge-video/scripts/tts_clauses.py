@@ -4,7 +4,7 @@
   <PY> -I tts_clauses.py <모델 폴더> <clauses.json> <출력 폴더> [속도] [톤] [목소리=5]
 
 모델 폴더로 엔진이 정해진다 (setup_tts.py 가 출력하는 MODEL= 이 Supertonic 3, KSS_MODEL= 이 옛 KSS):
-  Supertonic 3 (기본)  속도 기본 1.2, 목소리 번호 0~9 (아래 표). 44.1kHz. 추론 단계 5
+  Supertonic 3 (기본)  속도 기본 1.3, 목소리 번호 0~9 (아래 표). 44.1kHz. 추론 단계 5
   KSS (옛 음성)        속도 기본 1.25, 목소리 번호는 무시 (한 명)
 
 Supertonic 3 목소리 (같은 대본 19절을 속도 1.2 로 합성해 잰 평균 음높이. 성별은 소리로 확인하지 못했고 음높이로 구분):
@@ -33,7 +33,7 @@ EQ = "equalizer=f=3200:width_type=o:width=1.2:g=3,highshelf=f=5500:g=3,acompress
 
 model_dir, clauses_json, out_dir = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
 is_st = (pathlib.Path(model_dir) / "duration_predictor.int8.onnx").exists()      # Supertonic 인가, KSS 인가
-speed = float(sys.argv[4]) if len(sys.argv) > 4 else (1.2 if is_st else 1.25)
+speed = float(sys.argv[4]) if len(sys.argv) > 4 else (1.3 if is_st else 1.25)
 tone = sys.argv[5] if len(sys.argv) > 5 else ("natural" if is_st else "bright")
 voice = int(sys.argv[6]) if len(sys.argv) > 6 else 5
 if is_st and not 0 <= voice <= 9:
