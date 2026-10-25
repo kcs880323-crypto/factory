@@ -12,7 +12,13 @@
 #   ./install.sh --with-design-skills    + 디자인 스킬 3종: frontend-design, theme-factory, web-design-guidelines
 #                                          (frontend-design 은 공식 플러그인이 이미 있으면 건너뜀)
 #   ./install.sh --with-agent-reach      + Agent Reach (uv 필요, 기본 채널만). 계정 전체(~/.agent-reach)에 설치됨
+#   ./install.sh --with-rea              + REA(앱 리버스 엔지니어링): Node/npx 필요. ~/.claude.json 에 MCP 등록 +
+#                                          ~/.claude/skills 에 스킬 설치 (계정 전체). Hopper 는 설치하지 않음.
+#                                          별도 프로필에만 설치하려면 CLAUDE_CONFIG_DIR=~/.claude-rea 를 붙여 실행
+#   ./install.sh --with-graphify         + Graphify(코드베이스 지식 그래프): uv 필요. 스킬 설치 + ~/.claude/CLAUDE.md 에 섹션 추가 (계정 전체)
 #   환경변수 PPT_PYTHON=<python 경로>    PPT Master 부품을 설치할 파이썬 (기본 python3, 가상환경용)
+#   환경변수 REA_VERSION=<버전>          REA npm 버전 (기본: 시험한 6.7.0)
+#   환경변수 GRAPHIFY_SPEC=<스펙>        Graphify PyPI 스펙 (기본: 시험한 graphifyy==0.9.95, y 가 두 개)
 #   환경변수 AGENT_REACH_URL=<주소>      Agent Reach 설치 주소 (기본: 시험한 v1.6.0 릴리스 파일로 고정)
 #
 # 원칙: 이미 있는 폴더·파일은 덮어쓰지 않고 건너뛴다. 마지막에 항상 검증하고,
@@ -27,6 +33,11 @@ WITH_PPT=0
 WITH_OFFICIAL=0
 WITH_AGENT_REACH=0
 WITH_DESIGN=0
+WITH_REA=0
+WITH_GRAPHIFY=0
+# 직접 시험한 버전으로 고정한다 (바뀔 수 있는 최신 버전을 그대로 실행하지 않기 위해).
+REA_VERSION="${REA_VERSION:-6.7.0}"
+GRAPHIFY_SPEC="${GRAPHIFY_SPEC:-graphifyy==0.9.95}"
 
 JARVIS_SKILLS=(
   jarvis-agent-browser jarvis-find-skills jarvis-gsd jarvis-design-taste jarvis-mcp-builder
@@ -34,6 +45,7 @@ JARVIS_SKILLS=(
   jarvis-frontend-design jarvis-superpowers jarvis-code-review jarvis-context7 jarvis-code-simplifier
   jarvis-agent-reach
   jarvis-theme-factory jarvis-web-design-guidelines
+  jarvis-rea jarvis-graphify
 )
 # 공식 문서의 'releases/latest/download/agent-reach.zip' 대신 같은 릴리스 파일을 버전으로 고정한다
 # (v1.6.0 이 latest 일 때 두 주소는 같은 파일임을 확인함. 바뀔 수 있는 최신 파일을 그대로 실행하지 않기 위해).
@@ -57,6 +69,8 @@ for arg in "$@"; do
     --with-official-plugins) WITH_OFFICIAL=1 ;;
     --with-agent-reach) WITH_AGENT_REACH=1 ;;
     --with-design-skills) WITH_DESIGN=1 ;;
+    --with-rea) WITH_REA=1 ;;
+    --with-graphify) WITH_GRAPHIFY=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "알 수 없는 옵션: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -139,6 +153,32 @@ agent_reach_bin() {
     if [ -x "$bin_dir/agent-reach.exe" ]; then printf '%s\n' "$bin_dir/agent-reach.exe"; return 0; fi
   fi
   return 1
+}
+
+# graphify 실행 파일을 찾는다. uv 가 ~/.local/bin 에 설치하는데 PATH 에 없을 수 있어 그 폴더도 확인한다.
+graphify_bin() {
+  local bin_dir
+  if command -v graphify >/dev/null 2>&1; then command -v graphify; return 0; fi
+  bin_dir="$(uv tool dir --bin 2>/dev/null || true)"
+  if [ -n "$bin_dir" ]; then
+    if [ -x "$bin_dir/graphify" ]; then printf '%s\n' "$bin_dir/graphify"; return 0; fi
+    if [ -x "$bin_dir/graphify.exe" ]; then printf '%s\n' "$bin_dir/graphify.exe"; return 0; fi
+  fi
+  return 1
+}
+
+# REA 가 요구하는 Node 버전(문서 기준 22.23.4+ / 24.22.1+ / 26.12.1+)에 못 미치면 경고만 한다.
+# (package.json 의 engines 는 ^22.19 || ^24.11 || >=26 으로 더 느슨하고, 22.22.0 에서 설치·MCP 연결을 확인함)
+rea_node_note() {
+  local v major rest minor patch ok=0
+  v="$(node --version 2>/dev/null || true)"; v="${v#v}"
+  major="${v%%.*}"; rest="${v#*.}"; minor="${rest%%.*}"; patch="${rest#*.}"
+  case "$major" in
+    22) { [ "$minor" -gt 23 ] || { [ "$minor" -eq 23 ] && [ "$patch" -ge 4 ]; }; } && ok=1 ;;
+    24) { [ "$minor" -gt 22 ] || { [ "$minor" -eq 22 ] && [ "$patch" -ge 1 ]; }; } && ok=1 ;;
+    *) [ "$major" -ge 26 ] 2>/dev/null && ok=1 ;;
+  esac
+  [ "$ok" -eq 1 ] || say "참고: REA 문서는 Node 22.23.4+ / 24.22.1+ / 26.12.1+ 를 요구합니다 (현재 v$v). 설치와 MCP 연결은 22.22.0 에서 확인했지만 분석 기능은 확인하지 못했습니다."
 }
 
 verify_plugins() { # <플러그인@마켓>...
@@ -317,7 +357,61 @@ if [ "$WITH_AGENT_REACH" -eq 1 ]; then
   say "참고: Agent Reach 는 로그인이 필요한 사이트에서 내 Chrome 의 로그인을 복사해 쓸 수 있습니다. 로그인·선택 채널은 사용자 동의 후에만 진행하세요 (jarvis-agent-reach 스킬 참고)."
 fi
 
-# 8) 검증
+# 8) REA (앱 리버스 엔지니어링) — 계정 전체에 설치된다.
+#    setup 이 ~/.claude.json 에 MCP 서버를 등록하고 ~/.claude/skills 에 스킬을 설치한다(백업은 REA 가 만든다).
+#    Hopper 같은 상용 분석 도구는 설치하지 않는다 (--install-hopper 를 쓰지 않음).
+if [ "$WITH_REA" -eq 1 ]; then
+  step "9. REA 설치"
+  if ! node_ok; then
+    fail "Node.js 22.20 이상이 필요합니다 (현재: $(node --version 2>/dev/null || echo '없음')). https://nodejs.org 에서 LTS를 설치하세요. (REA)"
+  elif ! command -v npx >/dev/null 2>&1; then
+    fail "npx 가 없습니다. Node.js(npm 포함)를 설치하세요. (REA)"
+  else
+    rea_node_note
+    # REA 는 CLAUDE_CONFIG_DIR 을 따른다: 별도 프로필을 쓰면 그 안에만 등록·설치된다 (권장: 필요한 곳에서만 쓰기).
+    if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then REA_CFG="$CLAUDE_CONFIG_DIR/.claude.json"; else REA_CFG="$HOME/.claude.json"; fi
+    REA_SKILL="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/reverse-engineer-anything/SKILL.md"
+    if [ -f "$REA_SKILL" ] && [ -f "$REA_CFG" ] && grep -q 'rea-agents@' "$REA_CFG"; then
+      say "건너뜀 (이미 있음): REA (스킬과 MCP 등록)"
+    else
+      rea_log="$(mktemp)"
+      if npx -y "rea-agents@$REA_VERSION" setup --client claude_code --yes --json >"$rea_log" 2>&1; then
+        say "설치 완료: REA $REA_VERSION (MCP 등록 + reverse-engineer-anything 스킬). 분석 엔진(Hopper/Ghidra/IDA)은 설치하지 않았습니다."
+        rm -f "$rea_log"
+      else
+        fail "REA 설치 실패 (setup 출력: $rea_log)"
+      fi
+    fi
+    say "참고: REA 는 내가 소유했거나 분석이 허가된 소프트웨어에만 쓰세요. 런타임 분석은 대상 앱을 내 권한으로 실행합니다 (jarvis-rea 스킬 참고)."
+  fi
+fi
+
+# 9) Graphify (코드베이스 지식 그래프) — 계정 전체에 설치된다.
+#    graphify install 이 ~/.claude/skills/graphify 를 만들고 ~/.claude/CLAUDE.md 에 섹션을 추가한다 (기존 내용은 보존).
+if [ "$WITH_GRAPHIFY" -eq 1 ]; then
+  step "10. Graphify 설치"
+  GB="$(graphify_bin || true)"
+  if [ -n "$GB" ] && [ -f "$HOME/.claude/skills/graphify/SKILL.md" ]; then
+    say "건너뜀 (이미 있음): Graphify"
+  elif [ -z "$GB" ] && ! command -v uv >/dev/null 2>&1; then
+    fail "uv 가 없습니다. 공식 설치 안내(docs.astral.sh/uv)를 보고 설치한 뒤 다시 실행하세요. 원격 설치 스크립트는 자동으로 실행하지 않습니다. (Graphify)"
+  else
+    gfy_log="$(mktemp)"
+    CM="$HOME/.claude/CLAUDE.md"
+    if [ -f "$CM" ] && ! grep -q '^# graphify' "$CM"; then
+      cp "$CM" "$CM.bak-$(date +%Y%m%d%H%M%S)" && say "CLAUDE.md 백업: $CM.bak-*"
+    fi
+    if { [ -n "$GB" ] || uv tool install "$GRAPHIFY_SPEC"; } && GB="$(graphify_bin)" && "$GB" install >"$gfy_log" 2>&1; then
+      say "설치 완료: Graphify ($GRAPHIFY_SPEC). 스킬 설치 + ~/.claude/CLAUDE.md 에 graphify 섹션 추가"
+      rm -f "$gfy_log"
+    else
+      fail "Graphify 설치 실패 (위의 uv 오류, 또는 install 출력: $gfy_log)"
+    fi
+  fi
+  say "참고: graphify uninstall 은 전역 ~/.claude/CLAUDE.md 에 추가한 graphify 섹션을 지우지 않습니다. 제거할 때 수동으로 지우세요 (jarvis-graphify 스킬 참고)."
+fi
+
+# 10) 검증
 step "검증"
 for s in "${JARVIS_SKILLS[@]}"; do
   if [ -f "$TARGET/$s/SKILL.md" ]; then say "OK   $s"; else fail "$s 의 SKILL.md 가 없음"; fi
@@ -364,6 +458,27 @@ if [ "$WITH_DESIGN" -eq 1 ]; then
   else
     fail "frontend-design 이 설치되지 않음 (단독 스킬도 공식 플러그인도 없음)"
   fi
+fi
+
+if [ "$WITH_REA" -eq 1 ]; then
+  REA_SKILL="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/reverse-engineer-anything/SKILL.md"
+  if [ -f "$REA_SKILL" ]; then say "OK   REA 스킬 (reverse-engineer-anything)"; else fail "REA 스킬이 설치되지 않음 ($REA_SKILL)"; fi
+  if have_claude; then
+    if mcp_connected 'rea:*'; then say "OK   REA MCP 연결됨"; else fail "REA MCP 가 연결되지 않음 (claude mcp list 로 확인)"; fi
+  else
+    fail "claude CLI 가 없어 REA MCP 연결을 확인할 수 없음"
+  fi
+fi
+
+if [ "$WITH_GRAPHIFY" -eq 1 ]; then
+  GB="$(graphify_bin || true)"
+  if [ -z "$GB" ]; then
+    fail "graphify 실행 파일을 찾을 수 없음"
+  else
+    if "$GB" --help >/dev/null 2>&1; then say "OK   graphify 실행됨"; else fail "graphify --help 가 실패함"; fi
+  fi
+  if [ -f "$HOME/.claude/skills/graphify/SKILL.md" ]; then say "OK   Graphify 스킬"; else fail "Graphify 스킬이 설치되지 않음 (~/.claude/skills/graphify)"; fi
+  if [ -f "$HOME/.claude/CLAUDE.md" ] && grep -q 'graphify' "$HOME/.claude/CLAUDE.md"; then say "OK   ~/.claude/CLAUDE.md 에 graphify 섹션 있음"; else fail "~/.claude/CLAUDE.md 에 graphify 섹션이 없음"; fi
 fi
 
 if [ "$WITH_AGENT_REACH" -eq 1 ]; then
