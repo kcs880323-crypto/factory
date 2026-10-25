@@ -157,6 +157,6 @@ node "<PLUGIN_ROOT>/skills/hyperframes/scripts/plugin-cli.mjs" render
 | 자막이 서로 겹침 | 절 사이 간격(`--intra`, `--inter`)을 늘리거나 자막 클립 길이를 줄인다 |
 | `ffmpeg`/`npm`이 없다 | 사용자에게 알려 설치하게 한다 (윈도우: `winget install Gyan.FFmpeg`) |
 
-시험한 범위: 리눅스에서 `setup_tts.py`를 빈 상태에서 실행, 음성 합성, `build_track.py`(35~45초 자동 결정, 자막 합치기, 오프닝·본편·엔딩 구간), `make_clauses.py`, `prepare_assets.py`, 꿀벌 영상(30초)과 **찰스 오프닝·엔딩이 붙은 「문어의 심장은 세 개」(44초)**를 처음부터 끝까지 만들어 `check` 오류 0, `snapshot` 눈 확인, 렌더, `verify_video.py` 전부 합격(−14.7 LUFS, 절 마다 소리 있음). 시험하지 못한 범위: **윈도우**, 음성의 발음·억양과 **말할 때 몸의 움직임이 소리와 맞는지**(소리를 들을 수 없어 캡처한 프레임으로만 확인), 음성이 "찰스"라는 캐릭터에 어울리는지(KSS 모델은 여성 화자로 알고 있음), 웹 검색 원문 페이지 직접 열람.
+시험한 범위: 리눅스에서 `setup_tts.py`를 빈 상태에서 실행, 음성 합성, `build_track.py`(35~45초 자동 결정, 자막 합치기, 오프닝·본편·엔딩 구간), `make_clauses.py`, `prepare_assets.py`, 꿀벌 영상(30초)과 **찰스(사용자가 만든 오리 박사 그림) 오프닝·엔딩과 밝은 톤(`bright`) 음성이 붙은 「문어의 심장은 세 개」(43초)**를 처음부터 끝까지 만들어 `check` 오류 0·경고 0, `snapshot`과 렌더한 MP4의 프레임 눈 확인, `verify_video.py` 전부 합격(−14.4 LUFS, 자막 단위마다 소리 있음). 톤 처리는 `rubberband`가 있는 ffmpeg와 없는 ffmpeg(대체 경로) 모두 실행했다. 시험하지 못한 범위: **윈도우**, 음성의 발음·억양과 **말할 때 몸의 움직임이 소리와 맞는지**(소리를 들을 수 없어 캡처한 프레임으로만 확인), 음성이 "찰스"라는 캐릭터에 어울리는지(KSS 모델은 여성 화자로 알고 있음), 웹 검색 원문 페이지 직접 열람.
 
 공식 자료: <https://github.com/k2-fsa/sherpa-onnx> · <https://github.com/heygen-com/hyperframes> · Pretendard <https://github.com/orioncactus/pretendard>
