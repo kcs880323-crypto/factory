@@ -1,4 +1,4 @@
-# 자비스 인수인계: Claude Code 스킬 29종 (필수 5 + PPT 5 + 공식 플러그인 5 + Agent Reach 1 + 디자인 보강 3 + REA·Graphify 2 + 영상 제작 5 + 지식영상 1 + AI 비서 2)
+# 자비스 인수인계: Claude Code 스킬 30종 (필수 5 + PPT 5 + 공식 플러그인 5 + Agent Reach 1 + 디자인 보강 3 + REA·Graphify 2 + 영상 제작 5 + 지식영상 1 + AI 비서 2 + Ruflo 1)
 
 > 출처 1: 게으른 빌더(lazyowen.com) 「클로드 코드에 무조건 깔아야 하는 스킬 5개」 (2026-08-13 갱신, PDF 11쪽)
 > 출처 2: 써매(@ssumae.ai) 「PPT 늘 밤티라면 — 클로드로 발표용 장표 만드는 도구 5개」 (2026-10-21 공개, Notion)
@@ -8,6 +8,7 @@
 > 출처 6: 사용자가 전달한 「클로드 코드 고수들이 깔아 두는 무료 오픈소스 3개」 (2026-10-25 게시): REA, Graphify, Agent-Reach. **Agent-Reach는 파트 D에 이미 있어서 건너뛰었습니다.**
 > 출처 7: 사용자가 전달한 영상 제작 스킬 5개 소개 글 (2026-10-14 기준): HyperFrames, onetake, Collage B-roll, Claude Animation Base, Lemo-Opuscar
 > 출처 8: 사용자가 전달한 「클로드 디자인을 확 바꾸는 무료 스킬 3개」 (2026-10-25 게시): Frontend Design, UI UX Pro Max, Taste Skill. **Frontend Design(파트 C·E)과 Taste(파트 A)는 이미 있어서 건너뛰고, UI UX Pro Max만 새로 넣었습니다.**
+> 출처 9: 사용자가 전달한 게으른 빌더(lazyowen.com)의 Ruflo 가이드 PDF 주소(`/guide-pdf/ruflo.pdf`). **이 환경의 네트워크 정책이 그 도메인을 차단해 PDF를 읽지 못했습니다.** 그래서 PDF의 설치 안내 대신 공식 저장소(`ruvnet/ruflo`)와 npm 패키지를 직접 받아 읽고 시험해 만들었습니다.
 > 목적: 위 자료의 도구를 자비스가 설치·검증하고 바로 쓸 수 있도록 정리한 패키지입니다.
 
 ## 0. 한 줄 요약
@@ -19,7 +20,7 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 
 설치가 끝나면 **Claude Code를 완전히 종료했다가 다시 켜세요.** 재시작 전에는 새 스킬, 플러그인, MCP 서버, `/gsd-` 명령을 인식하지 못합니다.
 
-필요한 것만 골라 붙이세요: 필수 5종은 `--with-upstream`, PPT 도구는 `--with-ppt`, 공식 플러그인은 `--with-official-plugins`, 디자인 보강은 `--with-design-skills`(UI UX Pro Max는 `--with-uiux`), 앱 분석(REA)은 `--with-rea`, 코드베이스 지도(Graphify)는 `--with-graphify`, 영상 제작 도구는 `--with-video-skills`(HyperFrames·Lemo-Opuscar·Collage B-roll)와 `--with-onetake`(비상업 용도일 때만). 옵션 없이 실행하면 안내 스킬 29개만 복사합니다. **AI 비서(파트 H)는 별도 옵션 없이 이 28개에 들어 있고**, 처음 쓸 때 사용자 동의를 받고 `~/.jarvis-secretary`를 만듭니다.
+필요한 것만 골라 붙이세요: 필수 5종은 `--with-upstream`, PPT 도구는 `--with-ppt`, 공식 플러그인은 `--with-official-plugins`, 디자인 보강은 `--with-design-skills`(UI UX Pro Max는 `--with-uiux`), 멀티 에이전트 Ruflo는 `--with-ruflo`(약 1.7GB, 10장을 먼저 읽고), 앱 분석(REA)은 `--with-rea`, 코드베이스 지도(Graphify)는 `--with-graphify`, 영상 제작 도구는 `--with-video-skills`(HyperFrames·Lemo-Opuscar·Collage B-roll)와 `--with-onetake`(비상업 용도일 때만). 옵션 없이 실행하면 안내 스킬 30개만 복사합니다. **AI 비서(파트 H)는 별도 옵션 없이 이 28개에 들어 있고**, 처음 쓸 때 사용자 동의를 받고 `~/.jarvis-secretary`를 만듭니다.
 
 **Agent Reach(`--with-agent-reach`)는 위 한 줄에 일부러 넣지 않았습니다.** 계정 전체에 설치되고 로그인 복사와 관련된 주의점이 있어서, 5장(파트 D)을 읽고 따로 선택하세요.
 
@@ -69,7 +70,7 @@ PPT_PYTHON=python bash ~/tools/factory/jarvis-skills/install.sh --global --with-
 - 전체 설치하면 GSD와 superpowers가 둘 다 켜져 충돌하므로 하나는 끄세요 (4-2 참고): `claude plugin disable superpowers@claude-plugins-official`
 - 끝나면 Claude Code를 완전히 종료했다가 다시 켭니다.
 
-**자비스에게 맡기려면:** Git for Windows를 설치한 상태에서 Claude Code를 열고 10장의 프롬프트를 붙여넣되, 설치 명령 줄을 위 3)의 명령(`PPT_PYTHON=python bash …`)으로 바꿔 전달하세요.
+**자비스에게 맡기려면:** Git for Windows를 설치한 상태에서 Claude Code를 열고 11장의 프롬프트를 붙여넣되, 설치 명령 줄을 위 3)의 명령(`PPT_PYTHON=python bash …`)으로 바꿔 전달하세요.
 
 **Git for Windows 없이 PowerShell만 쓰는 경우:** `install.sh`를 쓸 수 없으므로 2-2, 3-3, 4-3의 수동 명령을 한 줄씩 실행합니다. `npx`, `npm`, `claude plugin …` 명령은 그대로 쓰면 되지만, bash 문법인 PPT Master의 경로 찾기(3-3의 2번)는 PowerShell에서 이렇게 바꿉니다.
 
@@ -120,7 +121,8 @@ jarvis-skills.zip
         ├── jarvis-lemo-opuscar/SKILL.md         ┘
         ├── jarvis-knowledge-video/              ← "지식영상 생성" 반복 사용 스킬 (SKILL.md + scripts/ + reference/)
         ├── jarvis-secretary/                    ← 파트 H: AI 비서 (SKILL.md + playbooks/ + scripts/secretary_store.py)
-        └── jarvis-skill-learner/SKILL.md        ← 파트 H: 새 업무를 배워서 저장
+        ├── jarvis-skill-learner/SKILL.md        ← 파트 H: 새 업무를 배워서 저장
+        └── jarvis-ruflo/SKILL.md                ← 파트 I: Ruflo 멀티 에이전트 (선택, 부작용이 커서 따로)
 ```
 
 ### 꼭 알아 둘 점: 두 종류가 있습니다
@@ -157,7 +159,7 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 
 | 옵션 | 동작 |
 |---|---|
-| (없음) | `jarvis-*` 29개만 `.claude/skills`에 복사 |
+| (없음) | `jarvis-*` 30개만 `.claude/skills`에 복사 |
 | `--global` | 계정 전체(`~/.claude`)에 설치 |
 | `--with-upstream` | + 공식 원본 4개와 GSD 설치 (네트워크 필요) |
 | `--with-browser` | + `agent-browser` 명령줄 도구와 자동화용 크롬 설치 (전역 npm 설치) |
@@ -166,6 +168,7 @@ unzip jarvis-skills.zip -d /tmp && /tmp/jarvis-skills/install.sh --with-upstream
 | `--with-agent-reach` | + 파트 D의 Agent Reach 설치 (5장 참고). uv 필요, 계정 전체에 설치 |
 | `--with-design-skills` | + 파트 E의 디자인 스킬 3종 설치 (6장 참고). frontend-design은 공식 플러그인이 이미 있으면 건너뜀 |
 | `--with-uiux` | + 파트 E의 UI UX Pro Max 플러그인 설치(`v2.15.0` 태그 고정, 6장 참고). claude CLI 필요, 스킬 7개가 함께 들어옴, 파이썬 3 필요 |
+| `--with-ruflo` | + 파트 I의 Ruflo(멀티 에이전트) 설치 (10장 참고). **npm 전역 고정 버전(약 1.7GB)** + `ruflo-core` 플러그인(태그 고정) + 안전 설정 3개. claude CLI, Node 20+ 필요 |
 | `--with-rea` | + 파트 F의 REA 설치 (7장 참고). Node/npx 필요, `~/.claude.json` MCP 등록 + 스킬. 별도 프로필은 `CLAUDE_CONFIG_DIR=…` |
 | `--with-graphify` | + 파트 F의 Graphify 설치 (7장 참고). uv 필요, 스킬 + 전역 `~/.claude/CLAUDE.md`에 섹션 추가 |
 | `--with-video-skills` | + 파트 G의 HyperFrames·Lemo-Opuscar 플러그인과 Collage B-roll `SKILL.md`(커밋·해시 고정) 설치 (8장 참고). MaxFusion MCP는 등록하지 않음 |
@@ -862,7 +865,60 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 
 ---
 
-## 10. 자비스에게 그대로 붙여넣을 프롬프트
+## 10. 파트 I — Ruflo: 멀티 에이전트와 공유 메모리 (선택, 부작용이 커서 따로)
+
+`ruvnet/ruflo`(구 Claude Flow, MIT). 설치하면 Claude Code에 **MCP 서버 1개(도구 379개)**, 범용 에이전트 4개, 스킬 5개, **도구 호출마다 도는 훅**이 들어옵니다. 큰 작업을 에이전트 여러 개에게 나누고 세션을 넘어 기억하게 하는 도구입니다. 자비스용 안내는 `jarvis-ruflo`.
+
+> **가이드 PDF를 읽지 못했습니다.** 전달받은 `lazyowen.com/guide-pdf/ruflo.pdf`는 이 환경의 네트워크 정책이 차단해(연결 403) 내용을 볼 수 없었습니다. 그래서 PDF를 추측하지 않고, 공식 저장소와 npm 패키지를 직접 받아 읽고 시험했습니다. PDF의 설명과 다른 부분이 있을 수 있습니다.
+
+### 10-1. 설치 전에 사용자에게 꼭 알릴 것 (직접 확인한 것)
+
+| 항목 | 내용 |
+|---|---|
+| **크기** | 고정 버전 전역 설치가 패키지 620개, **약 1.7GB, 약 2분**(npm 캐시 약 0.6GB 더). 마켓 저장소 복제도 약 0.2GB |
+| **과거 사고** | `claude-flow`·`ruflo`의 **3.1.0-alpha.54, 3.1.0-alpha.55, 3.5.0, 3.5.2**(확인한 버전)에는 `preinstall` 스크립트가 있어 `~/.npm/_npx`의 숨김 임시 폴더와 `~/.npm/_cacache`에서 `claude-flow`·`ruflo`가 든 색인 파일을 **지웠습니다.** 3.5.3(2026-03-05)부터는 없고 3.63.0에도 없습니다. 그래서 오래된 버전과 `npx ruflo@latest`를 쓰지 않습니다 |
+| **"최신"을 매번 실행하는 구조** | 플러그인의 훅은 `ruflo`가 없으면 `npx ruflo@latest`로, MCP 서버는 로컬 설치가 없으면 `npx -y @claude-flow/cli@latest`로 넘어갑니다. **고정 버전을 전역 설치**해 이 경로를 막습니다(가짜 `npx`로 감시해 호출되지 않는 것을 확인) |
+| **자동 업데이트** | CLI가 시작할 때 하루 한 번 npm에 물어보고 **패치 업데이트는 기본으로 자동 설치**(`npm install … --save-exact`를 현재 폴더에서 실행)합니다. `CLAUDE_FLOW_AUTO_UPDATE=false`로 끕니다 |
+| **명령이 평문으로 저장됨** | 기본 설정이면 Bash 명령 문자열이 프로젝트의 `.swarm/agentdb-memory.db`와 `.claude-flow/neural/patterns.json`에 저장됩니다(비밀 값 모양의 문자열로 확인). `CLAUDE_FLOW_HOOKS_RECORD_COMMANDS=false`로 끕니다 |
+| **프로젝트에 파일이 생김** | 프로젝트 루트에 `.swarm/`, `.claude-flow/`, `ruvector.db`(약 1.5MB). 홈에는 `~/.claude-flow/`, `~/.config/ruflo/`. `.gitignore`는 건드리지 않음 |
+| **외부 전송(기본은 꺼짐)** | 사용 통계(`funnel.ruv.io`)는 동의해야만 보내고 항목은 닫힌 목록입니다(코드에서 확인). 그러나 계정 로그인·클라우드 라우팅·학습 데이터 공유·수익 분배 등 **동의 항목이 12가지**입니다. 자비스는 어느 것에도 동의하지 않습니다 |
+| **다른 작업 방식 도구와 충돌** | superpowers, GSD와 같은 종류입니다. 같은 프로젝트에서 같이 켜지 않습니다 |
+| **관리** | 저장소와 npm 모두 한 개인(ruvnet). 거의 매일 새 버전이 나와서 고정 버전을 씁니다 |
+
+### 10-2. 설치
+
+```bash
+bash ~/tools/factory/jarvis-skills/install.sh --with-ruflo       # 계정 전체는 --global 추가
+```
+
+하는 일: ① `npm install -g ruflo@3.63.0`(고정, 다른 버전이 이미 있으면 덮어쓰지 않고 알림) ② 마켓 `ruvnet/ruflo`를 **`#v3.63.0` 태그**(커밋 `e2dae2f7…`)로 등록하고 **`ruflo-core`만** 설치(마켓의 나머지 46개는 설치하지 않음) ③ Claude Code 설정 파일의 `env`에 **안전 설정 3개** 추가(먼저 백업, 이미 있는 키는 그대로 둠).
+
+| 안전 설정 | 값 | 효과 |
+|---|---|---|
+| `CLAUDE_FLOW_AUTO_UPDATE` | `false` | 시작 때 자동 업데이트를 하지 않음 |
+| `CLAUDE_FLOW_HOOKS_RECORD_COMMANDS` | `false` | Bash 명령을 기록하지 않음 |
+| `RUFLO_HOOK_SKIP_NPX` | `1` | 훅이 `npx ruflo@latest`로 넘어가지 않음 |
+
+수동:
+
+```bash
+npm install -g ruflo@3.63.0
+claude plugin marketplace add "ruvnet/ruflo#v3.63.0" --scope user
+claude plugin install ruflo-core@ruflo --scope user
+# 위 3개 키를 설정 파일의 "env" 에 추가
+```
+
+설치 후 Claude Code를 완전히 종료했다가 다시 켭니다. Node 20 이상이 필요합니다.
+
+### 10-3. 사용자 확인이 필요한 것
+
+ruflo의 스킬은 `npx @claude-flow/cli@latest …`를 실행하라고 되어 있습니다. **이 패키지에서는 `npx …@latest` 대신 고정 설치된 `ruflo` 명령을 씁니다.** 그리고 다음은 실행 전에 무엇이 바뀌는지 알리고 승인받습니다: `ruflo init`/`init-project`(프로젝트에 `CLAUDE.md`, `.claude/settings.json`, `.claude-flow/` 생성), `doctor --fix`·`config reset`·`memory init --force`(설정·메모리 초기화), `daemon start`(배경 프로세스), 계정 로그인·클라우드 라우팅·사용 통계 같은 동의 항목(자비스는 하지 않음), 다른 ruflo 플러그인 설치.
+
+제거는 `claude plugin uninstall ruflo-core@ruflo --scope user`, `claude plugin marketplace remove ruflo`, `npm uninstall -g ruflo`(실제로 실행해 확인), 그리고 설정 파일의 `env` 3개 키와 프로젝트의 `.swarm/` `.claude-flow/` `ruvector.db`, 홈의 `~/.claude-flow` `~/.config/ruflo`를 사용자 확인 후 지웁니다.
+
+---
+
+## 11. 자비스에게 그대로 붙여넣을 프롬프트
 
 **파트 A (필수 5종)** — PDF의 「설치부터 검증까지 AI에게 맡기기」 프롬프트를 이 패키지 기준으로 정리한 것입니다.
 
@@ -954,6 +1010,16 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 출력: 실행한 명령어, 설치된 버전(v2.15.0 태그), 남은 오류를 정리해 주세요.
 ```
 
+**Ruflo (멀티 에이전트, 선택 — 크고 부작용이 큽니다)**
+
+```text
+역할: Ruflo 설치·검증을 맡는 담당. 먼저 jarvis-ruflo 스킬을 읽으세요.
+맥락: Ruflo 는 약 1.7GB 를 npm 전역에 설치하고, 도구를 쓸 때마다 훅이 돌며, 프로젝트에 .swarm/ .claude-flow/ ruvector.db 를 만듭니다. 과거 버전(3.5.2 이하)은 preinstall 이 npm 캐시를 지웠으므로 오래된 버전과 `npx ruflo@latest` 를 쓰지 않습니다.
+작업: 1) 설치 전에 위 내용(크기, 훅, 생기는 파일, 자동 업데이트, 외부 전송 동의 항목 12가지)을 사용자에게 알리고 동의를 받으세요. 2) 동의하면 `bash install.sh --with-ruflo`(계정 전체는 --global)를 실행하세요. 3) `OK   ruflo 3.63.0`, `OK   플러그인 ruflo-core@ruflo`, `OK   Ruflo 안전 설정 3개` 줄을 확인하고 '미완료' 항목을 그대로 보여 주세요. 4) Claude Code 를 완전히 종료했다가 다시 켜야 한다고 안내하세요.
+제약: 계정 로그인, 클라우드 라우팅, 학습 데이터 공유, 사용 통계 동의를 하지 마세요. init, doctor --fix, config reset, memory init --force, daemon start 는 먼저 묻고, 다른 ruflo 플러그인은 하나씩 사용자 승인 뒤에만 설치하세요. 안전 설정 3개를 끄지 마세요. superpowers·GSD 와 같은 프로젝트에서 같이 켜지 마세요.
+출력: 실행한 명령어, 설치된 버전, 건너뛴 항목, 남은 오류, 확인하지 못한 것(실제 스웜 작업)을 구분해 정리해 주세요.
+```
+
 **파트 F (REA·Graphify, 선택)**
 
 ```text
@@ -1006,7 +1072,7 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 
 ---
 
-## 11. 지켜야 할 규칙
+## 12. 지켜야 할 규칙
 
 1. 이미 설치된 것은 다시 설치하지 않습니다. 기존 파일·설정을 덮어쓰거나 지우지 않습니다.
 2. `.env` 같은 비밀키 파일은 읽지도 출력하지도 않습니다. 스크린샷에도 비밀값이 찍히지 않게 합니다.
@@ -1044,10 +1110,11 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 34. **제안은 하나씩, 근거와 함께 합니다.** 모호하면 질문 대신 기본값을 제안하고, 끝낸 뒤에는 다음 일을 하나만 제안하며, 두 번 거절되면 그 종류는 더 하지 않습니다. "가장 인기 있는" 같은 말은 본 근거가 있을 때만 씁니다.
 35. **새 업무는 사용자가 전체를 보고 승인한 것만 배워 저장합니다.** 비밀 값과 위임을 넓히는 표현은 저장하지 않고(`learn check`), 대화 중 한마디 "좋아요"를 저장 승인으로 보지 않습니다. 취향은 저장할 항목을 말하고 동의받은 뒤 저장합니다.
 36. **디자인 스킬(Frontend Design, UI UX Pro Max, Taste)은 한 작업에 하나만 씁니다.** UI UX Pro Max는 스킬 7개를 함께 설치하고, 그 중 이미지 생성 기능은 사용자가 이미지 API 키를 직접 설정했을 때만 외부로 요청을 보냅니다. 키를 설정하거나 묻지 않으며, `design-system/` 파일 생성과 `--force` 덮어쓰기는 사용자에게 먼저 묻습니다. 추천 결과보다 사용자의 요청과 브랜드가 우선입니다.
+37. **Ruflo는 고정 버전(3.63.0)만 설치하고 `npx ruflo@latest`·`npx @claude-flow/cli@latest`를 직접 실행하지 않습니다.** 안전 설정 3개(자동 업데이트 끔, 명령 기록 끔, npx 대체 끔)를 유지하고, 계정 로그인·클라우드 라우팅·학습 데이터 공유·사용 통계 동의를 하지 않으며, `init`·`doctor --fix`·`config reset`·`memory init --force`·`daemon start`는 먼저 묻습니다. 다른 ruflo 플러그인은 하나씩 승인받고 설치합니다.
 
 ---
 
-## 12. 자주 막히는 곳
+## 13. 자주 막히는 곳
 
 | 증상 | 원인 | 해결 |
 |---|---|---|
@@ -1101,7 +1168,7 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 
 ---
 
-## 13. 이 패키지에 대해 확인한 것과 확인하지 못한 것
+## 14. 이 패키지에 대해 확인한 것과 확인하지 못한 것
 
 ### 확인한 것 (격리된 빈 폴더·빈 HOME에서 실제 실행)
 - **파트 A:** PDF의 `npx skills add` 4개 명령은 모두 그대로 동작하며 `.claude/skills`에 네 폴더가 생겼습니다. GSD(`--claude --local`)는 Node 22.22에서 설치가 끝까지 완료되었고 `commands/gsd-help.md`가 생겼습니다.
@@ -1112,6 +1179,7 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 - **파트 F (Graphify):** 격리된 HOME에서 `uv tool install graphifyy`(0.9.95)와 `graphify install`을 실행했습니다. 스킬 설치와 함께 전역 `~/.claude/CLAUDE.md`에 섹션이 추가되고 기존 내용은 보존되며 두 번 실행해도 하나만 남는 것, `graphify uninstall`이 그 섹션을 남기는 것을 확인했습니다. 샘플 코드 3파일에서 `graphify update`가 키 없이 약 2초에 `graph.json`, `graph.html`, `GRAPH_REPORT.md`를 만들고 `god-nodes`·`query`가 올바른 호출 관계를 답했으며, 그동안 외부 접속 시도(프록시 실패 기록)가 없었습니다. 패키지 소스에서 텔레메트리 라이브러리는 찾지 못했습니다. 생성된 `graph.html`이 `unpkg.com`의 스크립트를 불러오는 것도 확인했습니다.
 - **파트 E:** 격리된 폴더에서 `npx skills add`로 `theme-factory`, `web-design-guidelines`, `frontend-design`이 설치됨을 확인했습니다. `theme-factory`는 `SKILL.md`·`LICENSE.txt`·`theme-showcase.pdf`·`themes/`(10개)를 포함합니다. 단독 `frontend-design`과 공식 플러그인판의 `SKILL.md`는 해시가 같았습니다. `web-design-guidelines`가 읽어 오는 원격 규칙 파일(`command.md`, 8,055바이트·191줄)을 직접 읽었고 검토 규칙과 출력 형식뿐이었으며, 고정 커밋 주소의 파일이 `main`과 같음을 확인했습니다(2026-10-23). 테마 글꼴(DejaVu, FreeSans 계열)이 한글 지원 글꼴 목록에 없음을 이 환경의 fontconfig로 확인했습니다. 스크립트는 첫 설치, 재실행, 플러그인이 이미 있을 때 `frontend-design` 건너뛰기, Node 버전 부족, 중복 경고, 옵션 없을 때 건드리지 않기를 시험했습니다.
 - **UI UX Pro Max(파트 E):** 격리된 HOME에서 마켓을 `#v2.15.0`으로 등록하고 플러그인을 설치해 스킬 7개(`ui-ux-pro-max`, `design`, `design-system`, `ui-styling`, `brand`, `banner-design`, `slides`)가 들어오는 것을 확인했습니다(표시 버전은 태그 안의 파일대로 2.13.0). 설치된 사본에서 `--design-system`(파일을 만들지 않음), `--persist --output-dir`(MASTER.md 생성, 재실행 시 덮어쓰지 않음), `--domain typography`, `--stack react`를 실행했고 저장소의 자체 테스트 153개가 통과했습니다. `install.sh --with-uiux`: 첫 설치 종료 코드 0, 재실행은 전부 건너뜀, claude CLI 없음은 종료 코드 1. Taste의 플러그인 설치 방법(`#v2.1.5`)도 격리된 HOME에서 설치해 스킬 이름이 `design-taste-frontend`인 것을 확인했습니다.
+- **Ruflo(파트 I):** 격리된 HOME·npm 전역 폴더에서 `install.sh --with-ruflo --global`을 실행했습니다(약 2분, 첫 설치 종료 코드 0). `ruflo v3.63.0`, 플러그인 `ruflo-core` 0.2.11, 설정 파일에 안전 설정 3개 추가(원래 있던 `permissions`·`env` 값은 그대로, 백업 생성). **설치된 플러그인의 MCP 서버를 표준입출력으로 실행해 초기화와 도구 379개 목록을 받았고**, 훅을 실행해 종료 코드 0과 `{"permission":"allow"}`를 확인했습니다. 기본 설정에서는 명령 문자열이 DB와 JSON에 저장되고, 안전 설정 3개를 켜면 저장되지 않고 파일도 생기지 않으며 `npx`도 호출되지 않는 것(가짜 `npx`로 감시)을 확인했습니다. 재실행은 전부 건너뜀, 다른 버전의 `ruflo`가 이미 있으면 덮어쓰지 않고 종료 코드 1, 깨진 설정 JSON은 건드리지 않고 종료 코드 1, claude CLI 없음은 종료 코드 1. 제거 명령(`plugin uninstall`, `marketplace remove`, `npm uninstall -g`)도 실행해 확인했습니다. npm 메타데이터로 3.1.0-alpha.54·alpha.55·3.5.0·3.5.2의 `preinstall`(npm 캐시 삭제)과 3.5.3·3.6.0에는 없음을 확인했고, 3.63.0 `@claude-flow/cli`의 `postinstall`은 읽어서 네트워크·삭제·실행 호출이 없음을 확인했습니다.
 - **파트 G:** 격리된 HOME에서 **① HyperFrames**를 `#v0.8.197` 태그로 마켓에 등록하고(커밋 해시로는 등록되지 않음을 확인) 플러그인을 설치해 버전 0.8.197을 확인했습니다. 플러그인 실행기로 `init` → `check` → `render`를 실행해 **1920×1080, 30fps, 10초 H.264 MP4**를 만들었습니다(시험 환경의 Chrome이 jsDelivr에 접속하지 못해 GSAP를 로컬 파일로 바꾼 뒤 성공. 바꾸기 전에는 `sub_timeline_script_failure`로 막힘). 텔레메트리가 기본으로 켜져 있음을 `telemetry status`로 확인하고 수집 항목·피드백·`publish` 문서를 읽었습니다. **② onetake**는 고정 커밋을 얕게 받아 라이브러리 단위 테스트 전부 통과(`ALL PASS`)를 확인하고, 파이썬 패키지를 가상환경에 설치한 뒤 템플릿 합성의 **2초 초안 렌더**(1920×1080, 30fps, 60프레임, 페이지 오류 없음)를 만들었습니다(playwright를 설치된 브라우저에 맞춘 1.56.0으로). **③ Collage B-roll**은 고정 커밋의 `SKILL.md`를 받아 기존에 읽은 내용과 같음을 확인하고, 명령·주소·키 관련 문장을 검색했으며, SHA-256을 계산해 설치 스크립트에 넣었습니다. **④ Claude Animation Base**는 고정 커밋을 받아 `npm ci --ignore-scripts`(46개 패키지, 설치 스크립트 있는 패키지 없음)를 실행하고 데모 장면의 **컨택트 시트 2장(0초·3초)을 렌더**해 그림을 확인했습니다(GPU 없는 소프트웨어 렌더, 로딩 제한을 늘려서, 프레임당 약 55초). **⑤ Lemo-Opuscar**는 플러그인을 설치하고 `setup.sh`로 라이브러리를 내려받아(약 31MB, 시험 시점 커밋 `413a6bd6`) `deps`의 npm 설치까지 실행했고, 설치 스크립트가 따르는 `LEMO_OPUSCAR_HOME` 고정 방식(직접 복제한 폴더는 갱신되지 않음)도 확인했습니다. `install.sh`는 `--with-video-skills --with-onetake`의 첫 설치, 재실행(전부 건너뜀), `--global`, 옵션 없음(25개만 복사), 해시 불일치·잘못된 커밋·claude CLI 없음의 실패 보고(종료 코드 1, 남은 폴더 없음)를 시험했습니다.
 - **AI 비서(파트 H):** `secretary_store.py selftest` 17개 항목이 모두 통과하고(예약 판정 6가지 경계 — 명시 요청+한도 안 AUTO, 자비스의 제안 ASK, 예약금·평점 미달·인원 초과·평점 모름 ASK — 일정 추가·초대, 규칙 없는 일 ASK, 결제·카드 입력 NEVER, 하루 한도, 기록에서 전화번호 가림, 절차 검사 4가지), 같은 명령줄을 격리된 홈에서 직접 실행해 확인했습니다: `init` 재실행 시 덮어쓰지 않음, 민감 항목은 `--sensitive-ok` 없이 거부, 카드·비밀번호 항목과 모르는 항목 거부, `decide`의 종료 코드(0/10/20), 한도 변경은 `--user-confirmed` 없이 거부, `learn add`의 중복·이름 검사, `learn remove`의 휴지통 이동. 내장 플레이북 5개와 틀이 자체 검사를 통과합니다.
 - **찰스(오리 박사) 오프닝·엔딩과 밝은 톤 음성:** 사용자가 만든 찰스 그림 4장(`idea`, `wave`, `hug`, `like`)의 배경을 지워 투명 PNG로 만들고(`charles_cutout.py`, 같은 명령으로 다시 만들면 파일이 똑같이 나옴), 「문어의 심장은 세 개」를 다시 만들었습니다. **43.0초**·1920×1080·30fps·h264+오디오, −14.4 LUFS, 피크 −2.9 dBFS, 자막 단위 17개 모두 소리 있음, `check` 오류 0·경고 0, `verify_video.py` 전부 합격. 렌더한 MP4에서 프레임을 뽑아 오프닝(전구 찰스 → 손 흔드는 찰스 "찰스입니다!")과 엔딩(전구 → 가슴에 손 → 엄지 척 윙크 + 좋아요·구독 버튼 → 손 흔들기 "찰스였습니다!")을 눈으로 확인했고, 그 과정에서 포즈가 바뀐 뒤에도 전구 빛이 남던 오류를 찾아 고쳤습니다. 목소리는 합성 뒤 `ffmpeg`로 음높이 +2 반음·고음 강조(`bright`)를 입혔고(같은 문장 평균 음높이 306→344 Hz, 소리의 밝기 1960→2700 Hz로 측정), `rubberband`가 없는 ffmpeg용 대체 경로(`asetrate`+`atempo`)도 실행해 같은 결과(345 Hz)를 확인했습니다. zip을 풀어 `install.sh`로 설치한 사본에서 `tts_clauses.py`·`build_track.py`·`charles.py` 경로도 확인했습니다.
@@ -1136,6 +1204,7 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 - **지식영상 생성 스킬:** 윈도우에서의 실행, 음성의 발음·억양(들어 보지 못함), 음성 모델의 라이선스 파일, 웹 검색으로 찾은 출처의 원문 페이지 직접 열람(두 번째 영상에서는 이 환경에서 접속에 실패해 검색 요약으로만 확인).
 - **파트 E 도구의 실제 사용 결과.** 테마를 실제 장표에 입힌 결과, `web-design-guidelines`로 실제 코드를 검토한 결과는 시험하지 못했습니다(대화형 세션 필요). 원격 규칙 파일이 앞으로 바뀌어도 고정 주소는 지금 읽은 내용을 유지하지만, 원본 스킬이 `main` 주소를 안내하는 것은 이 패키지가 바꿀 수 없어서 **자비스가 `jarvis-web-design-guidelines`의 고정 주소 규칙을 따르는지**는 실제 세션에서 확인하지 못했습니다. 원문 링크 중 `skills.sh`의 단독 설치 명령 페이지는 이 환경에서 접속하지 않았고, `npx skills add … --skill web-design-guidelines` 명령으로 대신 확인했습니다.
 - **UI UX Pro Max의 실제 사용:** 이 스킬로 화면을 끝까지 만들어 보지는 못했습니다(대화형 세션 필요). `design` 스킬의 이미지 생성(Gemini·Atlas Cloud·MuAPI)은 키가 없어 시험하지 못했고, 윈도우도 시험하지 못했습니다. "카페 예약 서비스" 검색에 파란색·보라색 조합이 추천된 것을 확인했습니다(추천이 사용자 요청과 맞는지는 자비스가 판단해야 함).
+- **Ruflo의 실제 사용:** 실제 스웜·에이전트 작업, 나머지 46개 ruflo 플러그인, 윈도우, 오래 켜 둔 상태에서의 동작, IPFS·클라우드 같은 외부 연결 기능의 안전성은 시험하지 못했습니다. **가이드 PDF(`lazyowen.com`)는 네트워크 정책으로 읽지 못해** PDF의 설명과 다를 수 있습니다. 선택한 버전(3.63.0)은 시험한 시점(2026-10-25)의 최신이고, 중간 버전을 모두 확인한 것은 아닙니다.
 - **Agent Reach의 실제 읽기 동작.** 설치와 기본 채널 준비까지만 확인했고, 각 채널로 실제 검색·읽기를 해 보지는 않았습니다(이 환경은 외부 사이트 접속이 제한적). 선택 채널(`agent-reach add`)의 설치 과정, 로그인 창, Chrome 로그인 복사가 실제로 어떻게 동작하는지도 확인하지 못했습니다. **로그인 복사에 대한 문서 간 모순**(`sessions.md`·스킬은 확장 연결 시 복사, 문제 해결 문서는 "절대 가져오지 않음")은 직접 풀지 못했습니다. 한국어 README(`docs/README_ko.md`)는 찾지 못했습니다. 공식 문서의 `archive/refs/tags/…zip` 주소(되돌리기에 쓰임)는 이 환경에서 403이라 시험하지 못했습니다.
 - **파트 C 도구의 실제 사용 결과.** `/code-review`는 실행하면 GitHub PR에 댓글이 게시되므로 실제 PR에 돌려 보지 않았습니다. superpowers의 작업 방식 강제가 새 세션에서 어떻게 나타나는지, code-simplifier의 실제 정리 결과, frontend-design의 디자인 결과도 대화형 세션이 필요해서 시험하지 못했습니다.
 - `--with-browser`(전역 npm 설치, 자동화용 크롬 다운로드)의 실제 설치, `install.sh --global --with-upstream`(`--global --with-ppt`는 확인함).
@@ -1146,7 +1215,7 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 
 ---
 
-## 14. 공식 자료
+## 15. 공식 자료
 
 | 이름 | 주소 |
 |---|---|
@@ -1155,6 +1224,7 @@ python ~/.claude/skills/jarvis-secretary/scripts/secretary_store.py selftest    
 | GSD Core | opengsd.net · github.com/open-gsd/gsd-core |
 | Taste Skill | tasteskill.dev · github.com/Leonxlnx/taste-skill |
 | UI UX Pro Max | github.com/nextlevelbuilder/ui-ux-pro-max-skill · uupm.cc |
+| Ruflo (구 Claude Flow) | github.com/ruvnet/ruflo · npm `ruflo`, `@claude-flow/cli` · 원본 가이드: lazyowen.com/guide-pdf/ruflo.pdf (이 환경에서는 열지 못함) |
 | Anthropic 공식 스킬 (mcp-builder, document-skills) | github.com/anthropics/skills |
 | PPT Master | github.com/hugohe3/ppt-master |
 | frontend-slides | github.com/zarazhangrui/frontend-slides |

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Jarvis 스킬 29종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
+# Jarvis 스킬 30종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
 #
-#   ./install.sh                         jarvis-* 스킬 29개를 현재 폴더의 .claude/skills 에 복사
+#   ./install.sh                         jarvis-* 스킬 30개를 현재 폴더의 .claude/skills 에 복사
 #   ./install.sh --global                계정 전체(~/.claude/skills)에 복사
 #   ./install.sh --with-upstream         + 공식 스킬 원본 4개와 GSD 설치 (네트워크 필요)
 #   ./install.sh --with-browser          + agent-browser 명령줄 도구와 자동화용 크롬 설치
@@ -20,12 +20,15 @@
 #                                          Collage B-roll 의 SKILL.md(커밋·해시 고정). MaxFusion MCP 는 등록하지 않음 (claude CLI·curl 필요)
 #   ./install.sh --with-onetake          + onetake(고정 커밋 복제, 약 225MB). 비상업 용도 전용 라이선스(PolyForm Noncommercial)
 #   ./install.sh --with-uiux             + UI UX Pro Max 플러그인(v2.15.0 태그 고정, 디자인 규칙부터 정하는 도구). 스킬 7개가 함께 들어오고 파이썬 3 필요 (claude CLI 필요)
+#   ./install.sh --with-ruflo            + Ruflo(멀티 에이전트): npm 전역 설치(v3.63.0 고정, 약 1.7GB) + ruflo-core 플러그인(태그 고정) + 안전 설정 3개를
+#                                          Claude Code 설정 파일의 env 에 추가 (자동 업데이트·명령 기록·npx 대체 끔). claude CLI, Node 20+ 필요
 #   (Claude Animation Base 는 프로젝트 폴더가 필요한 스타터 킷이라 설치하지 않음: jarvis-claude-animation-base 스킬 참고)
 #   환경변수 PPT_PYTHON=<python 경로>    PPT Master 부품을 설치할 파이썬 (기본 python3, 가상환경용)
 #   환경변수 REA_VERSION=<버전>          REA npm 버전 (기본: 시험한 6.7.0)
 #   환경변수 GRAPHIFY_SPEC=<스펙>        Graphify PyPI 스펙 (기본: 시험한 graphifyy==0.9.95, y 가 두 개)
 #   환경변수 AGENT_REACH_URL=<주소>      Agent Reach 설치 주소 (기본: 시험한 v1.6.0 릴리스 파일로 고정)
 #   환경변수 HYPERFRAMES_REF=<태그>      HyperFrames 마켓 태그 (기본: 시험한 v0.8.197)
+#   환경변수 RUFLO_VERSION=<버전>        Ruflo npm 버전·마켓 태그 (기본: 시험한 3.63.0. 3.5.2 이하는 preinstall 이 npm 캐시를 지운 이력이 있어 쓰지 않음)
 #   환경변수 UIUX_REF=<태그>            UI UX Pro Max 마켓 태그 (기본: 시험한 v2.15.0)
 #   환경변수 ONETAKE_SHA=<커밋>          onetake 커밋 (기본: 시험한 013a61ac…)
 #   환경변수 COLLAGE_SHA, COLLAGE_SHA256 Collage B-roll SKILL.md 의 커밋과 SHA-256 (둘 다 시험한 값이 기본. 바꾸면 해시도 함께 바꿔야 함)
@@ -47,11 +50,13 @@ WITH_GRAPHIFY=0
 WITH_VIDEO=0
 WITH_ONETAKE=0
 WITH_UIUX=0
+WITH_RUFLO=0
 # 직접 시험한 버전으로 고정한다 (바뀔 수 있는 최신 버전을 그대로 실행하지 않기 위해).
 REA_VERSION="${REA_VERSION:-6.7.0}"
 GRAPHIFY_SPEC="${GRAPHIFY_SPEC:-graphifyy==0.9.95}"
 HYPERFRAMES_REF="${HYPERFRAMES_REF:-v0.8.197}"
 UIUX_REF="${UIUX_REF:-v2.15.0}"
+RUFLO_VERSION="${RUFLO_VERSION:-3.63.0}"
 ONETAKE_SHA="${ONETAKE_SHA:-013a61ac8d98883c73733f59c06e49e9ba444f14}"
 COLLAGE_SHA="${COLLAGE_SHA:-2e9b8a93a2834e4d670700ab9e4827a8baf3b668}"
 COLLAGE_SHA256="${COLLAGE_SHA256:-5272b49c6581b1677b9f65d3eb2aa912825c1247395074bce7ff6ee845ac0124}"
@@ -67,6 +72,7 @@ JARVIS_SKILLS=(
   jarvis-knowledge-video
   jarvis-secretary jarvis-skill-learner
   jarvis-ui-ux-pro-max
+  jarvis-ruflo
 )
 # 공식 문서의 'releases/latest/download/agent-reach.zip' 대신 같은 릴리스 파일을 버전으로 고정한다
 # (v1.6.0 이 latest 일 때 두 주소는 같은 파일임을 확인함. 바뀔 수 있는 최신 파일을 그대로 실행하지 않기 위해).
@@ -95,6 +101,7 @@ for arg in "$@"; do
     --with-video-skills) WITH_VIDEO=1 ;;
     --with-onetake) WITH_ONETAKE=1 ;;
     --with-uiux) WITH_UIUX=1 ;;
+    --with-ruflo) WITH_RUFLO=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "알 수 없는 옵션: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -556,6 +563,70 @@ if [ "$WITH_UIUX" -eq 1 ]; then
   fi
 fi
 
+# 14) Ruflo (멀티 에이전트) — 크고 부작용이 많아서 옵션으로 따로 둔다 (jarvis-ruflo 스킬 0번을 먼저 사용자에게 알린다).
+#     (a) npm 전역에 고정 버전을 설치한다: 플러그인의 훅·MCP 가 npx 로 "최신"을 받아 실행하는 경로를 막기 위해서다.
+#         3.5.2 이하의 preinstall 은 npm 캐시를 지운 이력이 있어 고정 버전만 쓴다.
+#     (b) 마켓을 태그로 고정해 ruflo-core 하나만 설치한다 (마켓의 나머지 46개 플러그인은 설치하지 않는다).
+#     (c) 설정 파일의 env 에 안전 설정 3개를 넣는다 (백업, 이미 있는 키는 그대로 둠).
+RUFLO_ENV_KEYS=(CLAUDE_FLOW_AUTO_UPDATE CLAUDE_FLOW_HOOKS_RECORD_COMMANDS RUFLO_HOOK_SKIP_NPX)
+
+ruflo_settings() { # 설정 파일에 env 키 3개를 추가한다. 이미 있는 키는 두고 알린다.
+  node - "$SETTINGS_FILE" <<'NODE_EOF'
+const fs = require('fs'), path = require('path');
+const f = process.argv[2];
+let s = {};
+if (fs.existsSync(f)) {
+  try { s = JSON.parse(fs.readFileSync(f, 'utf8')); }
+  catch (e) { console.error('설정 파일을 JSON 으로 읽을 수 없어 건드리지 않습니다: ' + f); process.exit(3); }
+}
+if (!s.env || typeof s.env !== 'object' || Array.isArray(s.env)) s.env = {};
+const want = { CLAUDE_FLOW_AUTO_UPDATE: 'false', CLAUDE_FLOW_HOOKS_RECORD_COMMANDS: 'false', RUFLO_HOOK_SKIP_NPX: '1' };
+let changed = false;
+for (const [k, v] of Object.entries(want)) {
+  if (!(k in s.env)) { s.env[k] = v; changed = true; console.log('설정 추가: ' + k + '=' + v); }
+  else console.log('이미 있음(그대로 둠): ' + k + '=' + s.env[k]);
+}
+if (changed) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(s, null, 2) + '\n'); }
+NODE_EOF
+}
+
+ruflo_settings_ok() { # 3개 키가 설정 파일 env 에 모두 있는가
+  [ -f "$SETTINGS_FILE" ] && node -e '
+    const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); const e = s.env || {};
+    process.exit(process.argv.slice(2).every(k => k in e) ? 0 : 1)' "$SETTINGS_FILE" "${RUFLO_ENV_KEYS[@]}" 2>/dev/null
+}
+
+if [ "$WITH_RUFLO" -eq 1 ]; then
+  step "14. Ruflo 설치"
+  if ! have_claude; then
+    fail "claude CLI 가 없습니다 (https://claude.com/claude-code). Ruflo 설치를 건너뜁니다."
+  elif ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+    fail "Node.js 20 이상과 npm 이 필요합니다 (https://nodejs.org). Ruflo 설치를 건너뜁니다."
+  elif ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)'; then
+    fail "Node.js 20 이상이 필요합니다 (현재: $(node --version)). Ruflo 설치를 건너뜁니다."
+  else
+    say "참고: Ruflo 는 약 1.7GB, 설치에 몇 분이 걸립니다. 훅이 도구 호출마다 실행되고 프로젝트에 .swarm/ .claude-flow/ ruvector.db 가 생깁니다 (jarvis-ruflo 스킬 0번)."
+    ruflo_have="$(ruflo --version 2>/dev/null | sed -n 's/^ruflo v\{0,1\}\([0-9][0-9.]*\).*/\1/p' | head -n 1 || true)"
+    if [ "$ruflo_have" = "$RUFLO_VERSION" ]; then
+      say "건너뜀 (이미 있음): ruflo $ruflo_have"
+    elif command -v ruflo >/dev/null 2>&1; then
+      fail "이미 ruflo 가 있지만 고정 버전($RUFLO_VERSION)이 아닙니다 (현재: ${ruflo_have:-알 수 없음}). 덮어쓰지 않았습니다. 바꾸려면 사용자 확인 후: npm install -g ruflo@$RUFLO_VERSION"
+    elif npm install -g "ruflo@$RUFLO_VERSION"; then
+      say "설치 완료: ruflo@$RUFLO_VERSION (npm 전역)"
+    else
+      fail "npm install -g ruflo@$RUFLO_VERSION 실패 (권한 오류면 jarvis-ruflo 스킬의 '막힐 때' 참고)"
+    fi
+    install_plugin "ruvnet/ruflo#v$RUFLO_VERSION" ruflo-core@ruflo
+    if [ -f "$SETTINGS_FILE" ]; then
+      RUFLO_BACKUP="$SETTINGS_FILE.bak-$(date +%Y%m%d%H%M%S)"
+      cp "$SETTINGS_FILE" "$RUFLO_BACKUP" && say "설정 백업: $RUFLO_BACKUP"
+    fi
+    if ruflo_settings; then say "안전 설정 확인: $SETTINGS_FILE"; else fail "Ruflo 안전 설정을 쓰지 못했습니다 ($SETTINGS_FILE). 직접 env 에 ${RUFLO_ENV_KEYS[*]} 를 추가하세요 (jarvis-ruflo 스킬 1번)."; fi
+    say "참고: Ruflo 의 계정 로그인, 클라우드 라우팅, 학습 데이터 공유, 사용 통계 동의는 하지 않았습니다. init·doctor --fix·daemon 도 실행하지 않았습니다."
+    say "Ruflo 를 쓰려면 Claude Code를 완전히 종료했다가 다시 켜세요."
+  fi
+fi
+
 # 검증
 step "검증"
 for s in "${JARVIS_SKILLS[@]}"; do
@@ -663,6 +734,17 @@ if [ "$WITH_UIUX" -eq 1 ]; then
   else
     fail "claude CLI 가 없어 ui-ux-pro-max 플러그인을 확인할 수 없음"
   fi
+fi
+
+if [ "$WITH_RUFLO" -eq 1 ]; then
+  ruflo_now="$(ruflo --version 2>/dev/null | sed -n 's/^ruflo v\{0,1\}\([0-9][0-9.]*\).*/\1/p' | head -n 1 || true)"
+  if [ "$ruflo_now" = "$RUFLO_VERSION" ]; then say "OK   ruflo $ruflo_now"; else fail "ruflo 가 고정 버전($RUFLO_VERSION)이 아님 (현재: ${ruflo_now:-없음})"; fi
+  if have_claude; then
+    verify_plugins ruflo-core@ruflo
+  else
+    fail "claude CLI 가 없어 ruflo-core 플러그인을 확인할 수 없음"
+  fi
+  if ruflo_settings_ok; then say "OK   Ruflo 안전 설정 3개가 $SETTINGS_FILE 의 env 에 있음"; else fail "Ruflo 안전 설정(${RUFLO_ENV_KEYS[*]})이 $SETTINGS_FILE 의 env 에 모두 있지 않음"; fi
 fi
 
 if [ "$WITH_AGENT_REACH" -eq 1 ]; then
