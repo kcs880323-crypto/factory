@@ -117,12 +117,13 @@ def _scene(host, start, css, body, js):
       if (from) tl.to("#" + pid + "-p-" + from, {{ opacity: 0, duration: 0.14, ease: "none", immediateRender: false }}, g(t));
       tl.fromTo("#" + pid + "-p-" + to, {{ opacity: 0, scale: 0.93 }}, {{ opacity: 1, scale: 1, duration: 0.22, ease: "back.out(2)", immediateRender: false }}, g(t));
     }}
-    // 전구 빛: 켜지고 몇 번 깜빡인다
-    function glow(pid, t) {{
+    // 전구 빛: 켜지고 tOff 전까지 깜빡이다가 tOff 에 꺼진다 (깜빡임이 tOff 보다 먼저 끝나야 끄는 동작이 덮이지 않는다)
+    function glow(pid, t, tOff) {{
       tl.fromTo("#" + pid + "-glow", {{ opacity: 0, scale: 0.4 }}, {{ opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)", immediateRender: false }}, g(t));
-      tl.to("#" + pid + "-glow", {{ opacity: 0.55, duration: 0.2, yoyo: true, repeat: 5, ease: "sine.inOut", immediateRender: false }}, g(t + 0.4));
+      const n = Math.min(6, Math.floor((tOff - t - 0.45) / 0.2));
+      if (n >= 2) tl.to("#" + pid + "-glow", {{ opacity: 0.55, duration: 0.2, yoyo: true, repeat: n - 1, ease: "sine.inOut", immediateRender: false }}, g(t + 0.4));
+      tl.to("#" + pid + "-glow", {{ opacity: 0, duration: 0.15, ease: "none", immediateRender: false }}, g(tOff));
     }}
-    function glowOff(pid, t) {{ tl.to("#" + pid + "-glow", {{ opacity: 0, duration: 0.15, ease: "none", immediateRender: false }}, g(t)); }}
 {js}
     window.__timelines["{host}"] = tl;
   </script>
@@ -172,8 +173,7 @@ def write_scenes(proj, T, wav, total, off):
     // 30초 / 지식 하나(전구) / 찰스입니다(손 흔들기)
     tl.fromTo("#op-30", {{ opacity: 0, scale: 0.6, transformOrigin: "0% 50%" }}, {{ opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)" }}, g({s1 + 0.05:.2f}));
     tl.fromTo("#op-know", {{ opacity: 0, y: 30, filter: "blur(10px)" }}, {{ opacity: 1, y: 0, filter: "blur(0px)", duration: 0.35, ease: "power3.out" }}, g({s1 + 0.43 * d1:.2f}));
-    glow("op", {s1 + 0.43 * d1:.2f});
-    glowOff("op", {op2['start'] - 0.1:.2f});
+    glow("op", {s1 + 0.43 * d1:.2f}, {op2['start'] - 0.1:.2f});
     pose("op", "idea", "wave", {op2['start'] - 0.1:.2f});
     tl.fromTo("#op-plate", {{ opacity: 0, scale: 0.7, transformOrigin: "0% 50%" }}, {{ opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.7)" }}, g({op2['start'] + 0.05:.2f}));
     tl.fromTo("#op-ch", {{ y: 0 }}, {{ y: -26, duration: 0.2, yoyo: true, repeat: 1, ease: "power2.out", immediateRender: false }}, g({op2['start'] + 0.05:.2f}));
@@ -226,11 +226,10 @@ def write_scenes(proj, T, wav, total, off):
     // 알아두면 / 언젠가 쓴다 + 전구
     tl.fromTo("#en-a", {{ opacity: 0, y: 30, filter: "blur(10px)" }}, {{ opacity: 1, y: 0, filter: "blur(0px)", duration: 0.35, ease: "power3.out" }}, g({e1['start'] + 0.05:.2f}));
     tl.fromTo("#en-b", {{ opacity: 0, scale: 0.7, transformOrigin: "0% 50%" }}, {{ opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)" }}, g({e1['start'] + 0.5 * de1:.2f}));
-    glow("en", {e1['start'] + 0.5 * de1:.2f});
+    glow("en", {e1['start'] + 0.5 * de1:.2f}, {e2a['start'] - 0.1:.2f});
     // 좋아요와 구독: 점선 자리가 먼저 나오고 말할 때 채워진다
     tl.to(["#en-a", "#en-b"], {{ opacity: 0.0, filter: "blur(8px)", duration: 0.3, ease: "power2.in", immediateRender: false }}, g({e1['end'] + 0.1:.2f}));
     tl.fromTo(["#en-ghostl", "#en-ghosts"], {{ opacity: 0 }}, {{ opacity: 1, duration: 0.35, ease: "power2.out" }}, g({e1['end'] + 0.2:.2f}));
-    glowOff("en", {e2a['start'] - 0.1:.2f});
     pose("en", "idea", "hug", {e2a['start'] - 0.1:.2f});
     pose("en", "hug", "like", {e2b['start'] - 0.1:.2f});
     tl.fromTo("#en-like", {{ opacity: 0, scale: 0.4 }}, {{ opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2.2)" }}, g({e2b['start'] + 0.05:.2f}));

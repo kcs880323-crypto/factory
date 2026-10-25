@@ -353,7 +353,7 @@ cap_body = "\n".join(
     for i, r in enumerate(timing))
 cap_js = "\n".join(
     f'    tl.fromTo("#capp-{r["id"]}", {{ opacity: 0, y: 10 }}, {{ opacity: 1, y: 0, duration: 0.12, ease: "power3.out" }}, {cs(r):.2f});\n'
-    f'    tl.to("#capp-{r["id"]}", {{ opacity: 0, duration: 0.1, ease: "power2.in" }}, {r["end"]:.2f});\n'
+    f'    tl.to("#capp-{r["id"]}", {{ opacity: 0, duration: 0.07, ease: "power2.in" }}, {r["end"]:.2f});\n'
     f'    tl.set("#capp-{r["id"]}", {{ opacity: 0 }}, {r["end"] + 0.1:.2f});'
     for r in timing)
 (proj / "compositions" / "captions.html").write_text(f"""<template>

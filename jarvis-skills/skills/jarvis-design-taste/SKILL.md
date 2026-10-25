@@ -33,6 +33,21 @@ npx --yes skills@latest add https://github.com/Leonxlnx/taste-skill --skill desi
 - **`--skill design-taste-frontend`를 꼭 붙인다.** 옵션 없이 저장소를 통째로 설치하면 비슷한 스킬이 여러 개 한꺼번에 들어올 수 있다. 이미 설치돼 있으면 같은 명령을 다시 실행해도 된다(설치 이름은 바뀌지 않는다).
 - 이 저장소의 다른 스킬(`high-end-visual-design`, `minimalist-ui` 등)은 `Leonxlnx/taste-skill-classics`로 옮겨졌다. 필요하면 그 저장소에서 같은 이름으로 설치한다.
 
+### 플러그인으로 설치하는 방법 (공식 안내의 두 번째 방법)
+
+같은 스킬을 Claude Code 플러그인으로도 받을 수 있다. 격리된 HOME에서 실제로 설치해 v2.1.5가 들어오고 스킬 이름이 `design-taste-frontend`인 것을 확인했다.
+
+```bash
+claude plugin marketplace add "Leonxlnx/taste-skill#v2.1.5" --scope user
+claude plugin install taste-skill@taste-skill --scope user
+```
+
+**위의 `npx skills` 설치와 둘 중 하나만 쓴다** (둘 다 하면 같은 지침이 중복된다). 이미 `design-taste-frontend`가 있으면 이 방법을 쓰지 않는다. 업데이트는 `claude plugin update taste-skill@taste-skill`.
+
+### 다른 디자인 스킬과 같이 쓰지 않는다
+
+디자인 방향을 정하는 스킬(Frontend Design = `jarvis-frontend-design`, UI UX Pro Max = `jarvis-ui-ux-pro-max`, 이 Taste)은 **한 작업에 하나만** 쓴다. 랜딩 페이지 한 장을 통째로(사진, 브라우저 점검 포함) 만들 때가 Taste, 디자인 규칙(색·글꼴·섹션 순서)부터 정할 때는 UI UX Pro Max, 작은 화면은 Frontend Design이다.
+
 ## 3. 쓰는 방법
 
 만들 화면 설명과 함께 **하지 말아야 할 것**을 명시하면 결과가 달라진다.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Jarvis 스킬 28종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
+# Jarvis 스킬 29종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
 #
-#   ./install.sh                         jarvis-* 스킬 28개를 현재 폴더의 .claude/skills 에 복사
+#   ./install.sh                         jarvis-* 스킬 29개를 현재 폴더의 .claude/skills 에 복사
 #   ./install.sh --global                계정 전체(~/.claude/skills)에 복사
 #   ./install.sh --with-upstream         + 공식 스킬 원본 4개와 GSD 설치 (네트워크 필요)
 #   ./install.sh --with-browser          + agent-browser 명령줄 도구와 자동화용 크롬 설치
@@ -19,12 +19,14 @@
 #   ./install.sh --with-video-skills     + 영상 제작 도구: HyperFrames 플러그인(v0.8.197 고정), Lemo-Opuscar 플러그인,
 #                                          Collage B-roll 의 SKILL.md(커밋·해시 고정). MaxFusion MCP 는 등록하지 않음 (claude CLI·curl 필요)
 #   ./install.sh --with-onetake          + onetake(고정 커밋 복제, 약 225MB). 비상업 용도 전용 라이선스(PolyForm Noncommercial)
+#   ./install.sh --with-uiux             + UI UX Pro Max 플러그인(v2.15.0 태그 고정, 디자인 규칙부터 정하는 도구). 스킬 7개가 함께 들어오고 파이썬 3 필요 (claude CLI 필요)
 #   (Claude Animation Base 는 프로젝트 폴더가 필요한 스타터 킷이라 설치하지 않음: jarvis-claude-animation-base 스킬 참고)
 #   환경변수 PPT_PYTHON=<python 경로>    PPT Master 부품을 설치할 파이썬 (기본 python3, 가상환경용)
 #   환경변수 REA_VERSION=<버전>          REA npm 버전 (기본: 시험한 6.7.0)
 #   환경변수 GRAPHIFY_SPEC=<스펙>        Graphify PyPI 스펙 (기본: 시험한 graphifyy==0.9.95, y 가 두 개)
 #   환경변수 AGENT_REACH_URL=<주소>      Agent Reach 설치 주소 (기본: 시험한 v1.6.0 릴리스 파일로 고정)
 #   환경변수 HYPERFRAMES_REF=<태그>      HyperFrames 마켓 태그 (기본: 시험한 v0.8.197)
+#   환경변수 UIUX_REF=<태그>            UI UX Pro Max 마켓 태그 (기본: 시험한 v2.15.0)
 #   환경변수 ONETAKE_SHA=<커밋>          onetake 커밋 (기본: 시험한 013a61ac…)
 #   환경변수 COLLAGE_SHA, COLLAGE_SHA256 Collage B-roll SKILL.md 의 커밋과 SHA-256 (둘 다 시험한 값이 기본. 바꾸면 해시도 함께 바꿔야 함)
 #
@@ -44,10 +46,12 @@ WITH_REA=0
 WITH_GRAPHIFY=0
 WITH_VIDEO=0
 WITH_ONETAKE=0
+WITH_UIUX=0
 # 직접 시험한 버전으로 고정한다 (바뀔 수 있는 최신 버전을 그대로 실행하지 않기 위해).
 REA_VERSION="${REA_VERSION:-6.7.0}"
 GRAPHIFY_SPEC="${GRAPHIFY_SPEC:-graphifyy==0.9.95}"
 HYPERFRAMES_REF="${HYPERFRAMES_REF:-v0.8.197}"
+UIUX_REF="${UIUX_REF:-v2.15.0}"
 ONETAKE_SHA="${ONETAKE_SHA:-013a61ac8d98883c73733f59c06e49e9ba444f14}"
 COLLAGE_SHA="${COLLAGE_SHA:-2e9b8a93a2834e4d670700ab9e4827a8baf3b668}"
 COLLAGE_SHA256="${COLLAGE_SHA256:-5272b49c6581b1677b9f65d3eb2aa912825c1247395074bce7ff6ee845ac0124}"
@@ -62,6 +66,7 @@ JARVIS_SKILLS=(
   jarvis-hyperframes jarvis-onetake jarvis-collage-broll jarvis-claude-animation-base jarvis-lemo-opuscar
   jarvis-knowledge-video
   jarvis-secretary jarvis-skill-learner
+  jarvis-ui-ux-pro-max
 )
 # 공식 문서의 'releases/latest/download/agent-reach.zip' 대신 같은 릴리스 파일을 버전으로 고정한다
 # (v1.6.0 이 latest 일 때 두 주소는 같은 파일임을 확인함. 바뀔 수 있는 최신 파일을 그대로 실행하지 않기 위해).
@@ -89,6 +94,7 @@ for arg in "$@"; do
     --with-graphify) WITH_GRAPHIFY=1 ;;
     --with-video-skills) WITH_VIDEO=1 ;;
     --with-onetake) WITH_ONETAKE=1 ;;
+    --with-uiux) WITH_UIUX=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "알 수 없는 옵션: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -532,6 +538,24 @@ if [ "$WITH_ONETAKE" -eq 1 ]; then
   say "참고: 파이썬 패키지(playwright, numpy, scipy 등)는 설치하지 않았습니다. 가상환경에 설치하세요 (jarvis-onetake 스킬 참고)."
 fi
 
+# 13) UI UX Pro Max — 플러그인 하나가 스킬 7개를 들여온다 (ui-ux-pro-max, design, design-system, ui-styling, brand, banner-design, slides).
+#     시험한 v2.15.0 태그로 고정한다. 그 중 design 스킬은 사용자가 이미지 API 키를 설정했을 때만 외부 서비스를 부르므로 키는 건드리지 않는다.
+if [ "$WITH_UIUX" -eq 1 ]; then
+  step "13. UI UX Pro Max 설치"
+  if ! have_claude; then
+    fail "claude CLI 가 없습니다 (https://claude.com/claude-code). UI UX Pro Max 플러그인 설치를 건너뜁니다."
+  else
+    install_plugin "nextlevelbuilder/ui-ux-pro-max-skill#$UIUX_REF" ui-ux-pro-max@ui-ux-pro-max-skill
+    if command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || command -v py >/dev/null 2>&1; then
+      say "OK   파이썬 3 있음 (검색 스크립트용)"
+    else
+      say "참고: 파이썬 3 가 없습니다. UI UX Pro Max 의 검색 스크립트에 필요하니 설치하세요 (자동으로 설치하지 않습니다)."
+    fi
+    say "참고: 이 플러그인의 design 스킬은 Gemini·Atlas Cloud·MuAPI 키가 환경변수에 있을 때만 이미지 생성으로 외부에 요청을 보냅니다. 키는 설정하지 않았습니다 (jarvis-ui-ux-pro-max 스킬 참고)."
+    say "UI UX Pro Max 를 쓰려면 Claude Code를 완전히 종료했다가 다시 켜세요."
+  fi
+fi
+
 # 검증
 step "검증"
 for s in "${JARVIS_SKILLS[@]}"; do
@@ -630,6 +654,14 @@ if [ "$WITH_ONETAKE" -eq 1 ]; then
     [ "$onetake_head" = "$ONETAKE_SHA" ] || say "참고: onetake 가 시험한 커밋(${ONETAKE_SHA:0:8})이 아닙니다 (현재: ${onetake_head:0:8})."
   else
     fail "onetake 의 SKILL.md 가 없음 ($TARGET/onetake)"
+  fi
+fi
+
+if [ "$WITH_UIUX" -eq 1 ]; then
+  if have_claude; then
+    verify_plugins ui-ux-pro-max@ui-ux-pro-max-skill
+  else
+    fail "claude CLI 가 없어 ui-ux-pro-max 플러그인을 확인할 수 없음"
   fi
 fi
 

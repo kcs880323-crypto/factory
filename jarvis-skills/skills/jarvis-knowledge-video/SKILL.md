@@ -75,10 +75,11 @@ S=<이 스킬 폴더>/scripts            # 설치된 jarvis-knowledge-video/scri
 python "$S/setup_tts.py"            # 처음 한 번 (이미 있으면 아무것도 받지 않음). 마지막 줄 PY=…, MODEL=… 를 읽는다
 PY=<위의 PY>; MODEL=<위의 MODEL>
 "$PY" -I "$S/make_clauses.py" clauses.json clauses-full.json            # 본편 앞뒤에 찰스의 오프닝·엔딩 절을 붙인다
-"$PY" -I "$S/tts_clauses.py" "$MODEL" clauses-full.json clauses 1.25    # 절마다 wav
+"$PY" -I "$S/tts_clauses.py" "$MODEL" clauses-full.json clauses 1.25 bright   # 절마다 wav (속도 1.25, 톤 bright)
 "$PY" -I "$S/build_track.py" clauses-full.json clauses audio           # audio/ 에 narration.wav, timing.json(자막), clauses_timing.json(절별), parts.json(오프닝·본편·엔딩), duration.txt
 ```
 
+- **목소리 톤 (밝고 명랑하게):** 음성 모델은 목소리가 하나(여성)뿐이라 합성 뒤에 `ffmpeg`로 높낮이와 음색을 바꾼다. 기본 **`bright`**: 음높이 +2 반음, 3kHz 근처와 고음을 살짝 키우고 가볍게 눌러 고르게 함. 더 높이면 **`cheer`**(+3.5 반음), 원래 소리는 **`natural`**. 길이는 그대로라 대본·장면 시각이 안 바뀐다. 측정 결과(같은 문장): 평균 음높이 306→344 Hz(bright)·378 Hz(cheer), 소리의 밝기(스펙트럼 중심) 약 1960→2700 Hz. **이 수치는 높이와 밝기의 증거일 뿐 "명랑하게 들리는지"는 사용자가 들어 보고 정한다.** 사용자가 "더 밝게/덜 밝게" 하면 톤을 바꿔 음성부터 다시 만든다. 이 모델은 느낌표(!)를 읽지 못하고 건너뛰어서 문장 끝 억양은 바꿀 수 없다.
 - `build_track.py`가 영상 길이(35~45초)를 정해 `duration.txt`에 쓴다. 마지막 장면을 2초 이상 보여 주려고 낭독이 끝난 뒤 2초를 더한다. **낭독이 43초를 넘어 실패하면** 본편 대본을 줄이거나 속도를 올린다 (속도는 선형이 아니다: 1.0→1.25는 약 11% 짧아졌다). 속도 1.4 이상은 알아듣기 어려울 수 있다.
 - 나레이션은 **`loudnorm`으로 −16 LUFS**에 맞춰진다. 영상에 넣을 때는 `data-volume="0.85"`.
 
