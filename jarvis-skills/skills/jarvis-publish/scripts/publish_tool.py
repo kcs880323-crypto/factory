@@ -5,6 +5,7 @@
   python publish_tool.py init --youtube-account … --zernio-profile … --instagram-account … --instagram-username …
   python publish_tool.py google-import --file client_secret.json [--delete-source]
   python publish_tool.py youtube-auth                 브라우저로 구글 로그인 (계정이 설정과 같은지 확인)
+  python publish_tool.py youtube-auth --manual-start / --manual-finish "<주소>"   브라우저를 열 수 없는 곳(클라우드 세션)용
   python publish_tool.py zernio-key [--from-clipboard | --stdin]
   python publish_tool.py zernio-accounts [--save]     Zernio 에 연결된 계정 목록
   python publish_tool.py vertical <영상.mp4>           인스타 릴스용 9:16 영상 (흐린 배경 위에 원본)
@@ -197,6 +198,60 @@ class _CB(http.server.BaseHTTPRequestHandler):
         pass
 
 
+MANUAL_PORT = 8765          # 수동 로그인: 이 주소는 열리지 않는 것이 정상이다. 브라우저 주소창의 전체 주소를 복사해 쓴다.
+
+
+def _auth_url(cl, want, redirect, challenge, state):
+    return GOOGLE_AUTH + "?" + urllib.parse.urlencode({
+        "client_id": cl["client_id"], "redirect_uri": redirect, "response_type": "code", "scope": SCOPES,
+        "code_challenge": challenge, "code_challenge_method": "S256", "state": state, "access_type": "offline",
+        "prompt": "consent", "login_hint": want})
+
+
+def cmd_manual_start(cl, want):
+    """브라우저를 직접 열 수 없는 곳(클라우드 세션 등)용: 로그인 주소만 만들고, 사용자가 다른 기기에서 로그인한 뒤 주소창의 주소를 붙여 넣는다."""
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    state = secrets.token_urlsafe(16)
+    redirect = f"http://127.0.0.1:{MANUAL_PORT}"
+    write_private(HOME / "pending_auth.json", json.dumps({"verifier": verifier, "state": state, "redirect": redirect, "email": want, "t": time.time()}))
+    say(f"아래 주소를 내 브라우저에서 열고 {want} 계정으로 로그인해 허용하세요 (유튜브에 영상 올리기 권한 하나만 요청합니다).")
+    say("주소:", _auth_url(cl, want, redirect, challenge, state))
+    say(f"허용하면 'localhost 에 연결할 수 없음' 같은 오류 화면이 뜨는 것이 정상입니다. 그 화면의 **주소창 전체 주소**({redirect}/?state=…&code=…)를 복사해 알려 주세요.")
+    say("주소에 들어 있는 코드는 한 번만 쓸 수 있고, 이 컴퓨터에만 있는 값 없이는 쓸 수 없습니다. 15분 안에 알려 주세요.")
+    return 0
+
+
+def cmd_manual_finish(cl, want, text):
+    pend = read_json(HOME / "pending_auth.json")
+    if not pend:
+        say("진행 중인 수동 로그인이 없습니다. 먼저 youtube-auth --manual-start 를 하세요.")
+        return 20
+    if time.time() - pend.get("t", 0) > 900:
+        (HOME / "pending_auth.json").unlink(missing_ok=True)
+        say("15분이 지나 만료됐습니다. youtube-auth --manual-start 부터 다시 하세요.")
+        return 20
+    text = text.strip().strip('"').strip("'")
+    if text.lower().startswith("http"):
+        q = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(text).query).items()}
+        if "error" in q:
+            say("로그인이 취소되었거나 거부되었습니다:", q["error"])
+            return 1
+        if q.get("state") != pend["state"]:
+            say("state 가 맞지 않아 중단했습니다 (이 로그인 주소로 연 것이 아닌 주소일 수 있습니다).")
+            return 1
+        code = q.get("code", "")
+    else:
+        code = text                                              # 코드만 붙여 넣은 경우 (PKCE 가 묶어 주므로 이 컴퓨터가 아니면 쓸 수 없다)
+    if not code:
+        say("주소에서 code 를 찾지 못했습니다. 주소창의 전체 주소를 복사했는지 확인하세요.")
+        return 20
+    rc = _finish_auth(cl, code, pend["verifier"], pend["redirect"], pend["email"].lower())
+    if rc == 0:
+        (HOME / "pending_auth.json").unlink(missing_ok=True)
+    return rc
+
+
 def cmd_youtube_auth(a):
     cl = google_client()
     cfg = load_config()
@@ -207,16 +262,17 @@ def cmd_youtube_auth(a):
     if not want:
         say("먼저 init --youtube-account <이메일> 로 올릴 계정을 정해 두세요.")
         return 20
+    if a.manual_start:
+        return cmd_manual_start(cl, want)
+    if a.manual_finish:
+        return cmd_manual_finish(cl, want, a.manual_finish)
     srv = http.server.HTTPServer(("127.0.0.1", 0), _CB)
     port = srv.server_address[1]
     redirect = f"http://127.0.0.1:{port}"
     verifier = secrets.token_urlsafe(64)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
     state = secrets.token_urlsafe(16)
-    url = GOOGLE_AUTH + "?" + urllib.parse.urlencode({
-        "client_id": cl["client_id"], "redirect_uri": redirect, "response_type": "code", "scope": SCOPES,
-        "code_challenge": challenge, "code_challenge_method": "S256", "state": state, "access_type": "offline",
-        "prompt": "consent", "login_hint": want})
+    url = _auth_url(cl, want, redirect, challenge, state)
     say(f"브라우저에서 {want} 계정으로 로그인하고 허용하세요 (유튜브에 영상 올리기 권한 하나만 요청합니다).")
     say("주소:", url)
     if not a.no_browser:
@@ -973,6 +1029,50 @@ def selftest():
               and q["access_type"] == ["offline"])
         state["challenge"] = ""
 
+        # --- 수동 로그인 (브라우저를 열 수 없는 곳: 주소를 받아 로그인한 뒤 주소창의 주소를 붙여 넣는다)
+        (HOME / "youtube_token.json").unlink(missing_ok=True)
+
+        def manual_start():
+            rc, out = run("youtube-auth", "--manual-start")
+            m = re.search(r"주소: (\S+)", out)
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(m.group(1)).query) if m else {}
+            if q:
+                state["challenge"] = q["code_challenge"][0]
+            return rc, out, q
+        rc, out, q = manual_start()
+        check("수동 시작: 주소 출력, 예고 문구", rc == 0 and q.get("redirect_uri") == ["http://127.0.0.1:8765"] and q.get("code_challenge_method") == ["S256"]
+              and q.get("scope") == [SCOPES] and "주소창 전체 주소" in out)
+        if os.name != "nt":
+            check("대기 파일 권한 600", ((HOME / "pending_auth.json").stat().st_mode & 0o777) == 0o600)
+        rc, out = run("youtube-auth", "--manual-finish", f"http://127.0.0.1:8765/?state=WRONG&code=GOODCODE")
+        check("수동 마침: state 가 다르면 거부(1)", rc == 1 and "state" in out and not (HOME / "youtube_token.json").exists())
+        rc, out = run("youtube-auth", "--manual-finish", "http://127.0.0.1:8765/?error=access_denied&state=" + q["state"][0])
+        check("수동 마침: 로그인 거부 주소는 실패(1)", rc == 1 and not (HOME / "youtube_token.json").exists())
+        state["email"] = "someone.else@example.com"
+        rc, out = run("youtube-auth", "--manual-finish", f"http://127.0.0.1:8765/?state={q['state'][0]}&code=GOODCODE&scope=x")
+        check("수동 마침: 다른 계정이면 거부(20), 토큰 저장 안 함", rc == 20 and not (HOME / "youtube_token.json").exists())
+        state["email"] = "me@example.com"
+        rc, out, q = manual_start()
+        rc, out = run("youtube-auth", "--manual-finish", f"http://127.0.0.1:8765/?state={q['state'][0]}&code=GOODCODE&scope=x")
+        check("수동 마침 성공: 토큰 저장, 대기 파일 삭제, 비밀 비출력", rc == 0 and (HOME / "youtube_token.json").exists() and not (HOME / "pending_auth.json").exists() and "REFRESH" not in out)
+        (HOME / "youtube_token.json").unlink()
+        rc, out, q = manual_start()
+        rc, out = run("youtube-auth", "--manual-finish", "GOODCODE")
+        check("수동 마침: 코드만 붙여 넣어도 됨", rc == 0 and (HOME / "youtube_token.json").exists())
+        (HOME / "youtube_token.json").unlink()
+        rc, out = run("youtube-auth", "--manual-finish", "GOODCODE")
+        check("수동 마침: 시작하지 않았으면 거부(20)", rc == 20 and "먼저" in out)
+        rc, out, q = manual_start()
+        pj = read_json(HOME / "pending_auth.json")
+        pj["t"] -= 1000
+        (HOME / "pending_auth.json").write_text(json.dumps(pj), encoding="utf-8")
+        rc, out = run("youtube-auth", "--manual-finish", f"http://127.0.0.1:8765/?state={q['state'][0]}&code=GOODCODE")
+        check("수동 마침: 15분이 지나면 만료(20)", rc == 20 and "만료" in out and not (HOME / "youtube_token.json").exists())
+        state["challenge"] = ""
+        rc, out, q = manual_start()                      # 뒤 시험을 위해 토큰을 다시 만든다
+        rc, out = run("youtube-auth", "--manual-finish", f"http://127.0.0.1:8765/?state={q['state'][0]}&code=GOODCODE")
+        state["challenge"] = ""
+
         # --- Zernio 키
         rc, out = run("zernio-key", "--stdin", stdin="not-a-key\n")
         check("키 모양이 다르면 저장 안 함", rc == 20 and not (tmp / "home" / "zernio_key").exists())
@@ -1070,6 +1170,8 @@ def main():
     p.add_argument("--file", required=True)
     p.add_argument("--delete-source", action="store_true")
     p = sub.add_parser("youtube-auth")
+    p.add_argument("--manual-start", action="store_true", help="브라우저를 열 수 없는 곳: 로그인 주소만 만든다")
+    p.add_argument("--manual-finish", metavar="주소 또는 코드", help="로그인 뒤 주소창의 전체 주소(또는 code)를 붙여 넣는다")
     p.add_argument("--no-browser", action="store_true")
     p.add_argument("--timeout", type=int, default=300)
     p = sub.add_parser("zernio-key")
