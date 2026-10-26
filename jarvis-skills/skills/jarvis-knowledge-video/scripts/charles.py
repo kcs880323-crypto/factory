@@ -75,8 +75,9 @@ def mouth_track(wav, t0, t1, fps=30):
 
 
 # ---------------------------------------------------------------- 장면 생성
-THUMB = """<svg width="150" height="150" viewBox="0 0 100 100" style="position:absolute;left:-75px;top:-75px"><circle cx="50" cy="50" r="48" fill="{c}"/>
-      <path d="M 24 48 H 14 V 82 H 24 Z" fill="#fff"/><path d="M 30 82 H 64 C 72 82 77 78 79 72 L 84 56 C 86 50 82 46 76 46 H 58 L 62 32 C 63 26 59 22 54 22 L 45 42 L 30 50 Z" fill="#fff"/></svg>"""
+THUMB_ICON = """<svg width="88" height="88" viewBox="0 0 100 100" style="position:absolute;left:0;top:0;overflow:visible"><circle cx="50" cy="50" r="50" fill="{c}"/>
+      <g transform="translate(10 10) scale(0.8)"><path d="M 24 48 H 14 V 82 H 24 Z" fill="#fff"/><path d="M 30 82 H 64 C 72 82 77 78 79 72 L 84 56 C 86 50 82 46 76 46 H 58 L 62 32 C 63 26 59 22 54 22 L 45 42 L 30 50 Z" fill="#fff"/></g></svg>"""
+CHECK = """<svg width="50" height="50" viewBox="0 0 24 24" style="flex:none"><path d="M5 12.5 L10 17.5 L19 7" fill="none" stroke="{c}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>"""
 BELL = """<svg width="70" height="70" viewBox="0 0 100 100" style="position:absolute;left:0;top:0;overflow:visible"><g id="{p}-bell" style="transform-origin:50px 14px">
       <path d="M 50 8 C 34 8 26 22 26 38 V 52 L 16 64 V 70 H 84 V 64 L 74 52 V 38 C 74 22 66 8 50 8 Z" fill="#fff"/><path d="M 42 76 H 58 C 58 84 54 88 50 88 C 46 88 42 84 42 76 Z" fill="#fff"/></g></svg>"""
 
@@ -182,7 +183,7 @@ def write_scenes(proj, T, wav, total, off):
 """
     (proj / "compositions" / "opening.html").write_text(_scene("opening", 0, css, body, js), encoding="utf-8")
 
-    # ---------------- 엔딩: 전구 켠 찰스("알아두면 언젠가 쓴다!") → 가슴에 손(유익했다면) → 엄지 척 윙크(좋아요와 구독) → 손 흔들기(찰스였습니다!)
+    # ---------------- 엔딩: 전구 켠 찰스("알아두면 언젠가 쓴다!") → 가슴에 손(유익했다면) → 엄지 척 윙크(좋아요와 구독: 점선 자리 표시 없이 알약 버튼이 올라오고, 구독은 "구독중"으로 바뀜) → 손 흔들기(찰스였습니다!)
     e1, e2a, e2b, e2c, e3 = T["en1"], T["en2a"], T["en2b"], T["en2c"], T["en3"]
     es = e1["start"] - 0.45
     de1 = e1["end"] - e1["start"]
@@ -194,16 +195,20 @@ def write_scenes(proj, T, wav, total, off):
     #en-b {{ left: 1000px; top: 280px; font-size: 150px; line-height: 1.05; color: {NAVY}; }}
     #en-name {{ left: 1000px; top: 170px; font-size: 230px; line-height: 1; color: {NAVY}; }}
     #en-name2 {{ left: 1010px; top: 430px; font-size: 80px; color: {NAVY}; }}
-    .ico {{ position: absolute; width: 0; height: 0; opacity: 0; }}
-    #en-like {{ left: 1090px; top: 640px; }}
-    #en-sub {{ position: absolute; left: 1300px; top: 570px; width: 440px; height: 140px; border-radius: 70px; background: {CORAL}; display: flex; align-items: center; justify-content: center; gap: 22px; opacity: 0; font-weight: 800; font-size: 64px; color: #fff; }}
-    #en-subicon {{ position: relative; width: 70px; height: 70px; }}
-    #en-ghostl, #en-ghosts {{ position: absolute; opacity: 0; border: 6px dashed rgba(19,48,91,0.4); }}
-    #en-ghostl {{ left: 1015px; top: 565px; width: 150px; height: 150px; border-radius: 75px; }}
-    #en-ghosts {{ left: 1300px; top: 570px; width: 440px; height: 140px; border-radius: 70px; }}
-    #en-hearts {{ position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }}
+    .pill {{ position: absolute; top: 580px; height: 124px; border-radius: 62px; display: flex; align-items: center; font-weight: 800; font-size: 56px; letter-spacing: -0.02em; white-space: nowrap; opacity: 0; box-shadow: 0 16px 34px rgba(19,48,91,0.22); }}
+    #en-likep {{ left: 1000px; width: 340px; padding-left: 18px; gap: 24px; background: #fff; color: {NAVY}; }}
+    #en-likeico {{ position: relative; width: 88px; height: 88px; flex: none; }}
+    #en-subp, #en-subp2 {{ left: 1380px; width: 400px; justify-content: center; gap: 22px; }}
+    #en-subp {{ background: {CORAL}; color: #fff; }}
+    #en-subp2 {{ background: {NAVY}; color: {CREAM}; }}
+    .bellbox {{ position: relative; width: 64px; height: 64px; flex: none; }}
+    #en-likerip {{ position: absolute; left: 1018px; top: 598px; width: 88px; height: 88px; border-radius: 44px; border: 5px solid {CORAL}; opacity: 0; }}
+    #en-subrip {{ position: absolute; left: 1380px; top: 580px; width: 400px; height: 124px; border-radius: 62px; border: 5px solid {CORAL}; opacity: 0; }}
+    #en-spark {{ position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: visible; }}
 """
-    hearts = "".join(f'<path id="en-h{i}" d="M0,10 C-14,-2 -10,-12 -4,-12 C-1,-12 0,-9 0,-8 C0,-9 1,-12 4,-12 C10,-12 14,-2 0,10 Z" fill="{CORAL}" opacity="0" transform="translate({1090 + (i - 2) * 26} 620) scale(2)"/>' for i in range(5))
+    SPARKS = [(90, 19, 8, 'GOLD'), (86, 95, 6, 'CORAL'), (10, 91, 8, 'CORAL'), (-64, 111, 6, 'GOLD'), (-84, 37, 8, 'CORAL'), (-125, -27, 6, 'CORAL'), (-62, -68, 8, 'GOLD'), (-13, -127, 6, 'CORAL'), (46, -80, 8, 'CORAL'), (117, -52, 6, 'GOLD')]      # (x, y, 반지름, 색): 엄지 중심에서 퍼지는 작은 점들 (무작위 없이 고정 좌표)
+    GOLD = "#F4B400"
+    spark = "".join(f'<circle id="en-s{i}" cx="1062" cy="642" r="{r}" fill="{CORAL if c == "CORAL" else GOLD}" opacity="0"/>' for i, (x, y, r, c) in enumerate(SPARKS))
     body = f"""      <div class="bg" id="en-bg"></div>
       <div id="en-ch"><div id="en-talk">
         {glow_html('en', poses['idea'])}
@@ -213,10 +218,11 @@ def write_scenes(proj, T, wav, total, off):
       <div class="tx" id="en-b">언젠가 쓴다!</div>
       <div class="tx" id="en-name">찰스</div>
       <div class="tx" id="en-name2">였습니다!</div>
-      <div id="en-ghostl"></div><div id="en-ghosts"></div>
-      <div class="ico" id="en-like">{THUMB.format(c=CORAL)}</div>
-      <div id="en-sub"><span id="en-subicon">{BELL.format(p='ens')}</span><span>구독</span></div>
-      <svg id="en-hearts" viewBox="0 0 1920 1080">{hearts}</svg>"""
+      <div class="pill" id="en-likep"><div id="en-likeico">{THUMB_ICON.format(c=CORAL)}</div><span>좋아요</span></div>
+      <div class="pill" id="en-subp"><div class="bellbox">{BELL.format(p='ens')}</div><span>구독</span></div>
+      <div class="pill" id="en-subp2"><div class="bellbox">{BELL.format(p='ens2')}</div><span>구독중</span>{CHECK.format(c=CREAM)}</div>
+      <div id="en-likerip"></div><div id="en-subrip"></div>
+      <svg id="en-spark" viewBox="0 0 1920 1080">{spark}</svg>"""
     js = f"""
     tl.fromTo("#en-bg", {{ opacity: 0 }}, {{ opacity: 1, duration: 0.35, ease: "power2.out" }}, 0);
     tl.set("#en-p-idea", {{ opacity: 1 }}, 0);
@@ -227,20 +233,26 @@ def write_scenes(proj, T, wav, total, off):
     tl.fromTo("#en-a", {{ opacity: 0, y: 30, filter: "blur(10px)" }}, {{ opacity: 1, y: 0, filter: "blur(0px)", duration: 0.35, ease: "power3.out" }}, g({e1['start'] + 0.05:.2f}));
     tl.fromTo("#en-b", {{ opacity: 0, scale: 0.7, transformOrigin: "0% 50%" }}, {{ opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.8)" }}, g({e1['start'] + 0.5 * de1:.2f}));
     glow("en", {e1['start'] + 0.5 * de1:.2f}, {e2a['start'] - 0.1:.2f});
-    // 좋아요와 구독: 점선 자리가 먼저 나오고 말할 때 채워진다
+    // 좋아요와 구독: 빈 자리 표시 없이, 말할 때 버튼이 깔끔하게 올라온다 (좋아요 → 눌림과 반짝임, 구독 → 종 울림 → "구독중")
     tl.to(["#en-a", "#en-b"], {{ opacity: 0.0, filter: "blur(8px)", duration: 0.3, ease: "power2.in", immediateRender: false }}, g({e1['end'] + 0.1:.2f}));
-    tl.fromTo(["#en-ghostl", "#en-ghosts"], {{ opacity: 0 }}, {{ opacity: 1, duration: 0.35, ease: "power2.out" }}, g({e1['end'] + 0.2:.2f}));
     pose("en", "idea", "hug", {e2a['start'] - 0.1:.2f});
     pose("en", "hug", "like", {e2b['start'] - 0.1:.2f});
-    tl.fromTo("#en-like", {{ opacity: 0, scale: 0.4 }}, {{ opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2.2)" }}, g({e2b['start'] + 0.05:.2f}));
-    tl.fromTo("#en-ghostl", {{ opacity: 1 }}, {{ opacity: 0, duration: 0.2, immediateRender: false }}, g({e2b['start'] + 0.05:.2f}));
-    [0, 1, 2, 3, 4].forEach(i => {{
-      tl.fromTo("#en-h" + i, {{ opacity: 0, y: 0, x: 0 }}, {{ opacity: 1, y: -90 - i * 14, x: (i - 2) * 22, duration: 0.5, ease: "power2.out", immediateRender: false }}, g({e2b['start'] + 0.15:.2f} + i * 0.06));
-      tl.to("#en-h" + i, {{ opacity: 0, duration: 0.2, ease: "power1.in", immediateRender: false }}, g({e2b['start'] + 0.6:.2f} + i * 0.06));
+    tl.fromTo("#en-likep", {{ opacity: 0, y: 36, scale: 0.86, transformOrigin: "0% 50%" }}, {{ opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "back.out(1.7)" }}, g({e2b['start'] + 0.02:.2f}));
+    tl.fromTo("#en-likeico", {{ scale: 1, transformOrigin: "50% 50%" }}, {{ scale: 0.8, duration: 0.09, ease: "power2.in", immediateRender: false }}, g({e2b['start'] + 0.42:.2f}));
+    tl.to("#en-likeico", {{ scale: 1.16, duration: 0.16, ease: "power2.out" }}, g({e2b['start'] + 0.51:.2f}));
+    tl.to("#en-likeico", {{ scale: 1, duration: 0.22, ease: "back.out(2)" }}, g({e2b['start'] + 0.67:.2f}));
+    tl.fromTo("#en-likerip", {{ opacity: 0.75, scale: 0.7 }}, {{ opacity: 0, scale: 2.1, duration: 0.6, ease: "power2.out", immediateRender: false }}, g({e2b['start'] + 0.5:.2f}));
+    const SPARKS = {json.dumps(SPARKS)};
+    SPARKS.forEach(([x, y, r, c], i) => {{
+      tl.fromTo("#en-s" + i, {{ opacity: 0, x: 0, y: 0, scale: 0.3 }}, {{ opacity: 1, x: x, y: y, scale: 1, duration: 0.34, ease: "power2.out", immediateRender: false }}, g({e2b['start'] + 0.5:.2f}));
+      tl.to("#en-s" + i, {{ opacity: 0, duration: 0.24, ease: "power1.in", immediateRender: false }}, g({e2b['start'] + 0.78:.2f}));
     }});
-    tl.fromTo("#en-sub", {{ opacity: 0, scale: 0.6, transformOrigin: "50% 50%" }}, {{ opacity: 1, scale: 1, duration: 0.4, ease: "back.out(2)" }}, g({e2c['start'] + 0.0:.2f}));
-    tl.fromTo("#en-ghosts", {{ opacity: 1 }}, {{ opacity: 0, duration: 0.2, immediateRender: false }}, g({e2c['start'] + 0.0:.2f}));
-    tl.fromTo("#ens-bell", {{ rotation: 0 }}, {{ rotation: 18, duration: 0.09, yoyo: true, repeat: 5, ease: "sine.inOut", immediateRender: false }}, g({e2c['start'] + 0.35:.2f}));
+    tl.fromTo("#en-subp", {{ opacity: 0, y: 36, scale: 0.86, transformOrigin: "0% 50%" }}, {{ opacity: 1, y: 0, scale: 1, duration: 0.42, ease: "back.out(1.7)" }}, g({e2c['start'] + 0.0:.2f}));
+    tl.fromTo("#ens-bell", {{ rotation: 0 }}, {{ rotation: 16, duration: 0.09, yoyo: true, repeat: 3, ease: "sine.inOut", immediateRender: false }}, g({e2c['start'] + 0.2:.2f}));
+    tl.fromTo("#en-subrip", {{ opacity: 0.7, scaleX: 1, scaleY: 1 }}, {{ opacity: 0, scaleX: 1.2, scaleY: 1.5, duration: 0.55, ease: "power2.out", immediateRender: false }}, g({e2c['start'] + 0.5:.2f}));
+    tl.to("#en-subp", {{ opacity: 0, duration: 0.18, ease: "none", immediateRender: false }}, g({e2c['start'] + 0.52:.2f}));
+    tl.fromTo("#en-subp2", {{ opacity: 0, scale: 0.94, transformOrigin: "0% 50%" }}, {{ opacity: 1, scale: 1, duration: 0.22, ease: "back.out(2)", immediateRender: false }}, g({e2c['start'] + 0.52:.2f}));
+    tl.fromTo("#ens2-bell", {{ rotation: 0 }}, {{ rotation: 16, duration: 0.09, yoyo: true, repeat: 3, ease: "sine.inOut", immediateRender: false }}, g({e2c['start'] + 0.62:.2f}));
     // 찰스였습니다 (손 흔드는 찰스)
     pose("en", "like", "wave", {e3['start'] - 0.1:.2f});
     tl.fromTo("#en-name", {{ opacity: 0, scale: 0.6, transformOrigin: "0% 50%" }}, {{ opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.7)" }}, g({e3['start'] + 0.05:.2f}));
