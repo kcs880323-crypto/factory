@@ -205,7 +205,7 @@ def _auth_url(cl, want, redirect, challenge, state):
     return GOOGLE_AUTH + "?" + urllib.parse.urlencode({
         "client_id": cl["client_id"], "redirect_uri": redirect, "response_type": "code", "scope": SCOPES,
         "code_challenge": challenge, "code_challenge_method": "S256", "state": state, "access_type": "offline",
-        "prompt": "consent", "login_hint": want})
+        "prompt": "select_account consent", "login_hint": want})   # select_account: 이미 로그인된 다른(회사) 계정으로 자동 진행되지 않게 계정 선택 화면을 띄운다
 
 
 def cmd_manual_start(cl, want):
@@ -1027,6 +1027,7 @@ def selftest():
         check("로그인 흐름 성공(PKCE S256 확인), 토큰 저장", rc == 0 and (HOME / "youtube_token.json").exists() and "REFRESH" not in rest)
         check("요청 범위가 업로드 하나(+이메일)", q["scope"][0] == SCOPES and q["code_challenge_method"] == ["S256"] and q["login_hint"] == ["me@example.com"]
               and q["access_type"] == ["offline"])
+        check("계정 선택 화면을 띄움(다른 계정으로 자동 로그인 방지)", q["prompt"] == ["select_account consent"])
         state["challenge"] = ""
 
         # --- 수동 로그인 (브라우저를 열 수 없는 곳: 주소를 받아 로그인한 뒤 주소창의 주소를 붙여 넣는다)
