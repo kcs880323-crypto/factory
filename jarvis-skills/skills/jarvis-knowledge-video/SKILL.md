@@ -153,6 +153,7 @@ node "<PLUGIN_ROOT>/skills/hyperframes/scripts/plugin-cli.mjs" render
 ## 7. 납품과 기록
 
 - 결과: `knowledge-videos/<slug>/` 안에 프로젝트, `SOURCES.md`, 렌더한 MP4. 파일 이름은 `<slug>-<날짜>.mp4`.
+- 업로드에 쓸 `publish.json`(제목·설명·인스타 캡션·태그·해시태그·출처)을 영상 폴더에 함께 쓴다 (`jarvis-publish` 스킬 3번 형식. 사실은 `SOURCES.md`에서 확인한 것만, 출처는 실제로 확인한 주소만). 사용자가 유튜브·인스타에 올려 달라고 하면 `jarvis-publish`를 따른다 (이 스킬은 올리지 않는다).
 - 파일을 사용자에게 전달한다 (파일 전송 도구가 있으면 그것으로, 없으면 경로를 알린다).
 - `knowledge-videos/ledger.json`에 `{주제, 날짜, 길이, 파일}`을 추가한다 (다음에 같은 주제를 고르지 않기 위해).
 - 보고 형식: 주제 / 길이 / **확인한 것**(규칙 점검, 측정 결과) / **확인하지 못한 것**(발음·억양, 출처 미확인 항목) / 출처 / 음성 모델 라이선스 한 줄.
