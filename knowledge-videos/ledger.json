@@ -7,6 +7,13 @@
     "note": "첫 번째 예시 영상. MP4는 저장소에 올리지 않았고 대화에서 전달함. 참고 코드는 jarvis-skills/skills/jarvis-knowledge-video/reference/bee-dance/"
   },
   {
+    "topic": "꿀벌의 8자 춤 (찰스 판)",
+    "date": "2026-10-26",
+    "seconds": 43,
+    "file": "bee-waggle-dance/bee-waggle-dance-charles-2026-10-26.mp4",
+    "note": "첫 영상(30초, 찰스 없음)과 같은 주제를 현재 기본 방식으로 다시 만든 판: 찰스 오프닝·엔딩, Supertonic 3 목소리 5 속도 1.2, 짧은 절 감속·무음 제거, 절마다 6번 합성해 음성인식이 가장 잘 받아쓴 것을 선택(오류 글자 35 → 25). 본편 143자, 낭독 40.3초, 영상 43.0초(−14.7 LUFS, check 오류 0, verify 합격). 소스(clauses.json, build_video.py, SOURCES.md, publish.json)만 저장소에 있고 MP4는 올리지 않음"
+  },
+  {
     "topic": "문어의 심장은 세 개",
     "date": "2026-10-25",
     "seconds": 44,
