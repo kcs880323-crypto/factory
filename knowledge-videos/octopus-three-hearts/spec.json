@@ -1,0 +1,20 @@
+{
+  "chip": "문어의 심장은 세 개",
+  "theme": {"bg": "#07121b", "bg2": "#0f2a3d", "accent": "#F26B5B", "accent2": "#3DD6C6", "text": "#EAF4F8"},
+  "scenes": [
+    {"type": "question", "clauses": ["1a", "1b"], "headline": "문어의 심장은\n몇 개일까?", "sub": "정답은 세 개!", "sub_at": "1b", "symbol": "heart"},
+    {"type": "flow", "clauses": ["2a", "2b"], "nodes": [
+      {"label": "아가미 심장 2개", "note": "피를 아가미로 보낸다", "icon": "heart", "at": "2a"},
+      {"label": "아가미", "note": "피가 산소를 받는다", "icon": "drop", "at": "2b"}]},
+    {"type": "flow", "clauses": ["3a", "3b", "3c"], "nodes": [
+      {"label": "산소를 받은 피", "icon": "drop", "at": "3a"},
+      {"label": "몸 심장 1개", "note": "한 곳으로 모인다", "icon": "heart", "at": "3b"},
+      {"label": "온몸으로", "note": "피가 퍼진다", "icon": "fish", "at": "3c"}]},
+    {"type": "points", "clauses": ["4a", "4b", "4c"], "items": [
+      {"text": "철 → 붉은 피", "icon": "text:Fe", "at": "4a", "dt": 0.1},
+      {"text": "구리 → 푸른 피", "icon": "text:Cu", "at": "4a", "dt": 1.9},
+      {"text": "차갑고 산소가 적은 바다에 유리", "icon": "thermometer", "at": "4c"}]},
+    {"type": "stat", "clauses": ["5a", "5b"], "name": "헤엄칠 때 몸 심장은", "name_at": "5a", "name_dt": 0.0, "big": "멈춘다", "big_at": "5a", "big_dt": 1.3,
+     "label": "그래서 주로 바닥을 기어 다녀요", "label_at": "5b", "label_dt": 0.2, "recap": "심장 셋 = 아가미 심장 2 + 몸 심장 1", "recap_at": "5b", "recap_dt": 0.1}
+  ]
+}

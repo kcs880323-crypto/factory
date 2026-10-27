@@ -21,7 +21,8 @@
 |---|---|
 | 길이 | 35~45초 (낭독이 끝난 뒤 2초를 더한 값이 자동으로 정해짐) |
 | 화면 | 1920×1080, 30fps, H.264, AAC 소리 |
-| 구성 | 찰스 오프닝(약 4초) → 본편(약 26초, 장면 3~5개) → 찰스 엔딩(약 8초) |
+| 구성 | 찰스 오프닝(약 4초) → 본편(약 26초, **그림 장면 3~5개**) → 찰스 엔딩(약 8초) |
+| **오리의 자리** | **오리(찰스)는 오프닝과 엔딩에만 나옵니다.** 본편은 주제를 설명하는 그림·도표·숫자 장면으로 채웁니다. **오리가 본편 내내 나와서 설명하는 영상은 실패**이며 `check_frames.py`가 걸러냅니다 |
 | 목소리 | Supertonic 3 목소리 5, 속도 1.2, natural (사용자가 듣고 고른 것) |
 | 자막 | 낭독과 같이 절 단위로 나옴, 56px 700 굵기, 화면 아래 |
 | 소리 크기 | 영상 −17~−13 LUFS (실제 −14.7~−15.0) |
@@ -140,13 +141,14 @@ knowledge-videos/
     clauses/                   절마다 wav (tts_clauses.py 또는 고른 것)
     audio/                     narration.wav, timing.json, clauses_timing.json, parts.json, duration.txt
     proj/                      HyperFrames 프로젝트 (index.html, compositions/, assets/, renders/)
-    build_video.py             화면 생성기 (손으로 씀)
+    spec.json                  본편 그림 장면 설계표 (방법 A, 권장)
+    build_video.py             주제 맞춤 화면 생성기 (방법 B를 쓸 때만)
     SOURCES.md                 주장 → 출처
     publish.json               업로드용 제목·설명 (jarvis-publish 형식)
     <slug>-charles-<날짜>.mp4  결과 (저장소에 올리지 않음)
 ```
 
-`proj/`, `clauses/`, `audio/`, `*.mp4`는 `.gitignore`로 **저장소에 올리지 않습니다.** 올리는 것은 `clauses.json`, `build_video.py`, `SOURCES.md`, `publish.json`과 `ledger.json`입니다.
+`proj/`, `clauses/`, `audio/`, `*.mp4`는 `.gitignore`로 **저장소에 올리지 않습니다.** 올리는 것은 `clauses.json`, `spec.json`(또는 `build_video.py`), `SOURCES.md`, `publish.json`과 `ledger.json`입니다.
 
 ---
 
@@ -247,16 +249,51 @@ cp audio/narration.wav audio/timing.json audio/clauses_timing.json audio/parts.j
 ```
 PowerShell이면 `Copy-Item audio\narration.wav,audio\timing.json,audio\clauses_timing.json,audio\parts.json,audio\duration.txt proj\assets\`.
 
-### 단계 6. 화면 생성기 `build_video.py` 쓰기
+### 단계 6. 본편 그림 장면 만들기 (가장 중요한 단계)
 
-**가장 어려운 단계**입니다. 주제마다 그림이 다르므로 **예시를 복사해서 이 주제의 장면으로 바꿔 씁니다.** 그대로 복사하지 않습니다.
+> **먼저 못 박아 둡니다.** 오리(찰스)는 **오프닝(약 4초)과 엔딩(약 8초)에만** 나옵니다. 그 사이 **본편 약 26초는 오리 없이** 질문 → 흐름도·카드·막대 → 큰 숫자 → 요약 한 줄 같은 **그림 장면 3~5개**로 채웁니다. "오리가 화면에 계속 나와서 설명하는" 영상은 실패입니다. 오프닝·엔딩의 오리는 `charles.write_scenes()`가 알아서 만드니 **본편에서 오리를 따로 그리거나 넣지 않습니다.**
 
-- 가장 가까운 예시를 고른다:
-  - `examples/bee-waggle-dance/build_video.py`: 장면 4개 (벌집 → 방향 → 거리 → 인물), 길 따라 움직이는 물체, 도표가 자라는 구성.
-  - `examples/octopus-three-hearts/build_video.py`: 장면 3개, 한 장면이 15초 동안 하나의 도표를 키움, 박동, 흐름 입자.
+두 가지 방법이 있습니다. **A를 쓰세요.** (B는 A로 표현이 안 되는 움직임이 꼭 필요할 때만.)
+
+#### 방법 A (권장): 설계표 `spec.json` 한 장 + `scene_kit.py` (코드를 쓰지 않는다)
+
+`tools/scene_kit.py`가 설계표를 읽어 본편 장면과 배경·칩·자막·찰스 오프닝/엔딩까지 한 번에 만듭니다. 사람이 하는 일은 **5줄 대본을 장면으로 나누고 JSON을 채우는 것**뿐입니다.
+
+**① 장면 종류 5가지**
+
+| type | 쓰는 곳 | 필드 (핵심만) | 화면 |
+|---|---|---|---|
+| `question` | 줄 1: 훅(질문) | `headline`(큰 제목, `\n`으로 줄바꿈), `sub`+`sub_at`, `symbol`(아이콘) | 큰 제목, 위에 아이콘 배지, 아래 보조 문장 |
+| `flow` | 과정·원인→결과 (노드 2~5개) | `nodes: [{label, note, icon, at}]` | 아이콘 원 → 점선 화살표 → 아이콘 원 … 절 시각마다 하나씩 나타나고 마지막은 빛남 |
+| `points` | 사실 2~4개 나열 | `items: [{text, icon, at}]` | 카드가 하나씩 나타남 (아이콘 + 두 줄 글) |
+| `compare` | 두 가지 비교, 크기 차이 | `axis`, `left`/`right: {title, value(0~1), label, at, label_at}` | 카드 두 장, 막대가 낭독에 맞춰 참 |
+| `stat` | 숫자·연도·핵심 한 단어 | `name`, `big`, `label`, `note`, `recap` (+ 각각 `_at`, `_dt`) | 큰 글자(300px) + 설명 + 마지막 요약 한 줄 |
+
+- 모든 `at`, `*_at`은 **본편 절 id**(`1a`, `3b` …)입니다. 요소는 그 절이 시작되고 `dt`초(기본 0.15) 뒤에 나타납니다. 낭독이 "시계"입니다.
+- `icon`: `sun moon drop flame leaf heart star bolt cloud mountain magnet atom gear eye clock globe flower fish bee tree question check wave planet thermometer arrow-up book scale` 중 하나, 또는 `"text:Cu"`처럼 글자 1~4자.
+- `theme`: 주제 색 한 가지(`accent`)와 어두운 바탕(`bg`, `bg2`), 보조색(`accent2`), 글자색(`text`). 꿀벌 `#FFB81C`/`#120d08`, 문어 `#F26B5B`/`#07121b`.
+- **마지막 장면의 `recap`**(핵심 요약 한 줄)은 엔딩 전환까지 **2초 이상** 보여야 합니다. `scene_kit.py`가 모자라면 "주의" 줄로 알려 줍니다. `recap_at`/`recap_dt`를 앞으로 당기세요.
+
+**② 만드는 순서**
+1. `clauses.json`의 5줄을 **장면 3~5개**로 나눕니다. 규칙: 장면들의 `clauses`를 이어 붙이면 **본편의 절 전부가 순서대로 한 번씩** 나와야 합니다 (빠뜨리거나 순서가 바뀌면 `scene_kit.py`가 오류로 알려 줍니다).
+2. 표처럼 줄의 역할에 맞는 종류를 고릅니다: 줄 1 → `question`, 줄 2~3 → `flow`/`points`, 줄 4 → `compare`/`points`, 줄 5 → `stat`(+`recap`).
+3. 각 절이 말하는 순간 **화면에 새로 나타나는 것**을 한 가지씩 정해 `at`에 그 절 id를 씁니다.
+4. `spec.json`을 쓰고 실행합니다 (예시: `examples/bee-waggle-dance/spec.json`, `examples/octopus-three-hearts/spec.json`):
+   ```bash
+   python <키트>/tools/scene_kit.py proj spec.json "$S"
+   ```
+   `장면 1 (question): 본편 0.0~5.0초, 절 1a, 1b` … `index ok: 본편 장면 5 개 + 찰스 오프닝·엔딩` 줄이 나와야 합니다.
+5. 7단계(점검·snapshot)로 갑니다. 글이 길어 잘리거나 겹치면 `label`/`text`를 줄입니다 (노드 `label` 한 줄 10자 안팎, `points`의 `text` 두 줄 안).
+
+**③ 한계 (정직하게)**: 틀이 정해진 템플릿이라 그림이 **아이콘 + 도형 + 글자**입니다. 벌이 8자로 날아다니는 것 같은 **주제 맞춤 움직임**은 못 만듭니다. 그런 연출이 꼭 필요하면 방법 B입니다.
+
+#### 방법 B (고급): 주제 맞춤 화면 코드 `build_video.py`를 직접 쓰기
+
+예시를 복사해서 이 주제의 장면으로 바꿔 씁니다 (그대로 복사하지 않습니다).
+- 가장 가까운 예시: `examples/bee-waggle-dance/build_video.py` (장면 4개, 길 따라 움직이는 물체, 도표가 자라는 구성), `examples/octopus-three-hearts/build_video.py` (장면 3개, 한 장면이 15초 동안 하나의 도표를 키움, 박동, 흐름 입자).
 - 상세 규칙은 6장, 파일 읽는 법은 7장.
-- 실행: `python build_video.py proj "$S"` (두 번째 인수 = 스킬의 scripts 폴더. `charles.py`를 불러오기 위해 필요). 시스템 파이썬이어도 됩니다 (표준 라이브러리만 쓴다).
-- 끝에 `hive ok / direction ok / … / index ok` 줄이 나옵니다.
+- 실행: `python build_video.py proj "$S"` (두 번째 인수 = 스킬의 scripts 폴더). 끝에 `index ok`가 나옵니다.
+- B를 써도 **본편에 오리를 넣지 않고** 9단계에서 `check_frames.py`로 확인합니다.
 
 ### 단계 7. 점검과 화면 확인 (렌더 전에 반드시)
 
@@ -291,6 +328,11 @@ node "$CLI" render            # proj/renders/proj_<날짜>.mp4 (GPU 없는 환�
 ```
 - 모두 PASS여야 합니다: 1920×1080, h264 30fps, 오디오 있음, 길이 35~45.1초, 소리 −17~−13 LUFS, 절마다 소리 있음(RMS > −35 dBFS).
 - 소리가 −13 LUFS보다 크면 `index.html`의 `data-volume`을 낮춰(`0.85` → `0.8`) 다시 렌더.
+- **본편에 그림이 나오는지 자동으로 확인합니다** (오리만 나오는 영상을 걸러냄):
+  ```bash
+  "$PY" -I <키트>/tools/check_frames.py renders/<파일>.mp4 ../audio/parts.json
+  ```
+  모두 PASS여야 합니다: 오프닝·엔딩에 찰스 화면이 있고, **본편에 오리(노란 찰스 화면)가 10% 이하**, 본편 화면이 바뀌는 표본이 25% 이상, 안 바뀌는 구간이 6초 이하. 이것은 "그림이 있고 움직이는가"만 재며 **그림이 보기 좋은지는 재지 못합니다** (그건 snapshot을 눈으로 봅니다).
 - **렌더한 MP4에서 직접 프레임을 뽑아 봅니다** (snapshot과 렌더 결과가 같은지):
   ```bash
   ffmpeg -v error -y -ss 30 -i renders/<파일>.mp4 -frames:v 1 -vf scale=960:-1 f30.png
@@ -375,6 +417,8 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
 
 | 실수 | 결과 |
 |---|---|
+| **본편에도 오리를 계속 보여 줌 (오리가 설명하는 영상)** | **실패.** 오리는 오프닝·엔딩 전용. `check_frames.py`가 불합격으로 알려 줌 |
+| 6단계를 건너뛰고 오프닝·엔딩 장면만으로 영상을 만듦 | 위와 같음. `scene_kit.py`는 장면이 3개 미만이면 만들지 않음 |
 | 속도를 1.2보다 올림 | "찰스입니다"의 "입니다"가 안 들림 |
 | 오프닝 낭독문을 "찰스입니다!"로 바꿈 | 같은 이유 |
 | 본편이 160자를 넘김 | 45초 초과, `build_track.py` 실패 |
@@ -422,6 +466,11 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
 | 음성이 비어 있다 / `no frontend available` | sherpa-onnx가 1.13.8이 아닌 경우. `setup_tts.py`를 다시 실행 |
 | `ModuleNotFoundError: sherpa_onnx` | 시스템 파이썬으로 실행함. **`PY`(가상환경 파이썬)로 `-I`를 붙여** 실행 |
 | `build_track.py` "낭독이 N초" 실패 | 본편을 줄인다 (125~160자) |
+| `scene_kit.py`: `spec 오류: scenes 는 3~5개여야 합니다` | 본편 그림 장면이 3개 미만이거나 5개 초과. 5줄을 장면 3~5개로 나눈다 |
+| `scene_kit.py`: `장면들의 clauses 를 이어 붙이면 …` | 어떤 절이 빠졌거나 순서가 바뀜. 출력에 나온 본편 절 id 목록과 맞춘다 |
+| `scene_kit.py`: `icon '…' 은 없습니다` | 아이콘 이름 오타. 목록은 6장 단계 6 또는 `scene_kit.py` 머리말 |
+| `scene_kit.py`: `주의: 요약 한 줄이 …초만 보입니다` | `recap_at`/`recap_dt`를 앞으로 당긴다 (2초 이상 보여야 함) |
+| `check_frames.py`가 본편에 오리가 많다고 불합격 | 6단계를 건너뛰었거나 본편에 찰스 그림을 넣음. 방법 A로 본편 장면을 만든다 |
 | `check`에 `connector_orphan` 경고 | 마스크로 가린 점선이면 거짓 경보. snapshot에서 화면이 정상인지 확인 |
 | 렌더가 `sub_timeline_script_failure` | GSAP CDN 사용. `assets/gsap.min.js`로 |
 | 자막이 서로 겹침 | `build_track.py`의 `--intra`, `--inter`를 늘리거나 자막 클립 길이를 줄임 |
@@ -436,25 +485,37 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
 
 ## 9. 재현 시험: 「꿀벌의 8자 춤」 (자비스가 제대로 하는지 확인)
 
-**같은 대본과 같은 생성기로 영상을 만들어 보고, 아래 기준과 비교합니다.** 합성에는 무작위가 있어 숫자는 조금씩 다릅니다.
+**같은 대본으로 영상을 만들어 보고, 아래 기준과 비교합니다.** 합성에는 무작위가 있어 숫자는 조금씩 다릅니다. 시험은 두 가지입니다. **9-1(설계표 방식)을 먼저** 하고, 통과하면 9-2는 선택입니다.
 
-작업: `examples/bee-waggle-dance/`의 `clauses.json`과 `build_video.py`를 새 작업 폴더(`knowledge-videos/bee-test/`)에 복사하고 4~9단계를 그대로 합니다 (3단계 대본 쓰기와 6단계 생성기 쓰기는 이미 있으니 건너뜁니다).
+### 9-1. 설계표 방식 (권장 경로) — `spec.json` + `scene_kit.py`
+
+작업: `examples/bee-waggle-dance/`의 `clauses.json`과 `spec.json`을 새 작업 폴더(`knowledge-videos/bee-test/`)에 복사하고 **4~9단계**를 그대로 합니다 (3단계 대본과 6단계 설계표는 이미 있으니 `scene_kit.py`만 실행). 6단계 명령: `python <키트>/tools/scene_kit.py proj spec.json "$S"`.
 
 | 항목 | Claude의 결과 | 허용 범위 |
 |---|---|---|
 | 본편 낭독 글자 수 | 143자 | 같아야 함 |
 | 절 19개 | 오프닝 2 + 본편 12 + 엔딩 5 | 같아야 함 |
-| 낭독 합계(`tts_clauses.py` 마지막 줄) | 34.0~34.6초 | ±1.5초 |
-| 마지막 절 끝 (`en3` end, 전체 시각) | 약 40.3초 | ±1.5초 |
+| `scene_kit.py` 출력 | 장면 5개 (question, flow, points, compare, stat) | 같아야 함 |
 | `duration.txt` | 43 | 41~45 |
-| `check` | 오류 0, 경고 1, 정보 3~4 | 오류 0 |
-| 렌더 결과 | 1920×1080, 30fps, 약 20~21MB | |
-| 영상 소리 크기 | −14.7~−14.8 LUFS | −17~−13 |
+| `check` | 오류 0, 경고 0, 정보 1~2 | 오류 0 |
+| 렌더 결과 | 1920×1080, 30fps, 약 12MB | |
+| 영상 소리 크기 | −14.8 LUFS | −17~−13 |
 | `verify_video.py` | 전부 PASS | 전부 PASS |
-| 렌더 시간 | 약 3.5~5분 (GPU 없음, 두 번 돌려 3.5분과 5.1분) | 환경마다 다름 |
-| 화면 | 오프닝(찰스, "30초/지식 하나/찰스입니다!") → 어두운 벌집과 제목 → 꿀벌과 꽃과 "?" → 벽면 8자 춤 → 각도 패널과 태양 → 흔드는 시간 막대 두 개 → 카를 폰 프리슈, 1973, 노벨 생리의학상 공동 수상 → 찰스 엔딩(좋아요·구독중 알약) | 같은 순서 |
+| **`check_frames.py`** | **전부 PASS** (오리 0/51장, 바뀌는 표본 28/51장, 최장 정지 1.5초) | 전부 PASS |
+| 화면 | 오프닝(찰스) → 본편: ① "벌집 속은 깜깜합니다" 큰 제목과 ? 배지 → ② 별·벌·8 노드가 점선 화살표로 이어짐 → ③ 카드 3장 → ④ 막대 두 개 비교 → ⑤ 카를 폰 프리슈, 1973, 요약 한 줄 → 찰스 엔딩 | 같은 순서, **본편에 오리 없음** |
 
-기준에서 벗어나면 (1) 어느 단계에서 달라졌는지, (2) 오류 메시지 전문을 그대로 사용자에게 알립니다.
+### 9-2. 직접 코드 방식 (선택) — `build_video.py`
+
+`examples/bee-waggle-dance/build_video.py`를 복사해 `python build_video.py proj "$S"`로 6단계를 합니다.
+
+| 항목 | Claude의 결과 | 허용 범위 |
+|---|---|---|
+| `check` | 오류 0, 경고 1, 정보 3~4 | 오류 0 |
+| 렌더 결과 | 약 20~21MB, −14.7~−14.8 LUFS | −17~−13 |
+| `check_frames.py` | 전부 PASS (오리 0/51장, 바뀌는 표본 40/51장) | 전부 PASS |
+| 화면 | 오프닝 → 어두운 벌집과 제목 → 꿀벌과 꽃과 "?" → 벽면 8자 춤 → 각도 패널과 태양 → 막대 두 개 → 카를 폰 프리슈, 1973 → 찰스 엔딩 | 같은 순서 |
+
+두 방식 모두 렌더 시간은 약 3.5~5분(GPU 없음)입니다. 기준에서 벗어나면 (1) 어느 단계에서 달라졌는지, (2) 오류 메시지 전문을 그대로 사용자에게 알립니다.
 
 ---
 
@@ -466,6 +527,7 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
   - 점검: check 오류 N, 경고 N (이유)
   - 측정: verify_video.py 결과 (소리 크기, 길이, 해상도, 절마다 소리)
   - 화면: snapshot과 렌더한 MP4 프레임을 눈으로 확인한 시점들, 고친 것
+  - 본편 장면: 방법 A/B, 장면 구성(종류와 절), check_frames.py 결과 (오리 N/M장, 바뀌는 표본, 최장 정지)
   - 음성: 절마다 6번 합성해 받아쓰기로 고름 (오류 글자 처음 → 고른 뒤) / 또는 1번만 합성
 확인하지 못한 것:
   - 발음·억양·듣기 좋은지 (소리를 들을 수 없음)
@@ -482,6 +544,8 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
 - **소리를 들을 수 없습니다.** 어떤 말이 자연스러운지, 이름 "찰스"의 발음이 좋은지는 사용자가 판단합니다. 보고에서 "소리가 좋다"고 쓰지 않습니다.
 - 이 방법은 **Claude가 리눅스 클라우드 컨테이너에서** 두 편으로 확인한 것입니다. **Windows에서는 시험하지 못했습니다.** (PyPI에 Windows용 설치 파일이 있는 것만 확인.) 막히면 오류를 그대로 보고하세요.
 - 본편 125~160자 규칙은 두 편(143자, 158자)과 일부 줄로 잰 값입니다.
+- **방법 A(설계표)의 그림은 아이콘·도형·글자로 된 틀**입니다. 주제 맞춤 움직임(벌이 날아다니는 것 등)은 방법 B로 직접 코드를 써야 하고, 그것은 훨씬 어렵습니다. `scene_kit.py`는 꿀벌·문어 두 주제로만 시험했습니다.
+- `check_frames.py`는 "본편에 그림이 있고 움직이는가"만 잽니다. 그림이 보기 좋은지는 snapshot을 눈으로 봐야 합니다.
 - 한국어 음성인식 모델이 이름 "찰스"를 자주 "철수·체스"로 틀려서, 이름 발음은 측정하지 못했습니다.
 - 사실 확인은 웹 검색 요약 기준입니다. 의학·법률·투자 주제는 하지 않습니다.
 - 파이프라인은 **외부 서비스를 쓰지 않습니다** (음성·그림 모두 내 컴퓨터). 클라우드 음성(타입캐스트 등)이나 HeyGen 서비스를 쓰려면 먼저 사용자 동의가 필요하고, 이 문서는 그 연결을 갖고 있지 않습니다.
