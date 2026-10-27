@@ -6,11 +6,12 @@
 > - 약속: 아래 순서와 값으로 하면 같은 종류의 영상(1920×1080, 30fps, 35~45초, 찰스 오프닝·엔딩, 자막, 한국어 나레이션)이 나옵니다.
 > - 못 하는 약속: **소리는 들을 수 없으므로** 발음·억양이 좋은지는 사용자만 판단합니다. 합성에는 무작위가 있어 **같은 설정이어도 소리는 조금씩 다릅니다.** Claude는 **리눅스에서만** 시험했고 **Windows에서는 시험하지 못했습니다.**
 
-> **파일 위치 대응:** 이 문서는 키트(zip) 안에 들어 있고 저장소(`kcs880323-crypto/factory`)의 `knowledge-videos/`에도 같은 내용이 있습니다.
-> - 키트의 `예시/꿀벌의-8자-춤/` = 저장소의 `knowledge-videos/bee-waggle-dance/`
-> - 키트의 `예시/문어의-심장은-세-개/` = 저장소의 `knowledge-videos/octopus-three-hearts/`
-> - 키트의 `도구/` = 저장소의 `knowledge-videos/tools/`
-> - 저장소를 받았다면 이 문서는 `knowledge-videos/MANUAL.md`, 프롬프트는 `knowledge-videos/PROMPTS.md`입니다.
+> **파일 위치 대응:** 이 문서는 키트(zip, 폴더 이름 `knowledge-video-kit`) 안에 들어 있고 저장소(`kcs880323-crypto/factory`)의 `knowledge-videos/`에도 같은 내용이 있습니다.
+> - 키트의 `examples/bee-waggle-dance/` = 저장소의 `knowledge-videos/bee-waggle-dance/`
+> - 키트의 `examples/octopus-three-hearts/` = 저장소의 `knowledge-videos/octopus-three-hearts/`
+> - 키트의 `tools/` = 저장소의 `knowledge-videos/tools/`
+> - 이 문서는 키트에서는 `MANUAL.md`, 프롬프트는 `PROMPTS.md`입니다 (저장소에서는 `knowledge-videos/MANUAL.md`, `knowledge-videos/PROMPTS.md`).
+> - 파일·폴더 이름을 영문으로 한 것은 Windows PowerShell 5.1이 압축 안의 한글 이름을 깨뜨릴 수 있기 때문입니다.
 
 ---
 
@@ -160,7 +161,7 @@ knowledge-videos/
 ### 단계 2. 사실 확인 (건너뛰지 않는다)
 
 - **확실히 아는 사실과 출처로 확인한 사실만** 씁니다. 이름·연도·숫자는 특히 확인합니다.
-- 웹 검색으로 핵심 주장마다 믿을 만한 출처를 찾아 **`SOURCES.md`**에 `주장 | 확인한 내용 | 출처 주소` 표로 적습니다. 예: `예시/꿀벌의-8자-춤/SOURCES.md`.
+- 웹 검색으로 핵심 주장마다 믿을 만한 출처를 찾아 **`SOURCES.md`**에 `주장 | 확인한 내용 | 출처 주소` 표로 적습니다. 예: `examples/bee-waggle-dance/SOURCES.md`.
 - **원문을 직접 열어 읽지 못하고 검색 요약만 본 것은 그렇게 적습니다.** 확인 못 한 부분은 빼거나 "~로 알려져 있다"로 씁니다. 지어내지 않습니다.
 - 그림에서 일부러 단순화한 것(예: 각도 40°는 예시)이 있으면 `SOURCES.md` 끝에 적습니다.
 
@@ -230,7 +231,7 @@ PowerShell이면 `for ($i=0; $i -lt 6; $i++) { & $PY -I "$S\tts_clauses.py" $MOD
 # 음성인식 모델 (한 번만. 압축 파일 약 315MB, 풀면 약 340MB. 가상환경 밖에 풀어 둔다)
 #   https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-zipformer-korean-2024-06-24.tar.bz2
 ASRDIR=<풀린 폴더>/sherpa-onnx-zipformer-korean-2024-06-24      # 안에 encoder-epoch-99-avg-1.int8.onnx 등이 있어야 함
-ASRDIR=$ASRDIR CLAUSES=clauses-full.json "$PY" -I <키트>/도구/pick_best_take.py runs clauses
+ASRDIR=$ASRDIR CLAUSES=clauses-full.json "$PY" -I <키트>/tools/pick_best_take.py runs clauses
 # 저장소(kcs880323-crypto/factory)를 받았다면 파일 위치: knowledge-videos/tools/pick_best_take.py
 ```
 - `runs/` 안에는 **`d0`~`d5` 폴더만** 둡니다 (`d`로 시작하는 다른 파일이 있으면 오류).
@@ -251,8 +252,8 @@ PowerShell이면 `Copy-Item audio\narration.wav,audio\timing.json,audio\clauses_
 **가장 어려운 단계**입니다. 주제마다 그림이 다르므로 **예시를 복사해서 이 주제의 장면으로 바꿔 씁니다.** 그대로 복사하지 않습니다.
 
 - 가장 가까운 예시를 고른다:
-  - `예시/꿀벌의-8자-춤/build_video.py`: 장면 4개 (벌집 → 방향 → 거리 → 인물), 길 따라 움직이는 물체, 도표가 자라는 구성.
-  - `예시/문어의-심장은-세-개/build_video.py`: 장면 3개, 한 장면이 15초 동안 하나의 도표를 키움, 박동, 흐름 입자.
+  - `examples/bee-waggle-dance/build_video.py`: 장면 4개 (벌집 → 방향 → 거리 → 인물), 길 따라 움직이는 물체, 도표가 자라는 구성.
+  - `examples/octopus-three-hearts/build_video.py`: 장면 3개, 한 장면이 15초 동안 하나의 도표를 키움, 박동, 흐름 입자.
 - 상세 규칙은 6장, 파일 읽는 법은 7장.
 - 실행: `python build_video.py proj "$S"` (두 번째 인수 = 스킬의 scripts 폴더. `charles.py`를 불러오기 위해 필요). 시스템 파이썬이어도 됩니다 (표준 라이브러리만 쓴다).
 - 끝에 `hive ok / direction ok / … / index ok` 줄이 나옵니다.
@@ -300,7 +301,7 @@ node "$CLI" render            # proj/renders/proj_<날짜>.mp4 (GPU 없는 환�
 ### 단계 10. 납품과 기록
 
 1. 결과 파일을 `knowledge-videos/<slug>/<slug>-charles-<날짜>.mp4`로 복사한다 (같은 이름이 있으면 `-2`를 붙인다. **기존 영상·프로젝트를 덮어쓰지 않는다**).
-2. `SOURCES.md`를 마무리하고, **업로드용 `publish.json`**을 쓴다 (제목·설명·인스타 캡션·태그·해시태그·출처. 형식은 `예시/…/publish.json`. 사실은 `SOURCES.md`에서 확인한 것만, 출처는 실제로 확인한 주소만).
+2. `SOURCES.md`를 마무리하고, **업로드용 `publish.json`**을 쓴다 (제목·설명·인스타 캡션·태그·해시태그·출처. 형식은 `examples/…/publish.json`. 사실은 `SOURCES.md`에서 확인한 것만, 출처는 실제로 확인한 주소만).
 3. `knowledge-videos/ledger.json`에 `{주제, 날짜, 길이(초), 파일, 메모}`를 추가한다.
 4. 파일을 사용자에게 전달한다 (파일 전송 도구가 있으면 그것으로, 없으면 경로).
 5. **보고** (10장 형식). **이 스킬은 올리지 않는다.** 사용자가 "유튜브·인스타 업로드"라고 하면 `jarvis-publish`의 절차(상태 확인 → 올릴 내용 보여 주고 확인받기 → 허락 뒤에만 올리기)를 따른다.
@@ -389,7 +390,7 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
 
 ## 7. 예시 `build_video.py` 읽는 법 (새 주제로 바꿀 곳)
 
-`예시/꿀벌의-8자-춤/build_video.py` (약 590줄)의 구성입니다.
+`examples/bee-waggle-dance/build_video.py` (약 590줄)의 구성입니다.
 
 | 부분 | 하는 일 | 새 주제에서 |
 |---|---|---|
@@ -437,7 +438,7 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
 
 **같은 대본과 같은 생성기로 영상을 만들어 보고, 아래 기준과 비교합니다.** 합성에는 무작위가 있어 숫자는 조금씩 다릅니다.
 
-작업: `예시/꿀벌의-8자-춤/`의 `clauses.json`과 `build_video.py`를 새 작업 폴더(`knowledge-videos/bee-test/`)에 복사하고 4~9단계를 그대로 합니다 (3단계 대본 쓰기와 6단계 생성기 쓰기는 이미 있으니 건너뜁니다).
+작업: `examples/bee-waggle-dance/`의 `clauses.json`과 `build_video.py`를 새 작업 폴더(`knowledge-videos/bee-test/`)에 복사하고 4~9단계를 그대로 합니다 (3단계 대본 쓰기와 6단계 생성기 쓰기는 이미 있으니 건너뜁니다).
 
 | 항목 | Claude의 결과 | 허용 범위 |
 |---|---|---|
