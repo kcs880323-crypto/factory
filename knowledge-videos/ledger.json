@@ -1,0 +1,23 @@
+[
+  {
+    "topic": "꿀벌의 8자 춤",
+    "date": "2026-10-25",
+    "seconds": 30,
+    "file": "bee-waggle-dance-30s.mp4",
+    "note": "첫 번째 예시 영상. MP4는 저장소에 올리지 않았고 대화에서 전달함. 참고 코드는 jarvis-skills/skills/jarvis-knowledge-video/reference/bee-dance/"
+  },
+  {
+    "topic": "꿀벌의 8자 춤 (찰스 판)",
+    "date": "2026-10-26",
+    "seconds": 43,
+    "file": "bee-waggle-dance/bee-waggle-dance-charles-2026-10-26.mp4",
+    "note": "첫 영상(30초, 찰스 없음)과 같은 주제를 현재 기본 방식으로 다시 만든 판: 찰스 오프닝·엔딩, Supertonic 3 목소리 5 속도 1.2, 짧은 절 감속·무음 제거, 절마다 6번 합성해 음성인식이 가장 잘 받아쓴 것을 선택(오류 글자 35 → 25). 본편 143자, 낭독 40.3초, 영상 43.0초(−14.7 LUFS, check 오류 0, verify 합격). 소스(clauses.json, build_video.py, SOURCES.md, publish.json)만 저장소에 있고 MP4는 올리지 않음"
+  },
+  {
+    "topic": "문어의 심장은 세 개",
+    "date": "2026-10-25",
+    "seconds": 44,
+    "file": "octopus-three-hearts/octopus-three-hearts-charles-2026-10-26.mp4",
+    "note": "찰스(사용자가 만든 오리 박사 그림) 오프닝·엔딩 + 새 기본 목소리(Supertonic 3 목소리 5, 속도 1.2, 짧은 절 자동 감속, 클립 앞뒤 무음 제거), 44초 판(v6). v5에서 엔딩의 좋아요·구독 부분을 점선 자리 표시 없이 알약 버튼(좋아요: 엄지 눌림+반짝임, 구독: 종 울림 후 구독중 ✓)으로 바꿨다. 낭독 길이를 맞추려고 2a·4a 표현만 줄여 본편 158자(사실 내용은 같음). 절마다 6번 합성해 음성인식이 가장 잘 받아쓴 것을 골랐다. 이전 판(v5: -2026-10-25-2.mp4, v4: 45초 Supertonic 2 목소리 6 속도 1.4, 43초 KSS, 30초 판)은 대화로만 전달. 소스(clauses.json, build_video.py, SOURCES.md)만 저장소에 있고 MP4는 올리지 않음"
+  }
+]
