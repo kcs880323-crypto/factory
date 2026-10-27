@@ -497,6 +497,7 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
 | `check_frames.py`가 본편에 오리가 많다고 불합격 | 6단계를 건너뛰었거나 본편에 찰스 그림을 넣음. 방법 A로 본편 장면을 만든다 |
 | `check`에 `connector_orphan` 경고 | 마스크로 가린 점선이면 거짓 경보. snapshot에서 화면이 정상인지 확인 |
 | 렌더가 `sub_timeline_script_failure` | GSAP CDN 사용. `assets/gsap.min.js`로 |
+| 렌더가 10분 넘게 걸린다 (43초 영상) | **기준은 4코어 PC에서 3~5분(프레임당 약 0.13초)**. 이보다 몇 배 느리면 이 PC의 문제일 가능성이 큼. 아래 "렌더가 이상하게 느릴 때" 점검. **작업자 수(`--workers`)를 바꾸거나 화면 효과(흐림)를 빼도 크게 달라지지 않았음**(작업자 1개 175초 대 자동 4개 196초, 흐림 제거 178초) |
 | 자막이 서로 겹침 | `build_track.py`의 `--intra`, `--inter`를 늘리거나 자막 클립 길이를 줄임 |
 | 장면이 전체적으로 늦게/일찍 나옴 | 6-1의 `OFF` 규칙 위반 |
 | 화면 왼쪽 위에 작은 점 | 6-4의 4번 |
@@ -504,6 +505,20 @@ ES = raw["en1"]["start"] - 0.45 - OFF   # 엔딩 장면이 시작하는 본편 �
 | Windows에서 `.sh`가 `pipefail` 오류 | 줄바꿈이 CRLF. `git clone -c core.autocrlf=false`로 받거나 `sed -i 's/\r$//'` |
 | `python3`이 없다 | Windows는 `python` 또는 `py -3` |
 | 한글 경로에서 오류 | 작업 폴더·slug를 영문으로 |
+
+### 렌더가 이상하게 느릴 때 (점검만 한다. 설정은 바꾸지 않는다)
+
+렌더 로그의 `capture_streaming ... durationMs`(화면을 찍는 시간, 밀리초)를 영상의 프레임 수(길이 × 30)로 나누면 프레임당 시간이 나옵니다. 기준(4코어, GPU 없음)은 약 0.13초입니다. 이보다 몇 배 크면 아래를 확인해 사용자에게 **보고만** 합니다.
+
+| 확인 | PowerShell | 느려지는 이유 |
+|---|---|---|
+| CPU 종류·코어 수 | `Get-CimInstance Win32_Processor \| select Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed` | 코어가 적거나 저전력 CPU면 소프트웨어 렌더링이 느림 |
+| 전원 상태 | `powercfg /getactivescheme`, `Get-CimInstance Win32_Battery \| select EstimatedChargeRemaining,BatteryStatus` | 노트북 배터리·절전 모드면 CPU 속도가 제한됨 |
+| 렌더 중 CPU·메모리 | 렌더를 돌리며 5초마다 `(Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue`와 `Get-Process \| sort CPU -desc \| select -first 8` | 다른 프로그램(백신 검사, 브라우저, 동기화)이 CPU를 쓰고 있으면 느림. 메모리가 모자라 디스크로 넘어가도 느림 |
+| 실시간 보호(백신) | `Get-MpComputerStatus \| select RealTimeProtectionEnabled` (확인만) | 렌더가 만드는 임시 파일을 계속 검사하면 느릴 수 있음. **예외 설정은 사용자 결정이라 자비스가 바꾸지 않는다** |
+| 임시 폴더 디스크 | `Get-PSDrive C` (남은 용량) | 용량 부족·느린 디스크 |
+
+보고에는 위 값과 로그의 단계별 시간(`compile`, `browser_probe`, `capture_calibration`, `capture_streaming`, `assemble`)을 표로 넣습니다. 원인을 짐작해서 쓰지 말고 **측정한 값만** 씁니다.
 
 ---
 
