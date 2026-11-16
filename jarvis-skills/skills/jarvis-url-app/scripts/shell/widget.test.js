@@ -10,6 +10,8 @@ const { chromium } = require("playwright");
 const RUNNER = fs.readFileSync(path.join(__dirname, "widget-runner.js"), "utf8");
 const LEDGER = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "smart-ledger.js"), "utf8");
 const AJ = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "ajgahub-board.js"), "utf8");
+const GAOPS = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "gaops-tasks.js"), "utf8")
+  .replace(/__PARAM_GAOPS_PROJECT__/g, "fake-project").replace(/__PARAM_GAOPS_API_KEY__/g, "FAKE_WEB_KEY");
 const FAKE_REF = "abcdefghijklmnopqrst"; // 지어낸 Supabase 프로젝트·키·토큰
 const FAKE_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.fakefakefake";
 const SLOT = "(/*__WIDGET_FN__*/ null)";
@@ -149,6 +151,75 @@ function check(label, cond, detail) {
     ["성과 · 11월 성과 공유회 결과", "오늘", "pos"], ["휴가 · 연차 사용 안내", "오늘", "pos"],
     ["출장 · 부산 출장", "어제", ""], ["(제목 없음)", `${o.getMonth() + 1}/${o.getDate()}`, ""]]), aw.rows);
   check("AJ: 제목과 오늘 새 글 수", aw.title === "AJ GA HUB 팀 게시판" && aw.note === "오늘 새 글 2개", aw);
+
+  // GA Ops: 진행 중 과업 (가짜 Firebase 로그인·Firestore)
+  const ga = await browser.newPage();
+  const g = { signUp: 0, refresh: 0, list: [], fail403: false };
+  const ymd = (n) => { const d = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  const doc = (title, status, due, prog, who, prio) => ({ name: "x", fields: {
+    title: { stringValue: title }, status: { stringValue: status }, priority: { stringValue: prio || "보통" },
+    ...(due ? { dueDate: { stringValue: due } } : {}), manualProgress: { integerValue: String(prog) },
+    mainAssigneeName: { stringValue: who } } });
+  const cors = { "Access-Control-Allow-Origin": "*" };
+  await ga.route("https://identitytoolkit.googleapis.com/**", (route) => { g.signUp++;
+    route.fulfill({ status: 200, contentType: "application/json", headers: cors,
+      body: JSON.stringify({ idToken: "anon-id-1", refreshToken: "anon-refresh", expiresIn: "3600" }) }); });
+  await ga.route("https://securetoken.googleapis.com/**", (route) => { g.refresh++;
+    route.fulfill({ status: 200, contentType: "application/json", headers: cors,
+      body: JSON.stringify({ id_token: "anon-id-2", refresh_token: "anon-refresh-2", expires_in: "3600" }) }); });
+  await ga.route("https://firestore.googleapis.com/**", (route) => {
+    const req = route.request();
+    g.list.push({ url: req.url(), method: req.method(), auth: req.headers()["authorization"] });
+    if (g.fail403) return route.fulfill({ status: 403, contentType: "application/json", headers: cors, body: "{}" });
+    route.fulfill({ status: 200, contentType: "application/json", headers: cors, body: JSON.stringify({ documents: [
+      doc("에너지모니터링배포", "진행 중", ymd(2), 0, "최성훈", "높음"),
+      doc("사무용품 정리", "진행 중", ymd(10), 40, "김창수"),
+      doc("소방 점검", "진행 중", ymd(-1), 80, "이영희"),
+      doc("법인차량 보험", "진행 중", null, 10, ""),
+      doc("완료된 일", "종료", ymd(1), 100, "A"),
+      doc("준비 중인 일", "준비", ymd(1), 0, "B"),
+      doc("다섯째 진행", "진행 중", ymd(20), 5, "C"),
+    ] }) });
+  });
+  await ga.goto(base + "aj/");
+  await ga.waitForFunction(() => window.__siteLoaded === 1);
+  await ga.evaluate((tok) => {
+    window.__w = []; window.__runs = 0;
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  const gaAsset = RUNNER.replace(SLOT, "(\n" + GAOPS.trim().replace(/;\s*$/, "") + "\n)");
+  await ga.evaluate(gaAsset.replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await ga.waitForTimeout(500);
+  check("GA Ops: AJ GA HUB 로그인 전에는 아무 요청도 안 함", g.signUp + g.list.length === 0, g);
+  await ga.evaluate((ref) => { localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: "s" }));
+    window.__urlappWidgetRun(); }, FAKE_REF);
+  await ga.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  await ga.waitForTimeout(2500); // 자기 로그인(POST) 때문에 다시 돌지 않는지
+  const gw = await ga.evaluate(() => ({ w: __w, n: __w.length }));
+  check("GA Ops: 익명 로그인 1번, 자기 요청으로 반복하지 않음", g.signUp === 1 && gw.n === 1, { g, n: gw.n });
+  check("GA Ops: 읽기는 GET, 필요한 칸만, 토큰 사용", g.list.length === 1 && g.list[0].method === "GET"
+    && g.list[0].auth === "Bearer anon-id-1" && g.list[0].url.includes("/projects/fake-project/databases/(default)/documents/tasks?")
+    && g.list[0].url.includes("mask.fieldPaths=manualProgress") && g.list[0].url.includes("key=FAKE_WEB_KEY"), g.list[0]);
+  const w0 = gw.w[0];
+  check("GA Ops: 제목에 진행 중 건수 (종료·준비 제외)", w0.title === "GA Ops 진행 중 과업 5건", w0.title);
+  check("GA Ops: 급한 순, 과업명 · 담당자, D-값 · 진척율", JSON.stringify(w0.rows.map((r) => [r.label, r.value, r.tone]))
+    === JSON.stringify([["소방 점검 · 이영희", "D+1 · 80%", "neg"], ["에너지모니터링배포 · 최성훈", "D-2 · 0%", "neg"],
+      ["사무용품 정리 · 김창수", "D-10 · 40%", ""], ["다섯째 진행 · C", "D-20 · 5%", ""]]), w0.rows);
+  check("GA Ops: 아래 줄에 경과·마감 임박 수", w0.note === "경과 1 · 마감 임박 1", w0.note);
+  await ga.evaluate(() => window.__urlappWidgetRun());
+  await ga.waitForFunction(() => __w.length === 2, null, { timeout: 5000 });
+  check("GA Ops: 두 번째는 저장된 토큰 사용 (새 익명 사용자 안 만듦)", g.signUp === 1 && g.refresh === 0 && g.list.length === 2, g);
+  await ga.evaluate(() => { const a = JSON.parse(localStorage.getItem("urlapp_gaops_auth")); a.exp = Date.now() - 1000;
+    localStorage.setItem("urlapp_gaops_auth", JSON.stringify(a)); window.__urlappWidgetRun(); });
+  await ga.waitForFunction(() => __w.length === 3, null, { timeout: 5000 });
+  check("GA Ops: 만료되면 갱신 토큰으로 새 토큰", g.refresh === 1 && g.signUp === 1 && g.list[2].auth === "Bearer anon-id-2", g);
+  g.fail403 = true;
+  await ga.evaluate(() => window.__urlappWidgetRun());
+  await ga.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
+  const w4 = await ga.evaluate(() => ({ w: __w[3], auth: localStorage.getItem("urlapp_gaops_auth") }));
+  check("GA Ops: 읽기 거부(403)는 위젯에 이유를 보이고 토큰을 지움", w4.w.note === "GA Ops 연결 실패 (읽기 403)"
+    && w4.w.rows.length === 0 && w4.auth === null, w4);
 
   await browser.close();
   server.close();

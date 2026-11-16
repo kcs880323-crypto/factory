@@ -44,7 +44,8 @@
     window.fetch = function (input, init) {
       var method = (init && init.method) || (input && typeof input === "object" && input.method) || "GET";
       var p = origFetch.apply(this, arguments);
-      if (/^(POST|PUT|PATCH|DELETE)$/.test(String(method).toUpperCase())) { // 읽기(GET·HEAD)는 빼야 스스로 반복하지 않는다
+      // 읽기(GET·HEAD)와 위젯 스크립트 자신의 요청(로그인 등, busy 동안)은 빼야 스스로 반복하지 않는다
+      if (!busy && /^(POST|PUT|PATCH|DELETE)$/.test(String(method).toUpperCase())) {
         p.then(soon, function () {});
       }
       return p;

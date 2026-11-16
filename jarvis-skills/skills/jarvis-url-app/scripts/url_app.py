@@ -892,9 +892,24 @@ def write_widget_resources(res, accent):
 """)
 
 
-def widget_asset(script_text):
-    """사이트별 위젯 스크립트(함수 하나)를 실행기에 넣는다."""
-    body = script_text.strip().rstrip(";").strip()
+PARAM_RE = re.compile(r"__PARAM_([A-Z0-9_]+)__")
+
+
+def widget_asset(script_text, params=()):
+    """사이트별 위젯 스크립트(함수 하나)를 실행기에 넣는다. __PARAM_이름__ 자리는 --widget-param 값으로 채운다."""
+    values = {}
+    for item in params or []:
+        name, sep, value = str(item).partition("=")
+        if not sep or not re.fullmatch(r"[A-Z0-9_]+", name):
+            raise Fail(f"--widget-param 은 이름=값 모양이어야 합니다 (이름은 영문 대문자·숫자·_): {name}")
+        values[name] = value
+    body = PARAM_RE.sub(lambda m: json.dumps(values[m.group(1)], ensure_ascii=False)[1:-1]
+                        if m.group(1) in values else m.group(0), script_text)
+    missing = sorted(set(PARAM_RE.findall(body)))
+    if missing:
+        raise Fail("위젯 스크립트에 채워야 할 값이 있습니다: " + ", ".join(missing)
+                   + " (--widget-param 이름=값 으로 준다)")
+    body = body.strip().rstrip(";").strip()
     if not body:
         raise Fail("위젯 스크립트가 비어 있습니다.")
     runner = WIDGET_RUNNER.read_text(encoding="utf-8")
@@ -981,7 +996,7 @@ def save_registry(home, reg):
     tmp.replace(p)
 
 
-EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "color", "bg", "orientation", "external", "allow_host", "desktop",
+EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto"}
@@ -1049,7 +1064,7 @@ def cmd_build(args):
                 keep_w.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ws, keep_w)
             explicit["widget"] = str(keep_w)
-            widget_js = widget_asset(keep_w.read_text(encoding="utf-8"))
+            widget_js = widget_asset(keep_w.read_text(encoding="utf-8"), opt["widget_param"] or [])
 
         # 아이콘
         icon_choice = opt["icon"] or "auto"
@@ -1358,6 +1373,14 @@ def cmd_selftest(args):
             mf6 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec6["apk"]], tmp_home, "xmltree")
             check("빌드 6: --widget none 이면 위젯이 빠짐", "WidgetProvider" not in mf6 and
                   "assets/urlapp-widget.js" not in zipfile.ZipFile(rec6["apk"]).namelist())
+            pjs = site / "p.js"
+            pjs.write_text("async function () { return {title: '__PARAM_T__', rows: []}; }", encoding="utf-8")
+            check("위젯 값 자리를 안 채우면 거부", raises(lambda: build(base + "/param", "--no-fetch", "--widget", str(pjs))))
+            build(base + "/param", "--no-fetch", "--widget", str(pjs), "--widget-param", 'T=a"b')
+            id7, rec7 = next((k, v) for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/param"))
+            a7 = zipfile.ZipFile(rec7["apk"]).read("assets/urlapp-widget.js").decode("utf-8")
+            check("위젯 값 자리 채움 (따옴표 이스케이프)", "title: 'a\\\"b'" in a7 and "__PARAM_" not in a7, a7[-120:])
+            check("잘못된 --widget-param 거부", raises(lambda: build(base + "/param", "--no-fetch", "--widget-param", "bad")))
             check("위젯 없는 앱에는 위젯 receiver 없음", "WidgetProvider" not in run(
                 [tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec["apk"]], tmp_home, "xmltree"))
         finally:
@@ -1388,6 +1411,8 @@ def build_parser():
     b.add_argument("--icon", help="auto(기본, 사이트 아이콘) | letter(글자 아이콘) | 이미지 파일 경로 | 이미지 주소")
     b.add_argument("--accent", help="강조색 #RRGGBB (진행 막대, 위젯의 수입 같은 강조 숫자). 기본: 아이콘 바탕색 → 테마색")
     b.add_argument("--widget", help="홈 화면 위젯을 넣는다: 위젯 스크립트(.js) 경로. 'none' 이면 뺀다 (widgets/ 의 예시 참고)")
+    b.add_argument("--widget-param", dest="widget_param", action="append", default=[],
+                   help="위젯 스크립트의 __PARAM_이름__ 자리에 넣을 값: 이름=값 (여러 번). 값은 출력하지 않고 이 컴퓨터에만 기억")
     b.add_argument("--icon-color", dest="icon_color",
                    help="아이콘 바탕색 #RRGGBB (글자 아이콘·투명한 로고에 적용. 기본: 상태 표시줄 색, 흰색이면 자동 색)")
     b.add_argument("--color", help="상태 표시줄 색 #RRGGBB (기본: 사이트의 theme-color, 없으면 흰색)")
