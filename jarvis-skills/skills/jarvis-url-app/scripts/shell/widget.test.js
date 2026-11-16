@@ -192,9 +192,13 @@ function check(label, cond, detail) {
   await ga.evaluate(gaAsset.replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
   await ga.waitForTimeout(500);
   check("GA Ops: AJ GA HUB 로그인 전에는 아무 요청도 안 함", g.signUp + g.list.length === 0, g);
-  await ga.evaluate((ref) => { localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: "s" }));
-    window.__urlappWidgetRun(); }, FAKE_REF);
-  await ga.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  // 실제 AJ GA HUB 처럼 세션을 저장하지 않고(persistSession: false) 화면에 "로그아웃" 버튼만 나타난다.
+  // 수동으로 다시 돌리지 않아도 10초 재시도로 채워져야 한다.
+  const loginAt = Date.now();
+  await ga.evaluate(() => { const b = document.createElement("button"); b.title = "로그아웃"; document.body.appendChild(b); });
+  await ga.waitForFunction(() => __w.length === 1, null, { timeout: 15000 });
+  const waited = Date.now() - loginAt;
+  check("GA Ops: 로그인(로그아웃 버튼)하면 저절로 채워짐 (세션 저장 없이)", waited < 12000 && g.signUp === 1, { waited, g });
   await ga.waitForTimeout(2500); // 자기 로그인(POST) 때문에 다시 돌지 않는지
   const gw = await ga.evaluate(() => ({ w: __w, n: __w.length }));
   check("GA Ops: 익명 로그인 1번, 자기 요청으로 반복하지 않음", g.signUp === 1 && gw.n === 1, { g, n: gw.n });

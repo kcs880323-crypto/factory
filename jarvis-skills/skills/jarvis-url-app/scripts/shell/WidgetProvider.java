@@ -101,7 +101,7 @@ public class WidgetProvider extends AppWidgetProvider {
         String note;
         long at = p.getLong("at", 0);
         if (data == null) {
-            note = ko ? "앱을 한 번 열면 여기에 요약이 보여요" : "Open the app once to fill this widget";
+            note = ko ? "앱을 열고 로그인하면 여기에 요약이 보여요" : "Open the app (and log in) to fill this widget";
         } else {
             String when = new SimpleDateFormat("M/d HH:mm", Locale.getDefault()).format(new Date(at));
             String extra = data.optString("note", "");

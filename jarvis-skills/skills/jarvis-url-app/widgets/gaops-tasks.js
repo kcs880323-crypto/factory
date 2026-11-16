@@ -1,6 +1,8 @@
 // AJ GA HUB 위젯: GA Ops(담당자 과업현황, 과업 관리)의 "진행 중" 과업.
 // GA Ops 는 Firebase(Firestore)의 tasks 컬렉션에 과업을 두고 익명 로그인으로 읽는다. 이 위젯도 같은 방식으로 읽는다
 // (GA Ops 페이지를 연 사람이 볼 수 있는 것과 같은 범위). AJ GA HUB 에 로그인한 뒤에만 읽는다.
+// AJ GA HUB 는 로그인 정보를 저장하지 않는다(Supabase persistSession: false, 메모리에만). 그래서 로그인 여부는
+// 화면으로 본다: 로그인한 뒤에만 나오는 "로그아웃" 버튼(title="로그아웃")이 있으면 로그인한 것.
 // 프로젝트 id 와 웹 API 키(GA Ops 페이지 스크립트에 있는 공개 값)는 이 파일에 적지 않고 빌드할 때 넣는다:
 //   url_app.py build … --widget widgets/gaops-tasks.js \
 //       --widget-param GAOPS_PROJECT=<프로젝트 id> --widget-param GAOPS_API_KEY=<웹 API 키>
@@ -10,8 +12,8 @@ async function () {
   const KEY = "__PARAM_GAOPS_API_KEY__";
   const TITLE = "GA Ops 진행 중 과업";
 
-  // 0) AJ GA HUB 로그인 확인 (Supabase 세션이 있어야)
-  let loggedIn = false;
+  // 0) AJ GA HUB 로그인 확인: 로그아웃 버튼이 보이면 로그인한 것 (세션을 저장하도록 사이트가 바뀌면 그것도 인정)
+  let loggedIn = !!document.querySelector('[title="로그아웃"]');
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i) || "";
     if (!/^sb-[a-z0-9]+-auth-token$/.test(k)) continue;

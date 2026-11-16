@@ -2,6 +2,8 @@
 // 사이트가 쓰는 Supabase 표(team_board)를, 사이트에 로그인한 사용자 본인의 세션으로 읽는다 (로그인 전에는 읽지 않음).
 // Supabase 주소와 공개(anon) 키는 이 파일에 적지 않고, 앱이 실행 중일 때 사이트의 스크립트에서 찾는다.
 // url_app.py build … --widget widgets/ajgahub-board.js
+// 주의 (2026-11-17 확인): 지금 AJ GA HUB 는 Supabase 세션을 저장하지 않아서(persistSession: false) 이 위젯은
+// 로그인 토큰을 찾지 못해 아무것도 보이지 않는다. 사이트가 세션을 저장하도록 바뀌기 전에는 gaops-tasks.js 를 쓴다.
 async function () {
   const CATEGORY = { achievement: "성과", story: "이야기", event: "경조사", vacation: "휴가", business_trip: "출장" };
 

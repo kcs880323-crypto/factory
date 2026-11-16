@@ -2,7 +2,8 @@
 // assets/urlapp-widget.js 로 만들고, 앱이 자기 사이트 페이지(맨 위 화면)에만 넣는다.
 // 위젯 스크립트는 사이트 안에서 돌므로 사이트의 로그인 상태·주소를 그대로 쓴다. 돌려준 값만 앱으로 간다.
 //   돌려줄 값: {title: "...", rows: [{label, value, tone: "pos"|"neg"|""}] (최대 4줄), note: "..."} 또는 null(갱신 안 함)
-// 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤).
+// 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤),
+// 그리고 위젯 스크립트가 null(로그인 전 등)을 돌려주는 동안은 10초마다.
 (function (token) {
   "use strict";
   if (window.__urlappWidget) return;
@@ -13,6 +14,11 @@
 
   var busy = false;
   var again = false;
+  var retry = null; // 아직 준비 안 됨(로그인 전 등)이면 10초 뒤 다시
+  function retryLater() {
+    if (retry) return;
+    retry = setTimeout(function () { retry = null; run(); }, 10000);
+  }
   function clip(s, n) {
     s = String(s == null ? "" : s);
     return s.length > n ? s.slice(0, n) : s;
@@ -21,7 +27,7 @@
     if (busy) { again = true; return; }
     busy = true;
     Promise.resolve().then(function () { return fn(); }).then(function (d) {
-      if (!d || typeof d !== "object") return;
+      if (!d || typeof d !== "object") { retryLater(); return; }
       var rows = Array.isArray(d.rows) ? d.rows.slice(0, 4).map(function (r) {
         return { label: clip(r && r.label, 24), value: clip(r && r.value, 24), tone: clip(r && r.tone, 3) };
       }) : [];

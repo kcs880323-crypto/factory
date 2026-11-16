@@ -787,13 +787,13 @@ def write_widget_resources(res, accent):
     w("values/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_desc">앱의 요약을 홈 화면에 보여 줍니다</string>
-    <string name="widget_hint">앱을 한 번 열면 여기에 요약이 보여요</string>
+    <string name="widget_hint">앱을 열고 로그인하면 여기에 요약이 보여요</string>
 </resources>
 """)
     w("values-en/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_desc">Shows the app\\'s summary on the home screen</string>
-    <string name="widget_hint">Open the app once to fill this widget</string>
+    <string name="widget_hint">Open the app (and log in) to fill this widget</string>
 </resources>
 """)
     w("drawable/urlapp_widget_bg.xml", """<?xml version="1.0" encoding="utf-8"?>
