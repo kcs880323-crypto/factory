@@ -102,6 +102,7 @@ public class MainActivity extends Activity {
     private static final long MAX_DOWNLOAD = 200L * 1024 * 1024;
     private final String dlToken = newToken();
     private String downloadJs;
+    private String widgetJs; // 위젯이 있는 앱만 (assets/urlapp-widget.js)
     private final HashMap<String, PendingFile> pendingFiles = new HashMap<>();
 
     @Override
@@ -178,6 +179,14 @@ public class MainActivity extends Activity {
         }
     }
 
+    private String readAssetOrNull(String name) {
+        try {
+            return readAsset(name);
+        } catch (IOException e) {
+            return null; // 이 앱에는 없는 기능
+        }
+    }
+
     private static String newToken() {
         byte[] b = new byte[24];
         new SecureRandom().nextBytes(b);
@@ -200,6 +209,8 @@ public class MainActivity extends Activity {
     }
 
     private int accentColor() {
+        int explicit = parseColor(cfg.optString("accent"), 0);
+        if (explicit != 0) return explicit;
         // 진행 막대는 웹 화면 위에 그려지므로 배경과 구분되는 색을 쓴다.
         if (Math.abs(luma(themeColor) - luma(bgColor)) > 60) return themeColor;
         return isLight(bgColor) ? Color.rgb(26, 115, 232) : Color.rgb(138, 180, 248);
@@ -323,12 +334,9 @@ public class MainActivity extends Activity {
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(web, true);
 
-        try {
-            downloadJs = readAsset("urlapp-download.js");
-            web.addJavascriptInterface(new Bridge(), "UrlAppBridge");
-        } catch (IOException e) {
-            downloadJs = null; // 옛 빌드: 도우미 없이 동작
-        }
+        downloadJs = readAssetOrNull("urlapp-download.js");
+        widgetJs = readAssetOrNull("urlapp-widget.js");
+        if (downloadJs != null || widgetJs != null) web.addJavascriptInterface(new Bridge(), "UrlAppBridge");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -344,7 +352,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView v, String url) {
                 if (!mainFrameError && errorView != null) errorView.setVisibility(View.GONE);
-                injectDownloadHelper(url);
+                injectHelpers(url);
                 updateBackHandling();
             }
 
@@ -625,10 +633,13 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void injectDownloadHelper(String url) {
-        if (downloadJs == null || url == null || web == null) return;
-        if (!isOwnHost(Uri.parse(url).getHost())) return; // 자기 사이트에만
-        web.evaluateJavascript(downloadJs.replace("\"__URLAPP_TOKEN__\"", JSONObject.quote(dlToken)), null);
+    /** 다운로드 도우미와 위젯 실행기는 자기 사이트의 맨 위 화면에만 넣는다 (evaluateJavascript 는 맨 위 화면에서만 돈다). */
+    private void injectHelpers(String url) {
+        if (url == null || web == null) return;
+        if (!isOwnHost(Uri.parse(url).getHost())) return;
+        String token = JSONObject.quote(dlToken);
+        if (downloadJs != null) web.evaluateJavascript(downloadJs.replace("\"__URLAPP_TOKEN__\"", token), null);
+        if (widgetJs != null) web.evaluateJavascript(widgetJs.replace("\"__URLAPP_TOKEN__\"", token), null);
     }
 
     private static final Pattern DISPOSITION_NAME = Pattern.compile(
@@ -790,6 +801,18 @@ public class MainActivity extends Activity {
                 if (isOwnHost(u.getHost()) || !linksToBrowser) web.loadUrl(url);
                 else openExternal(new Intent(Intent.ACTION_VIEW, u));
             });
+        }
+
+        /** 위젯 실행기가 읽은 요약 (작은 JSON). 저장하고 홈 화면 위젯을 다시 그린다. */
+        @JavascriptInterface
+        public void widget(String token, String json) {
+            if (!dlToken.equals(token) || widgetJs == null || json == null || json.length() > 4000) return;
+            try {
+                new JSONObject(json); // 모양만 확인
+            } catch (Exception e) {
+                return;
+            }
+            WidgetProvider.save(getApplicationContext(), json);
         }
 
         private void drop(String id) {

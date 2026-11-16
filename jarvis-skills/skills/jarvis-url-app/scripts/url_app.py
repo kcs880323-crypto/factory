@@ -35,8 +35,10 @@ import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-SHELL_SRC = HERE / "shell" / "MainActivity.java"
+SHELL_DIR = HERE / "shell"  # 안드로이드 껍데기 자바 코드 (MainActivity, WidgetProvider)
 DOWNLOAD_JS = HERE / "shell" / "download.js"  # 페이지가 만든 파일(blob:) 받기 도우미. 앱마다 assets 로 들어간다
+WIDGET_RUNNER = HERE / "shell" / "widget-runner.js"  # 위젯 스크립트를 감싸 페이지에서 돌리는 실행기
+WIDGET_SLOT = "(/*__WIDGET_FN__*/ null)"
 ICON_TOOL = HERE / "UrlAppIcon.java"
 SHELL_CLASS = "app.jarvis.urlapp.MainActivity"
 MIN_SDK = 24      # 안드로이드 7.0
@@ -641,12 +643,22 @@ def android_string(s):
 
 # ---------------------------------------------------------------- 프로젝트 파일
 
-def manifest_xml(app_id, cleartext, orientation):
+def manifest_xml(app_id, cleartext, orientation, widget=False):
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
     orient_attr = f'\n            android:screenOrientation="{orient}"' if orient else ""
     # 안드로이드 16 은 큰 화면(태블릿)에서 방향 고정을 무시한다. 고정을 원하면 임시 예외 속성을 넣는다.
     prop = ('\n            <property android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"'
             ' android:value="true" />') if orient else ""
+    receiver = f"""
+        <receiver
+            android:name="app.jarvis.urlapp.WidgetProvider"
+            android:exported="false"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/urlapp_widget_info" />
+        </receiver>""" if widget else ""
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{app_id}">
@@ -671,7 +683,7 @@ def manifest_xml(app_id, cleartext, orientation):
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />{prop}
-        </activity>
+        </activity>{receiver}
     </application>
 </manifest>
 """
@@ -749,10 +761,153 @@ def write_resources(res, app_id, name, theme, bg, icon_bg):
 
 # ---------------------------------------------------------------- 빌드
 
+def mix(hex_color, other, t):
+    a = [int(hex_color[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(other[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#%02X%02X%02X" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+
+
+def write_widget_resources(res, accent):
+    """홈 화면 위젯의 모양 (RemoteViews 로 그릴 수 있는 LinearLayout·TextView·ImageView 만 쓴다)."""
+    def w(rel, text):
+        f = res / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+
+    def colors(vals):
+        return ('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
+                + "".join(f'    <color name="{k}">{v}</color>\n' for k, v in vals.items()) + "</resources>\n")
+
+    w("values/widget_colors.xml", colors({
+        "widget_bg": "#FFFFFF", "widget_title": "#0F172A", "widget_label": "#64748B", "widget_value": "#0F172A",
+        "widget_note": "#94A3B8", "widget_accent": accent, "widget_negative": "#E11D48"}))
+    w("values-night/widget_colors.xml", colors({
+        "widget_bg": "#1E293B", "widget_title": "#F1F5F9", "widget_label": "#94A3B8", "widget_value": "#F8FAFC",
+        "widget_note": "#64748B", "widget_accent": mix(accent, "#FFFFFF", 0.35), "widget_negative": "#FB7185"}))
+    w("values/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_desc">앱의 요약을 홈 화면에 보여 줍니다</string>
+    <string name="widget_hint">앱을 한 번 열면 여기에 요약이 보여요</string>
+</resources>
+""")
+    w("values-en/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_desc">Shows the app\\'s summary on the home screen</string>
+    <string name="widget_hint">Open the app once to fill this widget</string>
+</resources>
+""")
+    w("drawable/urlapp_widget_bg.xml", """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_bg" />
+    <corners android:radius="22dp" />
+</shape>
+""")
+    rows = "".join(f"""
+    <LinearLayout
+        android:id="@+id/w_row{i}"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+        <TextView
+            android:id="@+id/w_label{i}"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_label"
+            android:textSize="13sp" />
+        <TextView
+            android:id="@+id/w_value{i}"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:textColor="@color/widget_value"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>""" for i in range(1, 5))
+    w("layout/urlapp_widget.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/urlapp_widget_bg"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="10dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:importantForAccessibility="no"
+            android:src="@mipmap/ic_launcher" />
+        <TextView
+            android:id="@+id/w_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/app_name"
+            android:textColor="@color/widget_title"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+    </LinearLayout>{rows}
+    <TextView
+        android:id="@+id/w_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="@string/widget_hint"
+        android:textColor="@color/widget_note"
+        android:textSize="10sp" />
+</LinearLayout>
+""")
+    w("xml/urlapp_widget_info.xml", """<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_desc"
+    android:initialLayout="@layout/urlapp_widget"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="140dp"
+    android:minResizeHeight="90dp"
+    android:previewLayout="@layout/urlapp_widget"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />
+""")
+
+
+def widget_asset(script_text):
+    """사이트별 위젯 스크립트(함수 하나)를 실행기에 넣는다."""
+    body = script_text.strip().rstrip(";").strip()
+    if not body:
+        raise Fail("위젯 스크립트가 비어 있습니다.")
+    runner = WIDGET_RUNNER.read_text(encoding="utf-8")
+    if runner.count(WIDGET_SLOT) != 1:
+        raise Fail("widget-runner.js 의 자리 표시가 없습니다.")
+    return runner.replace(WIDGET_SLOT, "(\n" + body + "\n)")
+
+
 def shell_dex(home, tc, javac, java, workdir):
     """껍데기 코드는 모든 앱이 같으므로 한 번만 컴파일해 둔다 (소스·도구가 바뀌면 다시)."""
     p = tool_paths(tc)
-    key = hashlib.sha256(SHELL_SRC.read_bytes() + TOOLCHAIN_ID.encode()).hexdigest()[:16]
+    sources = sorted(SHELL_DIR.glob("*.java"))
+    key = hashlib.sha256(b"".join(f.read_bytes() for f in sources) + TOOLCHAIN_ID.encode()).hexdigest()[:16]
     cache = home / "cache" / f"shell-{key}"
     dex = cache / "classes.dex"
     if dex.is_file():
@@ -761,7 +916,7 @@ def shell_dex(home, tc, javac, java, workdir):
     classes.mkdir()
     boot = os.pathsep.join([str(p["android_jar"]), str(p["lambda_stubs"])])
     run([javac, "-source", "8", "-target", "8", "-Xlint:-options", "-encoding", "UTF-8",
-         "-bootclasspath", boot, "-d", classes, SHELL_SRC], workdir, "껍데기 자바 컴파일(javac)")
+         "-bootclasspath", boot, "-d", classes, *sources], workdir, "껍데기 자바 컴파일(javac)")
     class_files = sorted(classes.rglob("*.class"))
     out = workdir / "dex"
     out.mkdir()
@@ -826,7 +981,7 @@ def save_registry(home, reg):
     tmp.replace(p)
 
 
-EXPLICIT_KEYS = ("name", "icon", "icon_color", "color", "bg", "orientation", "external", "allow_host", "desktop",
+EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto"}
@@ -844,6 +999,8 @@ def cmd_build(args):
     url = normalize_url(args.url)
     if args.icon and args.icon not in ("auto", "letter") and not re.match(r"^https?://", args.icon):
         args.icon = str(Path(args.icon).expanduser().resolve())  # 다시 만들 때도 찾을 수 있게 절대 경로로 기억
+    if args.widget and args.widget != "none":
+        args.widget = str(Path(args.widget).expanduser().resolve())
     reg = load_registry(home)
     prev_id = next((k for k, v in reg["apps"].items() if v.get("url") == url), None)
     app_id = check_app_id(args.id or prev_id or derive_app_id(url))
@@ -877,6 +1034,22 @@ def cmd_build(args):
         icon_color = parse_css_color(opt["icon_color"] or "")
         if opt["icon_color"] and not icon_color:
             raise Fail(f"--icon-color 형식이 아닙니다: {opt['icon_color']} (예: #4F46E5)")
+        accent = parse_css_color(opt["accent"] or "")
+        if opt["accent"] and not accent:
+            raise Fail(f"--accent 형식이 아닙니다: {opt['accent']} (예: #4F46E5)")
+
+        # 위젯 (사이트별 위젯 스크립트가 있을 때만)
+        widget_js = None
+        if opt["widget"] and opt["widget"] != "none":
+            ws = Path(opt["widget"]).expanduser()
+            if not ws.is_file():
+                raise Fail(f"위젯 스크립트 파일이 없습니다: {ws}")
+            keep_w = home / "widgets" / (app_id + ".js")
+            if ws.resolve() != keep_w.resolve():
+                keep_w.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ws, keep_w)
+            explicit["widget"] = str(keep_w)
+            widget_js = widget_asset(keep_w.read_text(encoding="utf-8"))
 
         # 아이콘
         icon_choice = opt["icon"] or "auto"
@@ -917,6 +1090,9 @@ def cmd_build(args):
         if icon_info["used"] == "letter":
             icon_from = "글자 아이콘" + (" (그림이 64px 보다 작거나 읽을 수 없는 형식이라)" if src else "")
         write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"])
+        widget_accent = accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8")
+        if widget_js:
+            write_widget_resources(res, widget_accent)
 
         # 설정과 매니페스트
         version_code = int(prev.get("version_code", 0)) + 1
@@ -925,13 +1101,16 @@ def cmd_build(args):
                "theme_color": theme, "background_color": bg,
                "theme_color_dark": None if opt["color"] else site["theme_dark"],
                "desktop": bool(opt["desktop"]),
-               "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"]}
+               "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"],
+               "accent": accent}
         assets = workdir / "assets"
         assets.mkdir()
         (assets / "urlapp.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
         shutil.copyfile(DOWNLOAD_JS, assets / "urlapp-download.js")
+        if widget_js:
+            (assets / "urlapp-widget.js").write_text(widget_js, encoding="utf-8")
         cleartext = urllib.parse.urlsplit(url).scheme == "http"
-        (workdir / "AndroidManifest.xml").write_text(manifest_xml(app_id, cleartext, opt["orientation"]),
+        (workdir / "AndroidManifest.xml").write_text(manifest_xml(app_id, cleartext, opt["orientation"], bool(widget_js)),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -968,7 +1147,7 @@ def cmd_build(args):
         reg["apps"][app_id] = {
             "url": url, "name": name, "version_code": version_code, "version_name": version_name,
             "theme_color": theme, "background_color": bg, "icon_from": icon_from, "explicit": explicit,
-            "apk": str(apk), "apk_sha256": file_hashes(apk)[1], "cert_sha256": digest,
+            "apk": str(apk), "apk_sha256": file_hashes(apk)[1], "cert_sha256": digest, "widget": bool(widget_js),
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S")}
         save_registry(home, reg)
     finally:
@@ -978,6 +1157,8 @@ def cmd_build(args):
     say(f"완성: {apk} ({apk.stat().st_size / 1024:.0f}KB)")
     say(f"  이름 {name} | id {app_id} | 버전 {version_name} (코드 {version_code}) | 안드로이드 7.0 이상")
     say(f"  색 {theme} / 배경 {bg} | 아이콘: {icon_from}")
+    if widget_js:
+        say("  홈 화면 위젯: 있음 (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
     say(f"  다른 사이트 링크: {'브라우저로' if opt['external'] == 'browser' else '앱 안에서'} | 앱 안에서 여는 사이트: "
         + ", ".join(cfg["hosts"]))
     say("설치: 이 APK 를 태블릿·폰으로 옮겨 파일을 누르고 '출처를 알 수 없는 앱 설치'를 그 앱(파일 관리자 등)에만 허용한다."
@@ -1152,6 +1333,33 @@ def cmd_selftest(args):
             build(base + "/wide", "--no-fetch")
             check("빌드 4: 원본을 지워도 다시 만들기 됨",
                   load_registry(tmp_home)["apps"][id4]["version_code"] == 2)
+
+            wjs = site / "w.js"
+            wjs.write_text("// 시험용 위젯\nasync function () { return {title: 'T', rows: [{label: 'a', value: '1'}]}; };",
+                           encoding="utf-8")
+            build(base + "/widget", "--no-fetch", "--widget", str(wjs), "--accent", "#4f46e5")
+            id5, rec5 = next((k, v) for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/widget"))
+            mf = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec5["apk"]], tmp_home, "xmltree")
+            with zipfile.ZipFile(rec5["apk"]) as z:
+                names5 = set(z.namelist())
+                wasset = z.read("assets/urlapp-widget.js").decode("utf-8")
+            res5 = run([tp["aapt2"], "dump", "resources", rec5["apk"]], tmp_home, "dump resources")
+            check("빌드 5: 위젯 receiver 와 provider 정보", "app.jarvis.urlapp.WidgetProvider" in mf
+                  and "android.appwidget.action.APPWIDGET_UPDATE" in mf and "android.appwidget.provider" in mf)
+            check("빌드 5: 위젯 스크립트가 실행기 안에", WIDGET_SLOT not in wasset and "async function ()" in wasset
+                  and '"__URLAPP_TOKEN__"' in wasset)
+            check("빌드 5: 위젯 화면·밤 색", "layout/urlapp_widget" in res5 and "xml/urlapp_widget_info" in res5
+                  and re.search(r"color/widget_accent\n\s+\(\) #ff4f46e5", res5) is not None
+                  and "(night)" in res5)
+            check("빌드 5: 설정에 강조색", json.loads(zipfile.ZipFile(rec5["apk"]).read("assets/urlapp.json"))["accent"]
+                  == "#4F46E5")
+            build(base + "/widget", "--no-fetch", "--widget", "none")
+            rec6 = load_registry(tmp_home)["apps"][id5]
+            mf6 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec6["apk"]], tmp_home, "xmltree")
+            check("빌드 6: --widget none 이면 위젯이 빠짐", "WidgetProvider" not in mf6 and
+                  "assets/urlapp-widget.js" not in zipfile.ZipFile(rec6["apk"]).namelist())
+            check("위젯 없는 앱에는 위젯 receiver 없음", "WidgetProvider" not in run(
+                [tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec["apk"]], tmp_home, "xmltree"))
         finally:
             srv.shutdown()
             for k, v in old_env.items():
@@ -1178,6 +1386,8 @@ def build_parser():
     b.add_argument("url")
     b.add_argument("--name", help="앱 이름 (기본: 사이트의 이름·제목)")
     b.add_argument("--icon", help="auto(기본, 사이트 아이콘) | letter(글자 아이콘) | 이미지 파일 경로 | 이미지 주소")
+    b.add_argument("--accent", help="강조색 #RRGGBB (진행 막대, 위젯의 수입 같은 강조 숫자). 기본: 아이콘 바탕색 → 테마색")
+    b.add_argument("--widget", help="홈 화면 위젯을 넣는다: 위젯 스크립트(.js) 경로. 'none' 이면 뺀다 (widgets/ 의 예시 참고)")
     b.add_argument("--icon-color", dest="icon_color",
                    help="아이콘 바탕색 #RRGGBB (글자 아이콘·투명한 로고에 적용. 기본: 상태 표시줄 색, 흰색이면 자동 색)")
     b.add_argument("--color", help="상태 표시줄 색 #RRGGBB (기본: 사이트의 theme-color, 없으면 흰색)")
