@@ -825,7 +825,7 @@ def save_registry(home, reg):
     tmp.replace(p)
 
 
-EXPLICIT_KEYS = ("name", "icon", "color", "bg", "orientation", "external", "allow_host", "desktop",
+EXPLICIT_KEYS = ("name", "icon", "icon_color", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto"}
@@ -873,6 +873,9 @@ def cmd_build(args):
             raise Fail(f"--color 형식이 아닙니다: {opt['color']} (예: #1A73E8)")
         if opt["bg"] and not parse_css_color(opt["bg"]):
             raise Fail(f"--bg 형식이 아닙니다: {opt['bg']} (예: #FFFFFF)")
+        icon_color = parse_css_color(opt["icon_color"] or "")
+        if opt["icon_color"] and not icon_color:
+            raise Fail(f"--icon-color 형식이 아닙니다: {opt['icon_color']} (예: #4F46E5)")
 
         # 아이콘
         icon_choice = opt["icon"] or "auto"
@@ -892,12 +895,13 @@ def cmd_build(args):
             if picked:
                 src, masked, icon_from = picked[0], picked[1], picked[2]
                 mode = "maskable" if masked else "image"
-        letter_bg = theme if not is_near_white(theme) else LETTER_PALETTE[
-            int(hashlib.sha1(app_id.encode()).hexdigest(), 16) % len(LETTER_PALETTE)]
+        letter_bg = icon_color or (theme if not is_near_white(theme) else LETTER_PALETTE[
+            int(hashlib.sha1(app_id.encode()).hexdigest(), 16) % len(LETTER_PALETTE)])
         res = workdir / "res"
         res.mkdir()
         # 글자 아이콘은 색 있는 바탕, 투명한 로고 그림은 테마색(흰색이면 흰 바탕) 위에 그린다.
-        icon_cmd = [java, ICON_TOOL, res, letter_candidates(name, host), letter_bg if mode == "letter" else theme, mode]
+        icon_cmd = [java, ICON_TOOL, res, letter_candidates(name, host),
+                    letter_bg if mode == "letter" else (icon_color or theme), mode]
         if src:
             icon_cmd.append(src)
         icon_out = run(icon_cmd, workdir, "아이콘 만들기")
@@ -1105,12 +1109,14 @@ def cmd_selftest(args):
             check("빌드 2: 지정한 옵션은 기억", rec2["explicit"].get("orientation") == "portrait")
 
             build(base + "/other", "--no-fetch", "--name", "@Tom's \"앱\" & <b>", "--icon", "letter",
-                  "--external", "app", "--fullscreen")
+                  "--external", "app", "--fullscreen", "--icon-color", "#4f46e5")
             reg3 = load_registry(tmp_home)
             id3 = next(k for k in reg3["apps"] if k != app_id)
             b3 = badging(tp["aapt2"], Path(reg3["apps"][id3]["apk"]), tmp_home)
             check("빌드 3: 특수문자 이름이 그대로", b3.get("label") == "@Tom's \"앱\" & <b>", str(b3.get("label")))
             check("빌드 3: 글자 아이콘", reg3["apps"][id3]["icon_from"].startswith("글자"))
+            res3 = run([tp["aapt2"], "dump", "resources", reg3["apps"][id3]["apk"]], tmp_home, "dump resources")
+            check("빌드 3: --icon-color 가 아이콘 바탕색", re.search(r"color/icon_bg\n\s+\(\) #ff4f46e5", res3) is not None)
             check("빌드 3: 다른 경로는 다른 id", id3 != app_id)
             check("잘못된 색 거부", raises(lambda: build(base + "/x", "--no-fetch", "--color", "blue-ish")))
         finally:
@@ -1139,6 +1145,8 @@ def build_parser():
     b.add_argument("url")
     b.add_argument("--name", help="앱 이름 (기본: 사이트의 이름·제목)")
     b.add_argument("--icon", help="auto(기본, 사이트 아이콘) | letter(글자 아이콘) | 이미지 파일 경로 | 이미지 주소")
+    b.add_argument("--icon-color", dest="icon_color",
+                   help="아이콘 바탕색 #RRGGBB (글자 아이콘·투명한 로고에 적용. 기본: 상태 표시줄 색, 흰색이면 자동 색)")
     b.add_argument("--color", help="상태 표시줄 색 #RRGGBB (기본: 사이트의 theme-color, 없으면 흰색)")
     b.add_argument("--bg", help="배경색 #RRGGBB (기본: 흰색)")
     b.add_argument("--orientation", choices=["auto", "portrait", "landscape"])
