@@ -2,7 +2,7 @@
 // assets/urlapp-widget.js 로 만들고, 앱이 자기 사이트 페이지(맨 위 화면)에만 넣는다.
 // 위젯 스크립트는 사이트 안에서 돌므로 사이트의 로그인 상태·주소를 그대로 쓴다. 돌려준 값만 앱으로 간다.
 //   돌려줄 값: {title: "...", rows: [{label, value, tone: "pos"|"neg"|""}] (최대 4줄), note: "..."} 또는 null(갱신 안 함)
-// 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(GET 이 아닌 fetch 가 끝난 뒤).
+// 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤).
 (function (token) {
   "use strict";
   if (window.__urlappWidget) return;
@@ -33,7 +33,7 @@
   }
   window.__urlappWidgetRun = run;
 
-  // 사이트가 저장·삭제한 직후(POST·PUT·DELETE 등) 잠시 뒤 다시 읽는다.
+  // 사이트가 저장·삭제한 직후(POST·PUT·PATCH·DELETE) 잠시 뒤 다시 읽는다.
   var timer = null;
   function soon() {
     clearTimeout(timer);
@@ -44,7 +44,7 @@
     window.fetch = function (input, init) {
       var method = (init && init.method) || (input && typeof input === "object" && input.method) || "GET";
       var p = origFetch.apply(this, arguments);
-      if (String(method).toUpperCase() !== "GET") {
+      if (/^(POST|PUT|PATCH|DELETE)$/.test(String(method).toUpperCase())) { // 읽기(GET·HEAD)는 빼야 스스로 반복하지 않는다
         p.then(soon, function () {});
       }
       return p;

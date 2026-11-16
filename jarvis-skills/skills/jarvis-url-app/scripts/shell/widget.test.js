@@ -9,6 +9,9 @@ const { chromium } = require("playwright");
 
 const RUNNER = fs.readFileSync(path.join(__dirname, "widget-runner.js"), "utf8");
 const LEDGER = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "smart-ledger.js"), "utf8");
+const AJ = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "ajgahub-board.js"), "utf8");
+const FAKE_REF = "abcdefghijklmnopqrst"; // 지어낸 Supabase 프로젝트·키·토큰
+const FAKE_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.fakefakefake";
 const SLOT = "(/*__WIDGET_FN__*/ null)";
 const ASSET = RUNNER.replace(SLOT, "(\n" + LEDGER.trim().replace(/;\s*$/, "") + "\n)"); // url_app.py 의 widget_asset 과 같게
 const TOKEN = "t0k3n";
@@ -32,6 +35,14 @@ function check(label, cond, detail) {
       summary = { ...summary, variable: summary.variable + 6560 }; // 메가커피 한 잔 지출 추가
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end("{}");
+    }
+    if (req.url === "/aj/index.js") {
+      res.writeHead(200, { "Content-Type": "text/javascript" });
+      return res.end(`const z9="https://${FAKE_REF}.supabase.co",k="${FAKE_KEY}";window.__siteLoaded=1;`);
+    }
+    if (req.url === "/aj/") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      return res.end('<!doctype html><html><head><script type="module" src="/aj/index.js"></script></head><body>AJ</body></html>');
     }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end("<!doctype html><html><body>가계부</body></html>");
@@ -72,9 +83,9 @@ function check(label, cond, detail) {
   check("저장 직후 다시 읽어 지출이 바뀜", w2.rows[1].value === "2,006,560원", w2.rows);
   // GET 은 다시 읽기를 부르지 않는다
   const before = await page.evaluate(() => __w.length);
-  await page.evaluate(() => fetch("/api/summary?x=1"));
+  await page.evaluate(() => Promise.all([fetch("/api/summary?x=1"), fetch("/api/summary?x=2", { method: "HEAD" })]));
   await page.waitForTimeout(2200);
-  check("GET 요청은 다시 읽기를 부르지 않음", (await page.evaluate(() => __w.length)) === before);
+  check("GET·HEAD 요청은 다시 읽기를 부르지 않음", (await page.evaluate(() => __w.length)) === before);
 
   // 두 번 넣어도 한 번만
   await page.evaluate(ASSET.replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
@@ -95,6 +106,49 @@ function check(label, cond, detail) {
   const clipped = await page2.evaluate(() => __w[0]);
   check("제목 30자·4줄·값 24자로 자름", clipped && clipped.title && clipped.title.length === 30 && clipped.rows.length === 4
     && clipped.rows[0].value.length === 24, clipped);
+
+  // AJ GA HUB: 팀 게시판 위젯
+  const aj = await browser.newPage();
+  const sb = [];
+  const d0 = new Date();
+  const iso = (daysAgo, h) => new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() - daysAgo, h, 0, 0).toISOString();
+  await aj.route(`https://${FAKE_REF}.supabase.co/**`, (route) => {
+    const req = route.request();
+    sb.push({ url: req.url(), apikey: req.headers()["apikey"], auth: req.headers()["authorization"] });
+    route.fulfill({ status: 200, contentType: "application/json", headers: { "Access-Control-Allow-Origin": "*" },
+      body: JSON.stringify([
+        { title: "11월 성과 공유회 결과", category: "achievement", author_name: "A", created_at: iso(0, 10) },
+        { title: "연차 사용 안내", category: "vacation", author_name: "B", created_at: iso(0, 9) },
+        { title: "부산 출장", category: "business_trip", author_name: "C", created_at: iso(1, 15) },
+        { title: "", category: "unknown", author_name: "D", created_at: iso(5, 11) },
+        { title: "다섯 번째 글", category: "story", author_name: "E", created_at: iso(6, 11) },
+      ]) });
+  });
+  await aj.goto(base + "aj/");
+  await aj.waitForFunction(() => window.__siteLoaded === 1);
+  await aj.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  const ajAsset = RUNNER.replace(SLOT, "(\n" + AJ.trim().replace(/;\s*$/, "") + "\n)");
+  await aj.evaluate(ajAsset.replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await aj.waitForTimeout(600);
+  check("AJ: 로그인 전에는 Supabase 에 요청하지 않음", sb.length === 0 && (await aj.evaluate(() => __w.length)) === 0, sb);
+  await aj.evaluate((ref) => {
+    localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify({ access_token: "user-session-jwt" }));
+    window.__urlappWidgetRun();
+  }, FAKE_REF);
+  await aj.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  const aw = await aj.evaluate(() => __w[0]);
+  check("AJ: 사용자 세션과 사이트의 공개 키로 요청", sb.length === 1 && sb[0].apikey === FAKE_KEY
+    && sb[0].auth === "Bearer user-session-jwt", sb);
+  check("AJ: 최신순 20개만 필요한 열로", sb[0] && sb[0].url.endsWith(
+    "/rest/v1/team_board?select=title,category,author_name,created_at&order=created_at.desc&limit=20"), sb[0] && sb[0].url);
+  const o = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() - 5);
+  check("AJ: 분류 · 제목, 오늘/어제/날짜", JSON.stringify(aw.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
+    ["성과 · 11월 성과 공유회 결과", "오늘", "pos"], ["휴가 · 연차 사용 안내", "오늘", "pos"],
+    ["출장 · 부산 출장", "어제", ""], ["(제목 없음)", `${o.getMonth() + 1}/${o.getDate()}`, ""]]), aw.rows);
+  check("AJ: 제목과 오늘 새 글 수", aw.title === "AJ GA HUB 팀 게시판" && aw.note === "오늘 새 글 2개", aw);
 
   await browser.close();
   server.close();
