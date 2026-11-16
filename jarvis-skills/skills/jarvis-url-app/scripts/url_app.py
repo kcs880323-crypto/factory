@@ -36,6 +36,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SHELL_SRC = HERE / "shell" / "MainActivity.java"
+DOWNLOAD_JS = HERE / "shell" / "download.js"  # 페이지가 만든 파일(blob:) 받기 도우미. 앱마다 assets 로 들어간다
 ICON_TOOL = HERE / "UrlAppIcon.java"
 SHELL_CLASS = "app.jarvis.urlapp.MainActivity"
 MIN_SDK = 24      # 안드로이드 7.0
@@ -889,6 +890,13 @@ def cmd_build(args):
                 src = Path(icon_choice).expanduser()
                 if not src.is_file():
                     raise Fail(f"아이콘 파일이 없습니다: {src}")
+                # 다시 만들 때도 쓸 수 있게 작업 폴더에 사본을 두고 그 경로를 기억한다 (원본이 지워져도 되도록)
+                keep = home / "icons" / (app_id + (src.suffix.lower() or ".img"))
+                if src.resolve() != keep.resolve():
+                    keep.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(src, keep)
+                    src = keep
+                explicit["icon"] = str(keep)
             mode, icon_from = "image", icon_choice
         elif icon_choice == "auto" and site["icons"]:
             picked = pick_icon(site["icons"], workdir)
@@ -921,6 +929,7 @@ def cmd_build(args):
         assets = workdir / "assets"
         assets.mkdir()
         (assets / "urlapp.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
+        shutil.copyfile(DOWNLOAD_JS, assets / "urlapp-download.js")
         cleartext = urllib.parse.urlsplit(url).scheme == "http"
         (workdir / "AndroidManifest.xml").write_text(manifest_xml(app_id, cleartext, opt["orientation"]),
                                                      encoding="utf-8")
@@ -995,6 +1004,15 @@ def _png(size, rgba_fn):
     def chunk(t, d):
         return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+
+
+def _png_rect(w, h, rgba):
+    import zlib
+    raw = b"".join(b"\x00" + bytes(rgba) * w for _ in range(h))
+    def chunk(t, d):
+        return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xFFFFFFFF)
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
 
 
@@ -1094,7 +1112,8 @@ def cmd_selftest(args):
             with zipfile.ZipFile(apk) as z:
                 names = set(z.namelist())
                 cfg = json.loads(z.read("assets/urlapp.json"))
-            check("빌드 1: dex·설정·아이콘 포함", {"classes.dex", "assets/urlapp.json", "resources.arsc",
+            check("빌드 1: dex·설정·다운로드 도우미·아이콘 포함", {"classes.dex", "assets/urlapp.json",
+                                                    "assets/urlapp-download.js", "resources.arsc",
                                             "AndroidManifest.xml"} <= names and any("ic_launcher_fg" in n for n in names))
             check("빌드 1: 설정의 주소·호스트", cfg["url"] == base + "/app/" and cfg["hosts"] == ["127.0.0.1"], str(cfg))
             check("빌드 1: 정렬", not check_alignment(apk))
@@ -1119,6 +1138,20 @@ def cmd_selftest(args):
             check("빌드 3: --icon-color 가 아이콘 바탕색", re.search(r"color/icon_bg\n\s+\(\) #ff4f46e5", res3) is not None)
             check("빌드 3: 다른 경로는 다른 id", id3 != app_id)
             check("잘못된 색 거부", raises(lambda: build(base + "/x", "--no-fetch", "--color", "blue-ish")))
+
+            wide = site / "wide.png"  # 가로로 긴 꽉 찬 그림 (사용자가 준 사진·일러스트 같은)
+            wide.write_bytes(_png_rect(300, 160, (40, 140, 200, 255)))
+            build(base + "/wide", "--no-fetch", "--icon", str(wide))
+            reg4 = load_registry(tmp_home)
+            id4, rec4 = next((k, v) for k, v in reg4["apps"].items() if v["url"].endswith("/wide"))
+            kept = Path(rec4["explicit"]["icon"])
+            check("빌드 4: 아이콘 파일은 작업 폴더에 사본으로 기억",
+                  kept.parent == tmp_home / "icons" and kept.read_bytes() == wide.read_bytes(), str(kept))
+            check("빌드 4: 가로 그림도 글자 대신 그림으로", not rec4["icon_from"].startswith("글자"), rec4["icon_from"])
+            wide.unlink()
+            build(base + "/wide", "--no-fetch")
+            check("빌드 4: 원본을 지워도 다시 만들기 됨",
+                  load_registry(tmp_home)["apps"][id4]["version_code"] == 2)
         finally:
             srv.shutdown()
             for k, v in old_env.items():

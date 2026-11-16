@@ -55,7 +55,8 @@ public class UrlAppIcon {
         boolean opaque = false;
         boolean maskable = mode.equals("maskable");
         if (src != null) {
-            src = toSquareArgb(src);
+            // 꽉 찬 그림(사진·일러스트)이 정사각형이 아니면 가운데를 정사각형으로 잘라 쓴다. 투명한 로고는 여백을 붙인다.
+            src = (src.getWidth() != src.getHeight() && isOpaque(src)) ? centerCrop(src) : toSquareArgb(src);
             opaque = isOpaque(src);
             if (opaque) bg = borderColor(src);
         }
@@ -197,12 +198,26 @@ public class UrlAppIcon {
         return out;
     }
 
+    static BufferedImage centerCrop(BufferedImage src) {
+        int s = Math.min(src.getWidth(), src.getHeight());
+        BufferedImage out = new BufferedImage(s, s, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = hq(out);
+        g.drawImage(src, -(src.getWidth() - s) / 2, -(src.getHeight() - s) / 2, null);
+        g.dispose();
+        return out;
+    }
+
     // 테두리 픽셀이 거의 다 불투명하면 "꽉 찬" 아이콘으로 본다.
     static boolean isOpaque(BufferedImage img) {
-        int s = img.getWidth(), total = 0, clear = 0;
-        for (int i = 0; i < s; i++) {
-            int[] px = {img.getRGB(i, 0), img.getRGB(i, s - 1), img.getRGB(0, i), img.getRGB(s - 1, i)};
-            for (int p : px) {
+        int w = img.getWidth(), h = img.getHeight(), total = 0, clear = 0;
+        for (int x = 0; x < w; x++) {
+            for (int p : new int[] {img.getRGB(x, 0), img.getRGB(x, h - 1)}) {
+                total++;
+                if ((p >>> 24) < 250) clear++;
+            }
+        }
+        for (int y = 0; y < h; y++) {
+            for (int p : new int[] {img.getRGB(0, y), img.getRGB(w - 1, y)}) {
                 total++;
                 if ((p >>> 24) < 250) clear++;
             }

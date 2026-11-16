@@ -8,6 +8,8 @@ import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -18,6 +20,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -26,6 +30,7 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.URLUtil;
@@ -47,11 +52,22 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainActivity extends Activity {
     static final String ACTION_HOME = "app.jarvis.urlapp.action.HOME";
@@ -80,6 +96,13 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private Object backCallback; // API 33+ 의 OnBackInvokedCallback (옛 기기에서 클래스를 건드리지 않으려고 Object)
     private boolean backRegistered;
+
+    // 페이지가 만든 파일(blob:, data:) 받기. 도우미 스크립트(assets/urlapp-download.js)는 자기 사이트의 맨 위 화면에만
+    // 넣고, 앱과의 통신은 실행할 때마다 새로 만드는 토큰이 있어야 한다 (다른 사이트의 iframe 은 토큰을 모른다).
+    private static final long MAX_DOWNLOAD = 200L * 1024 * 1024;
+    private final String dlToken = newToken();
+    private String downloadJs;
+    private final HashMap<String, PendingFile> pendingFiles = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle state) {
@@ -138,15 +161,29 @@ public class MainActivity extends Activity {
     // ---------- 설정 ----------
 
     private JSONObject loadConfig() {
-        try (InputStream in = getAssets().open("urlapp.json")) {
+        try {
+            return new JSONObject(readAsset("urlapp.json"));
+        } catch (Exception e) {
+            throw new IllegalStateException("assets/urlapp.json 을 읽을 수 없습니다", e);
+        }
+    }
+
+    private String readAsset(String name) throws IOException {
+        try (InputStream in = getAssets().open(name)) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
             while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            return new JSONObject(new String(out.toByteArray(), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            throw new IllegalStateException("assets/urlapp.json 을 읽을 수 없습니다", e);
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
         }
+    }
+
+    private static String newToken() {
+        byte[] b = new byte[24];
+        new SecureRandom().nextBytes(b);
+        StringBuilder sb = new StringBuilder();
+        for (byte x : b) sb.append(String.format(Locale.ROOT, "%02x", x));
+        return sb.toString();
     }
 
     private static int parseColor(String s, int fallback) {
@@ -286,6 +323,13 @@ public class MainActivity extends Activity {
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(web, true);
 
+        try {
+            downloadJs = readAsset("urlapp-download.js");
+            web.addJavascriptInterface(new Bridge(), "UrlAppBridge");
+        } catch (IOException e) {
+            downloadJs = null; // 옛 빌드: 도우미 없이 동작
+        }
+
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
@@ -300,6 +344,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView v, String url) {
                 if (!mainFrameError && errorView != null) errorView.setVisibility(View.GONE);
+                injectDownloadHelper(url);
                 updateBackHandling();
             }
 
@@ -538,18 +583,34 @@ public class MainActivity extends Activity {
     // ---------- 다운로드 ----------
 
     private void download(String url, String ua, String disposition, String mime) {
+        if (url != null && (url.startsWith("blob:") || url.startsWith("data:"))) {
+            // 도우미가 클릭을 놓친 경우(문서에 붙지 않은 링크 등): 페이지 안에서 파일을 꺼내 저장한다.
+            String js = "(function(){if(window.__urlappSave){window.__urlappSave(" + JSONObject.quote(url) + ","
+                    + JSONObject.quote(nameFromDisposition(disposition)) + ");return 'ok';}return 'no';})()";
+            web.evaluateJavascript(js, r -> {
+                if (!"\"ok\"".equals(r)) {
+                    toast(t("이 파일은 앱 안에서 받을 수 없어요. 브라우저에서 열어 주세요.",
+                            "This file can't be downloaded in the app. Open it in a browser."));
+                }
+            });
+            return;
+        }
         if (url == null || !(url.startsWith("https://") || url.startsWith("http://"))) {
             toast(t("이 파일은 앱 안에서 받을 수 없어요. 브라우저에서 열어 주세요.",
                     "This file can't be downloaded in the app. Open it in a browser."));
             return;
         }
-        String name = URLUtil.guessFileName(url, disposition, mime);
+        enqueueDownload(url, ua, URLUtil.guessFileName(url, disposition, mime), mime);
+    }
+
+    private void enqueueDownload(String url, String ua, String fileName, String mime) {
+        String name = safeFileName(fileName, mime);
         try {
             DownloadManager.Request r = new DownloadManager.Request(Uri.parse(url));
             String cookie = CookieManager.getInstance().getCookie(url);
             if (cookie != null) r.addRequestHeader("Cookie", cookie);
             if (ua != null) r.addRequestHeader("User-Agent", ua);
-            if (mime != null && !mime.isEmpty()) r.setMimeType(mime);
+            r.setMimeType(mimeFor(name, mime));
             r.setTitle(name);
             r.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             if (Build.VERSION.SDK_INT >= 29) {
@@ -561,6 +622,229 @@ public class MainActivity extends Activity {
             toast(t("내려받는 중: ", "Downloading: ") + name);
         } catch (RuntimeException e) {
             openExternal(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        }
+    }
+
+    private void injectDownloadHelper(String url) {
+        if (downloadJs == null || url == null || web == null) return;
+        if (!isOwnHost(Uri.parse(url).getHost())) return; // 자기 사이트에만
+        web.evaluateJavascript(downloadJs.replace("\"__URLAPP_TOKEN__\"", JSONObject.quote(dlToken)), null);
+    }
+
+    private static final Pattern DISPOSITION_NAME = Pattern.compile(
+            "filename\\*\\s*=\\s*(?:UTF-8'')?([^;]+)|filename\\s*=\\s*\"?([^\";]+)\"?", Pattern.CASE_INSENSITIVE);
+
+    static String nameFromDisposition(String disposition) {
+        if (disposition == null) return "";
+        Matcher m = DISPOSITION_NAME.matcher(disposition);
+        if (!m.find()) return "";
+        String v = m.group(1) != null ? m.group(1) : m.group(2);
+        try {
+            return Uri.decode(v.trim());
+        } catch (RuntimeException e) {
+            return v.trim();
+        }
+    }
+
+    /** 폴더 구분자·제어 문자를 빼고, 확장자가 없으면 MIME 으로 붙인다. 비어 있으면 날짜 이름. */
+    static String safeFileName(String name, String mime) {
+        String n = name == null ? "" : name.replaceAll("[\\\\/:*?\"<>|\\x00-\\x1f\\x7f]", "_").trim();
+        while (n.startsWith(".")) n = n.substring(1);
+        if (n.length() > 120) n = n.substring(n.length() - 120);
+        if (n.isEmpty()) n = "download-" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date());
+        if (n.lastIndexOf('.') <= 0 && mime != null && !mime.isEmpty()) {
+            String ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime.split(";")[0].trim());
+            if (ext != null) n += "." + ext;
+        }
+        return n;
+    }
+
+    static String mimeFor(String fileName, String mime) {
+        int dot = fileName.lastIndexOf('.');
+        if (dot > 0) {
+            String byExt = MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                    fileName.substring(dot + 1).toLowerCase(Locale.ROOT));
+            if (byExt != null) return byExt;
+        }
+        if (mime != null && !mime.trim().isEmpty()) return mime.split(";")[0].trim();
+        return "application/octet-stream";
+    }
+
+    private static final class PendingFile {
+        final File tmp;
+        final FileOutputStream out;
+        final String name;
+        final String mime;
+        long written;
+
+        PendingFile(File tmp, String name, String mime) throws IOException {
+            this.tmp = tmp;
+            this.out = new FileOutputStream(tmp);
+            this.name = name;
+            this.mime = mime;
+        }
+
+        void discard() {
+            try {
+                out.close();
+            } catch (IOException ignored) {
+                // 지우기 전 닫기 실패는 무시
+            }
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+        }
+    }
+
+    /** 다운로드 도우미(urlapp-download.js)만 부르는 통로. 모든 호출에 토큰이 맞아야 한다. 호출은 웹 화면의 별도 스레드에서 온다. */
+    private final class Bridge {
+        @JavascriptInterface
+        public String begin(String token, String name, String mime, double size) {
+            if (!dlToken.equals(token)) return "";
+            if (size > MAX_DOWNLOAD) {
+                runOnUiThread(() -> toast(t("파일이 너무 커서(200MB 초과) 앱에서 받을 수 없어요.",
+                        "The file is too large (over 200MB) to save in the app.")));
+                return "";
+            }
+            try {
+                File dir = new File(getCacheDir(), "urlapp-downloads");
+                if (!dir.isDirectory() && !dir.mkdirs()) return "";
+                String id = newToken().substring(0, 16);
+                PendingFile f = new PendingFile(new File(dir, id + ".part"), name, mime);
+                synchronized (pendingFiles) {
+                    pendingFiles.put(id, f);
+                }
+                return id;
+            } catch (IOException e) {
+                return "";
+            }
+        }
+
+        @JavascriptInterface
+        public boolean chunk(String token, String id, String base64) {
+            if (!dlToken.equals(token)) return false;
+            PendingFile f;
+            synchronized (pendingFiles) {
+                f = pendingFiles.get(id);
+            }
+            if (f == null) return false;
+            try {
+                byte[] b = Base64.decode(base64, Base64.DEFAULT);
+                f.written += b.length;
+                if (f.written > MAX_DOWNLOAD) throw new IOException("too large");
+                f.out.write(b);
+                return true;
+            } catch (IOException | IllegalArgumentException e) {
+                drop(id);
+                runOnUiThread(() -> toast(t("파일을 저장하지 못했어요.", "Couldn't save the file.")));
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public void end(String token, String id) {
+            if (!dlToken.equals(token)) return;
+            PendingFile f;
+            synchronized (pendingFiles) {
+                f = pendingFiles.remove(id);
+            }
+            if (f == null) return;
+            try {
+                f.out.close();
+                String name = safeFileName(f.name, f.mime);
+                String where = saveToDownloads(f.tmp, name, mimeFor(name, f.mime));
+                runOnUiThread(() -> toast(t("다운로드 폴더에 저장했어요: ", "Saved to Downloads: ") + where));
+            } catch (IOException | RuntimeException e) {
+                runOnUiThread(() -> toast(t("파일을 저장하지 못했어요.", "Couldn't save the file.")));
+            } finally {
+                //noinspection ResultOfMethodCallIgnored
+                f.tmp.delete();
+            }
+        }
+
+        @JavascriptInterface
+        public void fail(String token, String message) {
+            if (!dlToken.equals(token)) return;
+            runOnUiThread(() -> toast(t("파일을 저장하지 못했어요.", "Couldn't save the file.")));
+        }
+
+        /** 다른 주소의 &lt;a download&gt;: 사이트가 준 이름으로 다운로드 관리자에 맡긴다. */
+        @JavascriptInterface
+        public void download(String token, String url, String name) {
+            if (!dlToken.equals(token) || url == null) return;
+            if (!(url.startsWith("https://") || url.startsWith("http://"))) return;
+            runOnUiThread(() -> {
+                if (web == null) return;
+                String fileName = name == null || name.isEmpty() ? URLUtil.guessFileName(url, null, null) : name;
+                enqueueDownload(url, web.getSettings().getUserAgentString(), fileName, null);
+            });
+        }
+
+        /** window.open(주소, "_blank") 대신: 자기 사이트면 앱 안에서, 다른 사이트면 브라우저로. */
+        @JavascriptInterface
+        public void openUrl(String token, String url) {
+            if (!dlToken.equals(token) || url == null) return;
+            if (!(url.startsWith("https://") || url.startsWith("http://"))) return;
+            runOnUiThread(() -> {
+                if (web == null) return;
+                Uri u = Uri.parse(url);
+                if (isOwnHost(u.getHost()) || !linksToBrowser) web.loadUrl(url);
+                else openExternal(new Intent(Intent.ACTION_VIEW, u));
+            });
+        }
+
+        private void drop(String id) {
+            PendingFile f;
+            synchronized (pendingFiles) {
+                f = pendingFiles.remove(id);
+            }
+            if (f != null) f.discard();
+        }
+    }
+
+    /** 임시 파일을 '다운로드' 폴더로 옮긴다. 안드로이드 10+ 는 권한 없이 MediaStore 로, 그 아래는 앱 전용 폴더로. */
+    private String saveToDownloads(File src, String name, String mime) throws IOException {
+        if (Build.VERSION.SDK_INT >= 29) return Api29.saveToDownloads(getContentResolver(), src, name, mime);
+        File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (dir == null) dir = new File(getFilesDir(), "Download");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("no download folder");
+        File out = new File(dir, name);
+        int dot = name.lastIndexOf('.');
+        for (int k = 1; out.exists() && k < 1000; k++) {
+            out = new File(dir, dot > 0 ? name.substring(0, dot) + " (" + k + ")" + name.substring(dot) : name + " (" + k + ")");
+        }
+        try (InputStream in = new FileInputStream(src); OutputStream os = new FileOutputStream(out)) {
+            copy(in, os);
+        }
+        return out.getAbsolutePath();
+    }
+
+    static void copy(InputStream in, OutputStream out) throws IOException {
+        byte[] buf = new byte[65536];
+        int n;
+        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+    }
+
+    /** 안드로이드 10 에서 생긴 MediaStore.Downloads 는 여기서만 쓴다. */
+    private static final class Api29 {
+        static String saveToDownloads(ContentResolver cr, File src, String name, String mime) throws IOException {
+            ContentValues v = new ContentValues();
+            v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            v.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+            v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            v.put(MediaStore.MediaColumns.IS_PENDING, 1);
+            Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            if (uri == null) throw new IOException("MediaStore insert failed");
+            try (InputStream in = new FileInputStream(src); OutputStream out = cr.openOutputStream(uri)) {
+                if (out == null) throw new IOException("MediaStore open failed");
+                copy(in, out);
+            } catch (IOException | RuntimeException e) {
+                cr.delete(uri, null, null);
+                throw e;
+            }
+            v.clear();
+            v.put(MediaStore.MediaColumns.IS_PENDING, 0);
+            cr.update(uri, v, null, null);
+            return Environment.DIRECTORY_DOWNLOADS + "/" + name;
         }
     }
 
@@ -691,6 +975,10 @@ public class MainActivity extends Activity {
         if (fileCallback != null) {
             fileCallback.onReceiveValue(null);
             fileCallback = null;
+        }
+        synchronized (pendingFiles) {
+            for (PendingFile f : pendingFiles.values()) f.discard();
+            pendingFiles.clear();
         }
         if (web != null) {
             content.removeView(web);
