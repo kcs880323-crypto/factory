@@ -5,6 +5,7 @@ package app.jarvis.urlapp;
 // assets/urlapp.json 에서 읽으므로 이 코드는 한 번만 컴파일해 모든 앱이 같이 쓴다.
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
@@ -72,6 +73,7 @@ import java.util.regex.Pattern;
 public class MainActivity extends Activity {
     static final String ACTION_HOME = "app.jarvis.urlapp.action.HOME";
     static final String ACTION_BROWSER = "app.jarvis.urlapp.action.BROWSER";
+    static final String ACTION_CARDS = "app.jarvis.urlapp.action.CARDS"; // 카드 자동 등록 설정 (그 기능이 있는 앱만)
     private static final int REQ_FILES = 41;
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT;
 
@@ -152,7 +154,8 @@ public class MainActivity extends Activity {
         setupWebView();
 
         if (state == null) {
-            if (!handleShortcut(getIntent())) web.loadUrl(startUrl);
+            if (!handleShortcut(getIntent()) || ACTION_CARDS.equals(getIntent().getAction())) web.loadUrl(startUrl);
+            maybeOfferCards();
         } else if (web.restoreState(state) == null) { // 화면 회전·다크 모드 전환 뒤에는 보던 페이지를 되살린다
             web.loadUrl(startUrl);
         }
@@ -963,6 +966,10 @@ public class MainActivity extends Activity {
             web.loadUrl(startUrl);
             return true;
         }
+        if (ACTION_CARDS.equals(action) && CardEngine.available(this)) {
+            startActivity(new Intent(this, CardSettingsActivity.class));
+            return true;
+        }
         if (ACTION_BROWSER.equals(action)) {
             String current = web.getUrl();
             openExternal(new Intent(Intent.ACTION_VIEW, Uri.parse(current != null ? current : startUrl)));
@@ -978,6 +985,24 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (web != null) web.onResume();
+        if (CardEngine.available(this)) CardEngine.get(this).flushAsync(); // 못 보낸 카드 결제가 있으면 지금
+    }
+
+    /** 카드 자동 등록이 들어 있는 앱: 처음 한 번 설정할지 묻는다. */
+    private void maybeOfferCards() {
+        if (!CardEngine.available(this)) return;
+        CardStore store = CardEngine.get(this).store;
+        if (store.owner() != null || store.prompted()) return;
+        store.setPrompted();
+        new AlertDialog.Builder(this)
+                .setTitle(t("카드 결제 자동 등록", "Card payment auto-entry"))
+                .setMessage(t("카드 결제 알림을 읽어 가계부에 바로 등록할까요? 담당자와 알림 접근 권한을 정하면 시작해요. "
+                                + "(앱 아이콘을 길게 눌러 '카드 자동 등록'에서 언제든 바꿀 수 있어요)",
+                        "Read card payment notifications and add them to the ledger automatically?"))
+                .setPositiveButton(t("설정하기", "Set up"),
+                        (d, w) -> startActivity(new Intent(this, CardSettingsActivity.class)))
+                .setNegativeButton(t("나중에", "Later"), null)
+                .show();
     }
 
     @Override

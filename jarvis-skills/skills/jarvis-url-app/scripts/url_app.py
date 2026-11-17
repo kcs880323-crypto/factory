@@ -643,7 +643,7 @@ def android_string(s):
 
 # ---------------------------------------------------------------- 프로젝트 파일
 
-def manifest_xml(app_id, cleartext, orientation, widget=False):
+def manifest_xml(app_id, cleartext, orientation, widget=False, cards=False):
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
     orient_attr = f'\n            android:screenOrientation="{orient}"' if orient else ""
     # 안드로이드 16 은 큰 화면(태블릿)에서 방향 고정을 무시한다. 고정을 원하면 임시 예외 속성을 넣는다.
@@ -659,10 +659,32 @@ def manifest_xml(app_id, cleartext, orientation, widget=False):
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/urlapp_widget_info" />
         </receiver>""" if widget else ""
+    # 카드 자동 등록: 알림 듣기(사용자가 '알림 접근'을 켜야 동작), 설정 화면, 되돌리기 단추, 다시 보내기 작업
+    card_parts = """
+        <service
+            android:name="app.jarvis.urlapp.CardListenerService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+        <service
+            android:name="app.jarvis.urlapp.CardRetryJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+        <receiver
+            android:name="app.jarvis.urlapp.CardUndoReceiver"
+            android:exported="false" />
+        <activity
+            android:name="app.jarvis.urlapp.CardSettingsActivity"
+            android:exported="false"
+            android:label="@string/sc_cards" />""" if cards else ""
+    card_perm = '\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' if cards else ""
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{app_id}">
-    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.INTERNET" />{card_perm}
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
@@ -683,13 +705,13 @@ def manifest_xml(app_id, cleartext, orientation, widget=False):
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />{prop}
-        </activity>{receiver}
+        </activity>{receiver}{card_parts}
     </application>
 </manifest>
 """
 
 
-def write_resources(res, app_id, name, theme, bg, icon_bg):
+def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False):
     def w(rel, text):
         p = res / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -700,12 +722,14 @@ def write_resources(res, app_id, name, theme, bg, icon_bg):
     <string name="app_name">{android_string(name)}</string>
     <string name="sc_home">처음 화면</string>
     <string name="sc_browser">브라우저에서 열기</string>
+    <string name="sc_cards">카드 자동 등록</string>
 </resources>
 """)
     w("values-en/strings.xml", """<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="sc_home">Home</string>
     <string name="sc_browser">Open in browser</string>
+    <string name="sc_cards">Card auto-entry</string>
 </resources>
 """)
     w("values/colors.xml", f"""<?xml version="1.0" encoding="utf-8"?>
@@ -756,10 +780,44 @@ def write_resources(res, app_id, name, theme, bg, icon_bg):
       '<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">\n'
       + shortcut.format(sid="home", label="sc_home", action="HOME", pkg=app_id, cls=SHELL_CLASS)
       + shortcut.format(sid="browser", label="sc_browser", action="BROWSER", pkg=app_id, cls=SHELL_CLASS)
+      + (shortcut.format(sid="cards", label="sc_cards", action="CARDS", pkg=app_id, cls=SHELL_CLASS) if cards else "")
       + "</shortcuts>\n")
 
 
 # ---------------------------------------------------------------- 빌드
+
+CARD_NOTIFY_ICON = """<?xml version="1.0" encoding="utf-8"?>
+<!-- 카드 자동 등록 알림의 작은 아이콘 (영수증 모양, Material Icons "receipt", Apache-2.0) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M18,17H6v-2h12V17zM18,13H6v-2h12V13zM18,9H6V7h12V9zM3,22l1.5,-1.5L6,22l1.5,-1.5L9,22l1.5,-1.5L12,22l1.5,-1.5L15,22l1.5,-1.5L18,22l1.5,-1.5L21,22V2l-1.5,1.5L18,2l-1.5,1.5L15,2l-1.5,1.5L12,2l-1.5,1.5L9,2L7.5,3.5L6,2L4.5,3.5L3,2V22z" />
+</vector>
+"""
+
+
+def load_cards_config(path):
+    """카드 자동 등록 설정(사이트별 JSON)을 읽고 꼭 필요한 칸을 확인한다."""
+    try:
+        c = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise Fail(f"카드 설정을 읽을 수 없습니다: {path} ({e})")
+    owners = c.get("owners")
+    if not (isinstance(owners, list) and owners and all(isinstance(o, str) and o.strip() for o in owners)):
+        raise Fail("카드 설정의 owners(담당자 목록)가 비었거나 이상합니다.")
+    for k in ("add", "history", "delete"):
+        if not (isinstance(c.get(k), dict) and isinstance(c[k].get("path"), str) and c[k]["path"].startswith("/")):
+            raise Fail(f"카드 설정의 {k}.path 가 없습니다 (/로 시작하는 사이트 안 주소).")
+    if not isinstance(c["add"].get("body"), dict):
+        raise Fail("카드 설정의 add.body 가 없습니다.")
+    d = c.get("default_category")
+    if not (isinstance(d, list) and len(d) == 2):
+        raise Fail("카드 설정의 default_category 는 [대분류, 중분류] 두 칸이어야 합니다.")
+    for r in c.get("rules", []):
+        if not (isinstance(r, dict) and r.get("large") and isinstance(r.get("keywords"), list)):
+            raise Fail(f"카드 설정의 규칙 모양이 이상합니다: {str(r)[:80]}")
+    return c
+
 
 def mix(hex_color, other, t):
     a = [int(hex_color[i:i + 2], 16) for i in (1, 3, 5)]
@@ -996,7 +1054,7 @@ def save_registry(home, reg):
     tmp.replace(p)
 
 
-EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "color", "bg", "orientation", "external", "allow_host", "desktop",
+EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto"}
@@ -1016,6 +1074,8 @@ def cmd_build(args):
         args.icon = str(Path(args.icon).expanduser().resolve())  # 다시 만들 때도 찾을 수 있게 절대 경로로 기억
     if args.widget and args.widget != "none":
         args.widget = str(Path(args.widget).expanduser().resolve())
+    if args.cards and args.cards != "none":
+        args.cards = str(Path(args.cards).expanduser().resolve())
     reg = load_registry(home)
     prev_id = next((k for k, v in reg["apps"].items() if v.get("url") == url), None)
     app_id = check_app_id(args.id or prev_id or derive_app_id(url))
@@ -1066,6 +1126,19 @@ def cmd_build(args):
             explicit["widget"] = str(keep_w)
             widget_js = widget_asset(keep_w.read_text(encoding="utf-8"), opt["widget_param"] or [])
 
+        # 카드 결제 자동 등록 (사이트별 설정이 있을 때만)
+        cards_cfg = None
+        if opt["cards"] and opt["cards"] != "none":
+            cs = Path(opt["cards"]).expanduser()
+            if not cs.is_file():
+                raise Fail(f"카드 설정 파일이 없습니다: {cs}")
+            keep_c = home / "cards" / (app_id + ".json")
+            if cs.resolve() != keep_c.resolve():
+                keep_c.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(cs, keep_c)
+            explicit["cards"] = str(keep_c)
+            cards_cfg = load_cards_config(keep_c)
+
         # 아이콘
         icon_choice = opt["icon"] or "auto"
         src, mode, icon_from = None, "letter", "글자 아이콘"
@@ -1104,7 +1177,10 @@ def cmd_build(args):
         icon_info = json.loads(icon_out.strip().splitlines()[-1])
         if icon_info["used"] == "letter":
             icon_from = "글자 아이콘" + (" (그림이 64px 보다 작거나 읽을 수 없는 형식이라)" if src else "")
-        write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"])
+        write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"], cards=bool(cards_cfg))
+        if cards_cfg:
+            (res / "drawable").mkdir(exist_ok=True)
+            (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
         widget_accent = accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8")
         if widget_js:
             write_widget_resources(res, widget_accent)
@@ -1124,8 +1200,12 @@ def cmd_build(args):
         shutil.copyfile(DOWNLOAD_JS, assets / "urlapp-download.js")
         if widget_js:
             (assets / "urlapp-widget.js").write_text(widget_js, encoding="utf-8")
+        if cards_cfg:
+            (assets / "urlapp-cards.json").write_text(json.dumps(cards_cfg, ensure_ascii=False, indent=1),
+                                                      encoding="utf-8")
         cleartext = urllib.parse.urlsplit(url).scheme == "http"
-        (workdir / "AndroidManifest.xml").write_text(manifest_xml(app_id, cleartext, opt["orientation"], bool(widget_js)),
+        (workdir / "AndroidManifest.xml").write_text(manifest_xml(app_id, cleartext, opt["orientation"], bool(widget_js),
+                                                                  bool(cards_cfg)),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1163,6 +1243,7 @@ def cmd_build(args):
             "url": url, "name": name, "version_code": version_code, "version_name": version_name,
             "theme_color": theme, "background_color": bg, "icon_from": icon_from, "explicit": explicit,
             "apk": str(apk), "apk_sha256": file_hashes(apk)[1], "cert_sha256": digest, "widget": bool(widget_js),
+            "cards": bool(cards_cfg),
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S")}
         save_registry(home, reg)
     finally:
@@ -1172,6 +1253,9 @@ def cmd_build(args):
     say(f"완성: {apk} ({apk.stat().st_size / 1024:.0f}KB)")
     say(f"  이름 {name} | id {app_id} | 버전 {version_name} (코드 {version_code}) | 안드로이드 7.0 이상")
     say(f"  색 {theme} / 배경 {bg} | 아이콘: {icon_from}")
+    if cards_cfg:
+        say(f"  카드 결제 자동 등록: 있음 (담당자 {', '.join(cards_cfg['owners'])}. 설치 후 앱이 처음 열릴 때 설정을 묻는다: "
+            "담당자 고르기 → 알림 접근 허용 → 배터리 최적화 제외)")
     if widget_js:
         say("  홈 화면 위젯: 있음 (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
     say(f"  다른 사이트 링크: {'브라우저로' if opt['external'] == 'browser' else '앱 안에서'} | 앱 안에서 여는 사이트: "
@@ -1381,6 +1465,26 @@ def cmd_selftest(args):
             a7 = zipfile.ZipFile(rec7["apk"]).read("assets/urlapp-widget.js").decode("utf-8")
             check("위젯 값 자리 채움 (따옴표 이스케이프)", "title: 'a\\\"b'" in a7 and "__PARAM_" not in a7, a7[-120:])
             check("잘못된 --widget-param 거부", raises(lambda: build(base + "/param", "--no-fetch", "--widget-param", "bad")))
+            cards_json = HERE.parent / "cards" / "smart-ledger.json"
+            build(base + "/cards", "--no-fetch", "--cards", str(cards_json))
+            id8, rec8 = next((k, v) for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/cards"))
+            mf8 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec8["apk"]], tmp_home, "xmltree")
+            sc8 = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/shortcuts.xml", rec8["apk"]], tmp_home, "xmltree")
+            z8 = zipfile.ZipFile(rec8["apk"])
+            check("카드: 알림 듣기 서비스는 시스템만 묶을 수 있게", "app.jarvis.urlapp.CardListenerService" in mf8
+                  and "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" in mf8
+                  and "android.service.notification.NotificationListenerService" in mf8)
+            check("카드: 되돌리기·다시 보내기·설정 화면, 알림 권한", "CardUndoReceiver" in mf8 and "CardRetryJob" in mf8
+                  and "android.permission.BIND_JOB_SERVICE" in mf8 and "CardSettingsActivity" in mf8
+                  and "android.permission.POST_NOTIFICATIONS" in mf8)
+            check("카드: 설정·바로가기·알림 아이콘", json.loads(z8.read("assets/urlapp-cards.json"))["owners"] == ["창수", "지현"]
+                  and "app.jarvis.urlapp.action.CARDS" in sc8 and any("urlapp_card_notify" in n for n in z8.namelist()))
+            mf_plain = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec["apk"]], tmp_home, "xmltree")
+            check("카드 기능 없는 앱에는 알림 듣기·알림 권한 없음", "CardListenerService" not in mf_plain
+                  and "POST_NOTIFICATIONS" not in mf_plain)
+            bad_cards = site / "bad-cards.json"
+            bad_cards.write_text(json.dumps({"owners": []}), encoding="utf-8")
+            check("카드: 설정이 이상하면 빌드 거부", raises(lambda: build(base + "/cards2", "--no-fetch", "--cards", str(bad_cards))))
             check("위젯 없는 앱에는 위젯 receiver 없음", "WidgetProvider" not in run(
                 [tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec["apk"]], tmp_home, "xmltree"))
         finally:
@@ -1410,6 +1514,7 @@ def build_parser():
     b.add_argument("--name", help="앱 이름 (기본: 사이트의 이름·제목)")
     b.add_argument("--icon", help="auto(기본, 사이트 아이콘) | letter(글자 아이콘) | 이미지 파일 경로 | 이미지 주소")
     b.add_argument("--accent", help="강조색 #RRGGBB (진행 막대, 위젯의 수입 같은 강조 숫자). 기본: 아이콘 바탕색 → 테마색")
+    b.add_argument("--cards", help="카드 결제 알림 자동 등록을 넣는다: 사이트별 설정(.json) 경로. 'none' 이면 뺀다 (cards/ 의 예시 참고)")
     b.add_argument("--widget", help="홈 화면 위젯을 넣는다: 위젯 스크립트(.js) 경로. 'none' 이면 뺀다 (widgets/ 의 예시 참고)")
     b.add_argument("--widget-param", dest="widget_param", action="append", default=[],
                    help="위젯 스크립트의 __PARAM_이름__ 자리에 넣을 값: 이름=값 (여러 번). 값은 출력하지 않고 이 컴퓨터에만 기억")
