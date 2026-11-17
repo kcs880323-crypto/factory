@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { Text, View } from 'react-native';
 
 import { AppProvider, useApp } from '@/src/store/AppContext';
+import { ConfirmDialog } from '@/src/ui/ConfirmDialog';
 import { useIsDark, useTheme } from '@/src/ui/theme';
 
 export { ErrorBoundary } from 'expo-router';
@@ -32,7 +33,14 @@ function RootNav() {
     if (ready) SplashScreen.hideAsync().catch(() => undefined);
   }, [ready]);
 
-  if (!ready) return null;
+  if (!ready) {
+    // 휴대폰은 스플래시 화면이 가려 주고, 웹은 저장된 데이터를 불러오는 동안 안내를 보여 준다.
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: t.bg }}>
+        <Text style={{ color: t.sub, fontSize: 14 }}>불러오는 중…</Text>
+      </View>
+    );
+  }
 
   const base = dark ? DarkTheme : DefaultTheme;
   return (
@@ -48,6 +56,7 @@ function RootNav() {
         <Stack.Screen name="guide" options={{ title: '가입·운영 가이드' }} />
       </Stack>
       <Toast />
+      <ConfirmDialog />
     </ThemeProvider>
   );
 }

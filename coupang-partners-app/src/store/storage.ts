@@ -3,10 +3,30 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+import { HOSTING } from '../lib/hosting';
+import { remoteDelete, remoteGet, remoteSet, SYNCED_KEYS } from './artifactDb';
+
+const synced = (key: string) => HOSTING === 'artifact' && SYNCED_KEYS.includes(key);
+
+// 서버 저장이 실패하면(용량 초과 등) 화면에 알릴 수 있게 한다.
+let remoteErrorListener: ((key: string) => void) | null = null;
+export function onRemoteSaveError(fn: ((key: string) => void) | null) {
+  remoteErrorListener = fn;
+}
+
+async function readRaw(key: string): Promise<unknown> {
+  if (synced(key)) {
+    const v = await remoteGet(key);
+    if (v !== undefined) return v;
+  }
+  const raw = await AsyncStorage.getItem(key);
+  return raw ? JSON.parse(raw) : undefined;
+}
+
 export async function loadJson<T>(key: string, fallback: T): Promise<T> {
   try {
-    const raw = await AsyncStorage.getItem(key);
-    return raw ? ({ ...fallbackObj(fallback), ...JSON.parse(raw) } as T) : fallback;
+    const v = await readRaw(key);
+    return v && typeof v === 'object' ? ({ ...fallbackObj(fallback), ...v } as T) : fallback;
   } catch {
     return fallback;
   }
@@ -18,8 +38,7 @@ function fallbackObj<T>(v: T) {
 
 export async function loadArray<T>(key: string): Promise<T[]> {
   try {
-    const raw = await AsyncStorage.getItem(key);
-    const v = raw ? JSON.parse(raw) : [];
+    const v = await readRaw(key);
     return Array.isArray(v) ? v : [];
   } catch {
     return [];
@@ -28,10 +47,20 @@ export async function loadArray<T>(key: string): Promise<T[]> {
 
 export async function saveJson(key: string, value: unknown): Promise<void> {
   await AsyncStorage.setItem(key, JSON.stringify(value));
+  if (synced(key)) {
+    try {
+      await remoteSet(key, value);
+    } catch {
+      remoteErrorListener?.(key);
+    }
+  }
 }
 
 export async function removeKeys(keys: string[]): Promise<void> {
   await AsyncStorage.multiRemove(keys);
+  if (HOSTING === 'artifact') {
+    await Promise.all(SYNCED_KEYS.filter((k) => keys.includes(k)).map((k) => remoteDelete(k).catch(() => undefined)));
+  }
 }
 
 export async function allKeys(): Promise<readonly string[]> {

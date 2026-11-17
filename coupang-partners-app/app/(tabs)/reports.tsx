@@ -5,10 +5,11 @@ import { ScrollView, View } from 'react-native';
 import type { ReportBundle } from '@/src/api/types';
 import { longYmd, presetRange, RANGE_PRESETS, shortYmd, type RangePreset } from '@/src/lib/dates';
 import { num, pct, won } from '@/src/lib/format';
+import { API_AVAILABLE } from '@/src/lib/hosting';
 import { summarize } from '@/src/lib/reports';
 import { errorText, useApp, type Cached } from '@/src/store/AppContext';
 import { Banner, Bars, Button, Card, Chip, Loading, Row, Screen, Section, Stat, T } from '@/src/ui/kit';
-import { CacheNote, ModeBanner, openUrl, PARTNERS_SITE, UsageMeter } from '@/src/ui/parts';
+import { CacheNote, ModeBanner, PARTNERS_SITE, UsageMeter } from '@/src/ui/parts';
 import { useTheme } from '@/src/ui/theme';
 
 const HOUR = 60 * 60 * 1000;
@@ -72,11 +73,13 @@ export default function Reports() {
   if (mode === 'manual') {
     return (
       <Screen>
-        <Banner tone="info" icon="chart" title="실적 조회는 API 키가 있어야 해요">
-          그 전까지는 파트너스 사이트의 리포트 메뉴에서 클릭·주문·수익을 확인하세요. API 키를 넣으면 여기서 기간별 수익, 전환율, 잘 팔린 상품, 채널별 성과를 볼 수 있어요.
+        <Banner tone="info" icon="chart" title={API_AVAILABLE ? '실적 조회는 API 키가 있어야 해요' : '이 화면에서는 실적 조회를 못 해요'}>
+          {API_AVAILABLE
+            ? '그 전까지는 파트너스 사이트의 리포트 메뉴에서 클릭·주문·수익을 확인하세요. API 키를 넣으면 여기서 기간별 수익, 전환율, 잘 팔린 상품, 채널별 성과를 볼 수 있어요.'
+            : 'Claude 화면은 쿠팡 서버로 요청을 보낼 수 없어요. 파트너스 사이트의 리포트 메뉴에서 확인하거나, 휴대폰 앱·직접 배포한 웹사이트에서 API 키를 넣어 보세요.'}
         </Banner>
-        <Button label="파트너스 사이트 열기" icon="open" onPress={() => openUrl(PARTNERS_SITE)} />
-        <Button label="API 키 넣기" icon="key" kind="secondary" onPress={() => router.push('/settings')} />
+        <Button label="파트너스 사이트 열기" icon="open" href={PARTNERS_SITE} />
+        {API_AVAILABLE ? <Button label="API 키 넣기" icon="key" kind="secondary" onPress={() => router.push('/settings')} /> : null}
         <Button label="예시 데이터로 화면 둘러보기" icon="eye" kind="ghost" onPress={() => updateSettings({ demoMode: true })} />
       </Screen>
     );

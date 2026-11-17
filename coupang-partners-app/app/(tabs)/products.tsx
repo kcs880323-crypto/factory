@@ -3,10 +3,11 @@ import { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { BEST_CATEGORIES } from '@/src/api/categories';
+import { API_AVAILABLE } from '@/src/lib/hosting';
 import type { Product, SearchResult } from '@/src/api/types';
 import { errorText, useApp, type Cached, type Mode } from '@/src/store/AppContext';
 import { Banner, Button, Chip, Empty, Field, Loading, Row, Screen, T } from '@/src/ui/kit';
-import { CacheNote, ModeBanner, openUrl, PARTNERS_SITE, ProductCard } from '@/src/ui/parts';
+import { CacheNote, ModeBanner, PARTNERS_SITE, ProductCard } from '@/src/ui/parts';
 
 type Tab = 'search' | 'goldbox' | 'best' | 'pl';
 const TABS: { key: Tab; label: string }[] = [
@@ -70,12 +71,14 @@ export default function Products() {
   if (mode === 'manual') {
     return (
       <Screen>
-        <Banner tone="info" icon="key" title="상품 검색은 API 키가 있어야 해요">
-          쿠팡 파트너스 API 키는 가입 후 일정 활동을 거쳐 승인을 받으면 발급받을 수 있다고 안내돼 있어요. 그 전에는 파트너스 사이트에서 상품을 찾아 링크를 만든 뒤, 링크 탭에 붙여 넣어 쓰세요.
+        <Banner tone="info" icon="key" title={API_AVAILABLE ? '상품 검색은 API 키가 있어야 해요' : '이 화면에서는 상품 검색을 못 해요'}>
+          {API_AVAILABLE
+            ? '쿠팡 파트너스 API 키는 가입 후 일정 활동을 거쳐 승인을 받으면 발급받을 수 있다고 안내돼 있어요. 그 전에는 파트너스 사이트에서 상품을 찾아 링크를 만든 뒤, 링크 탭에 붙여 넣어 쓰세요.'
+            : 'Claude 화면은 쿠팡 서버로 요청을 보낼 수 없어요. 파트너스 사이트에서 상품을 찾아 링크를 만든 뒤 링크 탭에 붙여 넣거나, 휴대폰 앱·직접 배포한 웹사이트에서 API 키를 넣어 쓰세요.'}
         </Banner>
-        <Button label="파트너스 사이트에서 상품 찾기" icon="open" onPress={() => openUrl(PARTNERS_SITE)} />
+        <Button label="파트너스 사이트에서 상품 찾기" icon="open" href={PARTNERS_SITE} />
         <Button label="만든 링크 붙여 넣기" icon="paste" kind="secondary" onPress={() => router.push('/links')} />
-        <Button label="API 키 넣기" icon="key" kind="ghost" onPress={() => router.push('/settings')} />
+        {API_AVAILABLE ? <Button label="API 키 넣기" icon="key" kind="ghost" onPress={() => router.push('/settings')} /> : null}
         <Button label="예시 데이터로 화면 둘러보기" icon="eye" kind="ghost" onPress={() => updateSettings({ demoMode: true })} />
       </Screen>
     );

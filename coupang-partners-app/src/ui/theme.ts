@@ -1,5 +1,7 @@
 import { useColorScheme } from 'react-native';
 
+import { useDataTheme } from './dataTheme';
+
 const light = {
   bg: '#F4F6F8',
   card: '#FFFFFF',
@@ -48,12 +50,14 @@ const dark: typeof light = {
 
 export type Palette = typeof light;
 
-export function useTheme(): Palette {
-  return useColorScheme() === 'dark' ? dark : light;
+export function useIsDark(): boolean {
+  const os = useColorScheme();
+  const chosen = useDataTheme();
+  return (chosen ?? os) === 'dark';
 }
 
-export function useIsDark(): boolean {
-  return useColorScheme() === 'dark';
+export function useTheme(): Palette {
+  return useIsDark() ? dark : light;
 }
 
 export const radius = { sm: 8, md: 12, lg: 16 };

@@ -1,9 +1,10 @@
 // 화면에서 공통으로 쓰는 작은 부품들.
-import { SymbolView } from 'expo-symbols';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
+  Linking,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,58 +12,16 @@ import {
   Text,
   TextInput,
   View,
-  type ColorValue,
   type StyleProp,
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
 
+import { Icon, type IconName } from './icon';
 import { radius, useTheme, type Palette } from './theme';
 
-// ── 아이콘 ─────────────────────────────────────────────
-const ICONS = {
-  home: { ios: 'house', android: 'home' },
-  search: { ios: 'magnifyingglass', android: 'search' },
-  link: { ios: 'link', android: 'link' },
-  chart: { ios: 'chart.bar', android: 'bar_chart' },
-  settings: { ios: 'gearshape', android: 'settings' },
-  copy: { ios: 'doc.on.doc', android: 'content_copy' },
-  share: { ios: 'square.and.arrow.up', android: 'share' },
-  write: { ios: 'square.and.pencil', android: 'edit_note' },
-  save: { ios: 'bookmark', android: 'bookmark' },
-  trash: { ios: 'trash', android: 'delete' },
-  open: { ios: 'arrow.up.right.square', android: 'open_in_new' },
-  help: { ios: 'questionmark.circle', android: 'help' },
-  info: { ios: 'info.circle', android: 'info' },
-  paste: { ios: 'doc.on.clipboard', android: 'content_paste' },
-  checked: { ios: 'checkmark.circle.fill', android: 'check_circle' },
-  unchecked: { ios: 'circle', android: 'radio_button_unchecked' },
-  warn: { ios: 'exclamationmark.triangle', android: 'warning' },
-  key: { ios: 'key', android: 'key' },
-  bolt: { ios: 'bolt', android: 'bolt' },
-  tag: { ios: 'tag', android: 'sell' },
-  refresh: { ios: 'arrow.clockwise', android: 'refresh' },
-  close: { ios: 'xmark', android: 'close' },
-  chevron: { ios: 'chevron.right', android: 'chevron_right' },
-  book: { ios: 'book', android: 'menu_book' },
-  gift: { ios: 'gift', android: 'redeem' },
-  box: { ios: 'shippingbox', android: 'inventory_2' },
-  idea: { ios: 'lightbulb', android: 'lightbulb' },
-  megaphone: { ios: 'megaphone', android: 'campaign' },
-  truck: { ios: 'truck.box', android: 'local_shipping' },
-  eye: { ios: 'eye', android: 'visibility' },
-  eyeOff: { ios: 'eye.slash', android: 'visibility_off' },
-  person: { ios: 'person', android: 'person' },
-} as const;
-
-export type IconName = keyof typeof ICONS;
-
-export function Icon({ name, size = 20, color, style }: { name: IconName; size?: number; color?: ColorValue; style?: StyleProp<ViewStyle> }) {
-  const t = useTheme();
-  const n = ICONS[name];
-  return <SymbolView name={{ ios: n.ios, android: n.android, web: n.android }} size={size} tintColor={color ?? t.text} style={style} />;
-}
+export { Icon, type IconName } from './icon';
 
 // ── 글자 ──────────────────────────────────────────────
 type Variant = 'title' | 'h2' | 'h3' | 'body' | 'sub' | 'caption' | 'mono';
@@ -151,11 +110,19 @@ export function Section({ title, right, children }: { title: string; right?: Rea
 }
 
 // ── 버튼·칩 ──────────────────────────────────────────
+/** 바깥 주소로 가는 버튼. 웹에서는 진짜 <a> 링크로 그린다 (아티팩트 화면은 스크립트로 연 창을 막음). */
+function pressProps(href: string | undefined, onPress: (() => void) | undefined): object {
+  if (!href) return { onPress };
+  if (Platform.OS === 'web') return { href, hrefAttrs: { target: '_blank', rel: 'noopener noreferrer' } };
+  return { onPress: () => Linking.openURL(href).catch(() => undefined) };
+}
+
 type ButtonKind = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 export function Button({
   label,
   onPress,
+  href,
   kind = 'primary',
   icon,
   loading,
@@ -164,7 +131,8 @@ export function Button({
   style,
 }: {
   label: string;
-  onPress: () => void;
+  onPress?: () => void;
+  href?: string;
   kind?: ButtonKind;
   icon?: IconName;
   loading?: boolean;
@@ -178,9 +146,9 @@ export function Button({
   const off = disabled || loading;
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={href ? 'link' : 'button'}
       accessibilityLabel={label}
-      onPress={off ? undefined : onPress}
+      {...(off ? {} : pressProps(href, onPress))}
       style={({ pressed }) => [
         {
           backgroundColor: bg,
@@ -204,13 +172,25 @@ export function Button({
   );
 }
 
-export function IconButton({ icon, label, onPress, color }: { icon: IconName; label: string; onPress: () => void; color?: string }) {
+export function IconButton({
+  icon,
+  label,
+  onPress,
+  href,
+  color,
+}: {
+  icon: IconName;
+  label: string;
+  onPress?: () => void;
+  href?: string;
+  color?: string;
+}) {
   const t = useTheme();
   return (
     <Pressable
-      accessibilityRole="button"
+      accessibilityRole={href ? 'link' : 'button'}
       accessibilityLabel={label}
-      onPress={onPress}
+      {...pressProps(href, onPress)}
       hitSlop={6}
       style={({ pressed }) => ({ alignItems: 'center', gap: 2, paddingVertical: 4, paddingHorizontal: 6, opacity: pressed ? 0.5 : 1 })}>
       <Icon name={icon} size={20} color={color ?? t.primary} />

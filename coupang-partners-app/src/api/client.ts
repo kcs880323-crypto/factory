@@ -48,6 +48,11 @@ export interface ClientOptions {
   now?: () => Date;
   /** 실제 요청을 보내기 직전에 불린다. 던지면 요청을 보내지 않는다 (호출 한도 관리용). */
   beforeCall?: (endpoint: string) => void | Promise<void>;
+  /**
+   * 웹사이트용 중계 주소 (예: "/api/coupang"). 주면 쿠팡 대신 여기로 보내고, 쿠팡 경로는
+   * X-Coupang-Path 헤더에 담는다. 서명은 쿠팡 경로 기준 그대로라서 중계는 손대지 않고 전달만 한다.
+   */
+  proxyUrl?: string;
 }
 
 export interface ProductOptions {
@@ -136,7 +141,8 @@ export function createClient(opts: ClientOptions): ApiClient {
 
     const path = API_PATH + endpoint;
     const query = buildQuery(params);
-    const url = baseUrl + path + (query ? `?${query}` : '');
+    const target = path + (query ? `?${query}` : '');
+    const url = opts.proxyUrl ?? baseUrl + target;
     const headers: Record<string, string> = {
       Authorization: authorizationHeader({
         method,
@@ -148,6 +154,7 @@ export function createClient(opts: ClientOptions): ApiClient {
       }),
       'Content-Type': 'application/json;charset=UTF-8',
     };
+    if (opts.proxyUrl) headers['X-Coupang-Path'] = target;
 
     let res: Response;
     try {
@@ -169,7 +176,16 @@ export function createClient(opts: ClientOptions): ApiClient {
     }
     const apiMessage = String(json.rMessage ?? json.message ?? '').trim();
 
-    if (!res.ok) throw statusError(res.status, apiMessage);
+    if (!res.ok) {
+      if (opts.proxyUrl && (res.status === 404 || res.status === 405) && !json.rCode) {
+        throw new CoupangApiError(
+          'http',
+          '이 웹사이트에 API 중계 서버(/api/coupang)가 없어요. README의 "웹사이트로 배포하기"대로 Vercel에 올린 주소에서 써 주세요.',
+          res.status,
+        );
+      }
+      throw statusError(res.status, apiMessage);
+    }
 
     // 200이어도 실패일 수 있다 (예: 판매 종료 상품의 딥링크 → rCode 400 "url convert failed").
     const rCode = json.rCode;

@@ -1,12 +1,12 @@
 import * as Clipboard from 'expo-clipboard';
 import { useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Platform, ScrollView, View } from 'react-native';
 
 import { toNumber } from '@/src/api/client';
 import { classifyUrl, extractUrl, productIdFromUrl } from '@/src/lib/links';
 import { errorText, useApp } from '@/src/store/AppContext';
 import { Banner, Button, Card, Chip, Empty, Field, Row, Screen, Section, T } from '@/src/ui/kit';
-import { LinkCard, ModeBanner, openUrl, PARTNERS_SITE } from '@/src/ui/parts';
+import { LinkCard, ModeBanner, PARTNERS_SITE } from '@/src/ui/parts';
 
 export default function Links() {
   const { mode, client, settings, links, addLink, showToast, copy } = useApp();
@@ -24,9 +24,15 @@ export default function Links() {
   const channels = useMemo(() => [...new Set([settings.subId, ...settings.channels].filter(Boolean))], [settings]);
 
   const paste = async () => {
-    const text = await Clipboard.getStringAsync();
+    let text = '';
+    try {
+      text = await Clipboard.getStringAsync();
+    } catch {
+      text = '';
+    }
     if (!text) {
-      showToast('클립보드가 비어 있어요');
+      // 웹(특히 아티팩트 화면)은 클립보드 읽기를 막는다. 입력칸에 직접 붙여 넣으면 된다.
+      showToast(Platform.OS === 'web' ? '입력칸을 누르고 Ctrl+V(휴대폰은 길게 눌러 붙여넣기) 해 주세요' : '클립보드가 비어 있어요');
       return;
     }
     setRaw(text);
@@ -105,7 +111,7 @@ export default function Links() {
           </Banner>
         ) : null}
         {kind === 'coupang' && !client ? (
-          <Banner tone="warn" icon="warn" title="이 주소로는 수익이 안 잡혀요" action={<Button small kind="ghost" icon="open" label="파트너스 사이트 열기" onPress={() => openUrl(PARTNERS_SITE)} />}>
+          <Banner tone="warn" icon="warn" title="이 주소로는 수익이 안 잡혀요" action={<Button small kind="ghost" icon="open" label="파트너스 사이트 열기" href={PARTNERS_SITE} />}>
             일반 쿠팡 주소예요. 파트너스 사이트에서 이 상품의 링크를 만든 뒤 그 링크를 붙여 넣어 주세요.
           </Banner>
         ) : null}

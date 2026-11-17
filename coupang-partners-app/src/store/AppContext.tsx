@@ -1,12 +1,14 @@
 // 앱 전체 상태: 설정, API 키 유무, 링크 보관함, 호출 기록(시간당 한도), 응답 캐시, 알림 토스트.
 import * as Clipboard from 'expo-clipboard';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Share } from 'react-native';
+import { Alert, Platform, Share } from 'react-native';
 
 import { CoupangApiError, createClient, type ApiClient } from '../api/client';
 import { createDemoClient } from '../demo/demoData';
 import { DEFAULT_DISCLOSURE } from '../lib/compose';
 import { budget, clampLimit, DEFAULT_HOURLY_LIMIT, type Budget } from '../lib/rateGuard';
+import { API_AVAILABLE, PROXY_URL } from '../lib/hosting';
+import { SYNCED_KEYS } from './artifactDb';
 import { CallBudget } from './callBudget';
 import { kstYmd } from '../lib/dates';
 import {
@@ -15,6 +17,7 @@ import {
   loadArray,
   loadJson,
   loadKeys,
+  onRemoteSaveError,
   removeKeys,
   saveJson,
   saveKeys,
@@ -73,6 +76,13 @@ interface Checklist {
   done: Record<string, boolean>;
 }
 
+export interface AskSpec {
+  title: string;
+  message: string;
+  ok: string;
+  onOk: () => void;
+}
+
 interface AppState {
   ready: boolean;
   settings: Settings;
@@ -97,6 +107,10 @@ interface AppState {
   toggleChecklist: (id: string) => Promise<void>;
   toast: string | null;
   showToast: (message: string) => void;
+  /** 되돌릴 수 없는 일 전에 묻는다. 웹은 confirm()이 막힌 곳이 있어 앱 안 대화상자를 쓴다. */
+  ask: (spec: AskSpec) => void;
+  dialog: AskSpec | null;
+  closeDialog: () => void;
   copy: (text: string, message?: string) => Promise<void>;
   share: (text: string) => Promise<void>;
 }
@@ -123,6 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const linksRef = useRef<SavedLink[]>([]);
   const checklistRef = useRef<Checklist>({ date: '', done: {} });
   const [toast, setToast] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<AskSpec | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -161,6 +176,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   }, []);
 
+  // 아티팩트 화면에서 서버 저장이 실패하면 알린다 (이 브라우저에는 남아 있음).
+  useEffect(() => {
+    onRemoteSaveError(() =>
+      showToast('서버에 저장하지 못했어요 (이 브라우저에는 저장됨). 보관함이 너무 크면 오래된 링크를 지우거나 CSV로 내보내 주세요'),
+    );
+    return () => onRemoteSaveError(null);
+  }, [showToast]);
+
   const updateSettings = useCallback(async (patch: Partial<Settings>) => {
     const next: Settings = { ...settingsRef.current, ...patch };
     settingsRef.current = next;
@@ -178,14 +201,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setKeys(null);
   }, []);
 
-  const mode: Mode = settings.demoMode ? 'demo' : keys ? 'api' : 'manual';
+  const mode: Mode = settings.demoMode ? 'demo' : keys && API_AVAILABLE ? 'api' : 'manual';
 
   // 실제 요청 직전마다 최근 1시간 호출 수를 확인하고, 한도에 닿았으면 요청을 막는다.
   const limit = settings.hourlyLimit;
   const client = useMemo<ApiClient | null>(() => {
     if (mode === 'demo') return createDemoClient();
     if (mode === 'manual' || !keys) return null;
-    return createClient({ accessKey: keys.accessKey, secretKey: keys.secretKey, beforeCall: () => callBudget.take(limit) });
+    return createClient({
+      accessKey: keys.accessKey,
+      secretKey: keys.secretKey,
+      proxyUrl: PROXY_URL,
+      beforeCall: () => callBudget.take(limit),
+    });
   }, [mode, keys, callBudget, limit]);
 
   const usage = useMemo(() => budget(calls, settings.hourlyLimit, now), [calls, settings.hourlyLimit, now]);
@@ -253,7 +281,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const resetAll = useCallback(async () => {
     const ks = (await allKeys()).filter((k) => k.startsWith('cp.'));
-    await removeKeys([...ks]);
+    await removeKeys([...new Set([...ks, ...SYNCED_KEYS])]);
     await deleteKeys();
     setKeys(null);
     settingsRef.current = DEFAULT_SETTINGS;
@@ -275,21 +303,47 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await saveJson(K.checklist, next);
   }, []);
 
+  const ask = useCallback((spec: AskSpec) => {
+    if (Platform.OS === 'web') {
+      setDialog(spec);
+      return;
+    }
+    Alert.alert(spec.title, spec.message, [
+      { text: '취소', style: 'cancel' },
+      { text: spec.ok, style: 'destructive', onPress: spec.onOk },
+    ]);
+  }, []);
+  const closeDialog = useCallback(() => setDialog(null), []);
+
   const copy = useCallback(
     async (text: string, message = '복사했어요') => {
-      await Clipboard.setStringAsync(text);
-      showToast(message);
+      let ok = false;
+      try {
+        ok = (await Clipboard.setStringAsync(text)) !== false;
+      } catch {
+        ok = false;
+      }
+      showToast(ok ? message : '복사가 막혀 있어요. 글을 길게 눌러(또는 드래그해) 직접 복사해 주세요');
     },
     [showToast],
   );
 
-  const share = useCallback(async (text: string) => {
-    try {
-      await Share.share({ message: text });
-    } catch {
-      // 공유 창을 닫은 경우 등은 무시
-    }
-  }, []);
+  const share = useCallback(
+    async (text: string) => {
+      // 웹 브라우저 대부분(특히 PC)과 아티팩트 화면에는 공유 창이 없어 복사로 대신한다.
+      const nav = Platform.OS === 'web' ? (globalThis.navigator as Navigator | undefined) : undefined;
+      if (Platform.OS === 'web' && typeof nav?.share !== 'function') {
+        await copy(text, '이 브라우저는 공유 창이 없어 복사했어요. 붙여 넣어 올리세요');
+        return;
+      }
+      try {
+        await Share.share({ message: text });
+      } catch {
+        if (Platform.OS === 'web') await copy(text, '공유 창을 열 수 없어 복사했어요');
+      }
+    },
+    [copy],
+  );
 
   const value: AppState = {
     ready,
@@ -314,6 +368,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleChecklist,
     toast,
     showToast,
+    ask,
+    dialog,
+    closeDialog,
     copy,
     share,
   };

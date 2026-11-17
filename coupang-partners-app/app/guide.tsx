@@ -3,7 +3,7 @@ import { View } from 'react-native';
 
 import { DEFAULT_DISCLOSURE } from '@/src/lib/compose';
 import { Banner, Button, Card, Icon, Row, Screen, T, type IconName } from '@/src/ui/kit';
-import { openUrl, PARTNERS_SITE } from '@/src/ui/parts';
+import { PARTNERS_SITE } from '@/src/ui/parts';
 import { useTheme } from '@/src/ui/theme';
 
 function Step({ n, title, icon, children }: { n: number; title: string; icon: IconName; children: React.ReactNode }) {
@@ -52,7 +52,7 @@ export default function Guide() {
         <Li>파트너스 사이트에 쿠팡 계정으로 로그인해 가입을 신청해요.</Li>
         <Li>활동할 채널(블로그, 인스타그램, 유튜브 등) 주소와 소개를 적어요. 실제로 운영 중인 채널일수록 좋아요.</Li>
         <Li>수익을 받을 지급 정보(본인 인증, 계좌 등)는 사이트 안내에 따라 등록해요.</Li>
-        <Button label="파트너스 사이트 열기" icon="open" kind="secondary" onPress={() => openUrl(PARTNERS_SITE)} />
+        <Button label="파트너스 사이트 열기" icon="open" kind="secondary" href={PARTNERS_SITE} />
       </Step>
 
       <Step n={2} title="첫 링크 만들기 (API 없이)" icon="link">

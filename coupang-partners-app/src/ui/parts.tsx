@@ -1,32 +1,17 @@
 // 여러 화면에서 같이 쓰는 큰 부품: 모드 안내, 상품 카드, 링크 카드, 호출 사용량.
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Linking, Platform, View } from 'react-native';
+import { View } from 'react-native';
 
 import type { Product } from '../api/types';
 import { dateTimeText, minutesText, shortUrl, won } from '../lib/format';
+import { HOSTING } from '../lib/hosting';
 import { productPageUrl } from '../lib/links';
 import { errorText, useApp, type SavedLink } from '../store/AppContext';
 import { Badge, Banner, Button, Card, IconButton, Row, T, Thumb } from './kit';
 import { useTheme } from './theme';
 
 export const PARTNERS_SITE = 'https://partners.coupang.com/';
-
-export function openUrl(url: string) {
-  Linking.openURL(url).catch(() => undefined);
-}
-
-/** 확인 창 (웹 미리보기에서는 브라우저 confirm) */
-export function confirm(title: string, message: string, ok: string, onOk: () => void) {
-  if (Platform.OS === 'web') {
-    if (globalThis.confirm?.(`${title}\n\n${message}`)) onOk();
-    return;
-  }
-  Alert.alert(title, message, [
-    { text: '취소', style: 'cancel' },
-    { text: ok, style: 'destructive', onPress: onOk },
-  ]);
-}
 
 export function ModeBanner({ compact }: { compact?: boolean }) {
   const { mode, updateSettings } = useApp();
@@ -43,6 +28,17 @@ export function ModeBanner({ compact }: { compact?: boolean }) {
   }
   if (mode === 'manual') {
     if (compact) return null;
+    if (HOSTING === 'artifact') {
+      return (
+        <Banner
+          tone="info"
+          icon="info"
+          title="수동 모드 (Claude 화면)"
+          action={<Button small kind="ghost" label="예시로 둘러보기" onPress={() => updateSettings({ demoMode: true })} />}>
+          파트너스 사이트에서 만든 링크를 보관하고 홍보 글을 만들 수 있어요. 이 화면에서는 쿠팡 API를 부를 수 없어서, 상품 검색·자동 링크 변환·실적 조회는 휴대폰 앱이나 직접 배포한 웹사이트에서 써요.
+        </Banner>
+      );
+    }
     return (
       <Banner
         tone="info"
@@ -161,14 +157,14 @@ export function ProductCard({ p }: { p: Product }) {
             })
           }
         />
-        <IconButton icon="open" label="상품 보기" onPress={() => openUrl(p.productUrl)} />
+        <IconButton icon="open" label="상품 보기" href={p.productUrl} />
       </Row>
     </Card>
   );
 }
 
 export function LinkCard({ link }: { link: SavedLink }) {
-  const { copy, share, removeLink } = useApp();
+  const { copy, share, removeLink, ask } = useApp();
   const t = useTheme();
   return (
     <Card style={{ gap: 8 }}>
@@ -201,12 +197,12 @@ export function LinkCard({ link }: { link: SavedLink }) {
         <IconButton icon="copy" label="복사" onPress={() => copy(link.url, '링크를 복사했어요')} />
         <IconButton icon="share" label="공유" onPress={() => share(link.url)} />
         <IconButton icon="write" label="글 만들기" onPress={() => router.push({ pathname: '/compose', params: { linkId: link.id } })} />
-        <IconButton icon="open" label="열기" onPress={() => openUrl(link.url)} />
+        <IconButton icon="open" label="열기" href={link.url} />
         <IconButton
           icon="trash"
           label="삭제"
           color={t.danger}
-          onPress={() => confirm('링크 삭제', `「${link.title}」을(를) 보관함에서 지울까요?`, '삭제', () => removeLink(link.id))}
+          onPress={() => ask({ title: '링크 삭제', message: `「${link.title}」을(를) 보관함에서 지울까요?`, ok: '삭제', onOk: () => removeLink(link.id) })}
         />
       </Row>
     </Card>
