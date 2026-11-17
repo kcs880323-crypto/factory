@@ -25,7 +25,7 @@ import java.util.Locale;
 
 public class WidgetProvider extends AppWidgetProvider {
     static final String PREFS = "urlapp_widget";
-    static final int MAX_ROWS = 4;
+    static final int MAX_ROWS = 8; // 레이아웃에 있는 줄(w_row1…)까지만 그린다 (기본 4줄, 스크립트가 정하면 8줄까지)
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
@@ -85,6 +85,7 @@ public class WidgetProvider extends AppWidgetProvider {
         JSONArray rows = data != null ? data.optJSONArray("rows") : null;
         for (int i = 0; i < MAX_ROWS; i++) {
             int row = id(res, pkg, "w_row" + (i + 1));
+            if (row == 0) break; // 이 앱의 위젯은 여기까지
             JSONObject r = rows != null ? rows.optJSONObject(i) : null;
             if (r == null) {
                 v.setViewVisibility(row, View.GONE);

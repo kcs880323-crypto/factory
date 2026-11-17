@@ -39,6 +39,8 @@ SHELL_DIR = HERE / "shell"  # 안드로이드 껍데기 자바 코드 (MainActiv
 DOWNLOAD_JS = HERE / "shell" / "download.js"  # 페이지가 만든 파일(blob:) 받기 도우미. 앱마다 assets 로 들어간다
 WIDGET_RUNNER = HERE / "shell" / "widget-runner.js"  # 위젯 스크립트를 감싸 페이지에서 돌리는 실행기
 WIDGET_SLOT = "(/*__WIDGET_FN__*/ null)"
+WIDGET_ROWS_SLOT = "/*__WIDGET_ROWS__*/4"
+WIDGET_ROWS_RE = re.compile(r"^\s*//\s*urlapp:rows\s+(\d+)\s*$", re.M)
 ICON_TOOL = HERE / "UrlAppIcon.java"
 SHELL_CLASS = "app.jarvis.urlapp.MainActivity"
 MIN_SDK = 24      # 안드로이드 7.0
@@ -836,8 +838,20 @@ def mix(hex_color, other, t):
     return "#%02X%02X%02X" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
 
-def write_widget_resources(res, accent):
-    """홈 화면 위젯의 모양 (RemoteViews 로 그릴 수 있는 LinearLayout·TextView·ImageView 만 쓴다)."""
+def widget_rows(script_text):
+    """위젯 스크립트가 "// urlapp:rows N" 으로 정한 줄 수 (기본 4, 1~8)."""
+    m = WIDGET_ROWS_RE.search(script_text or "")
+    if not m:
+        return 4
+    n = int(m.group(1))
+    if not 1 <= n <= 8:
+        raise Fail(f"위젯 스크립트의 urlapp:rows 는 1~8 이어야 합니다: {n}")
+    return n
+
+
+def write_widget_resources(res, accent, rows=4):
+    """홈 화면 위젯의 모양 (RemoteViews 로 그릴 수 있는 LinearLayout·TextView·ImageView 만 쓴다).
+    rows: 줄 수. 4줄이 넘으면 처음 크기를 세 칸 높이로 한다 (이미 놓인 위젯은 사용자가 늘린다)."""
     def w(rel, text):
         f = res / rel
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -871,7 +885,7 @@ def write_widget_resources(res, accent):
     <corners android:radius="22dp" />
 </shape>
 """)
-    rows = "".join(f"""
+    rows_xml = "".join(f"""
     <LinearLayout
         android:id="@+id/w_row{i}"
         android:layout_width="match_parent"
@@ -897,7 +911,7 @@ def write_widget_resources(res, accent):
             android:textColor="@color/widget_value"
             android:textSize="16sp"
             android:textStyle="bold" />
-    </LinearLayout>""" for i in range(1, 5))
+    </LinearLayout>""" for i in range(1, rows + 1))
     w("layout/urlapp_widget.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/w_root"
@@ -932,7 +946,7 @@ def write_widget_resources(res, accent):
             android:textColor="@color/widget_title"
             android:textSize="14sp"
             android:textStyle="bold" />
-    </LinearLayout>{rows}
+    </LinearLayout>{rows_xml}
     <TextView
         android:id="@+id/w_note"
         android:layout_width="match_parent"
@@ -944,18 +958,19 @@ def write_widget_resources(res, accent):
         android:textSize="10sp" />
 </LinearLayout>
 """)
-    w("xml/urlapp_widget_info.xml", """<?xml version="1.0" encoding="utf-8"?>
+    tall = rows > 4
+    w("xml/urlapp_widget_info.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_desc"
     android:initialLayout="@layout/urlapp_widget"
     android:minWidth="180dp"
-    android:minHeight="110dp"
+    android:minHeight="{170 if tall else 110}dp"
     android:minResizeWidth="140dp"
-    android:minResizeHeight="90dp"
+    android:minResizeHeight="{130 if tall else 90}dp"
     android:previewLayout="@layout/urlapp_widget"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="3"
-    android:targetCellHeight="2"
+    android:targetCellHeight="{3 if tall else 2}"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />
 """)
@@ -982,8 +997,9 @@ def widget_asset(script_text, params=()):
     if not body:
         raise Fail("위젯 스크립트가 비어 있습니다.")
     runner = WIDGET_RUNNER.read_text(encoding="utf-8")
-    if runner.count(WIDGET_SLOT) != 1:
+    if runner.count(WIDGET_SLOT) != 1 or runner.count(WIDGET_ROWS_SLOT) != 1:
         raise Fail("widget-runner.js 의 자리 표시가 없습니다.")
+    runner = runner.replace(WIDGET_ROWS_SLOT, str(widget_rows(script_text)))
     return runner.replace(WIDGET_SLOT, "(\n" + body + "\n)")
 
 
@@ -1126,6 +1142,7 @@ def cmd_build(args):
 
         # 위젯 (사이트별 위젯 스크립트가 있을 때만)
         widget_js = None
+        widget_n = 4
         if opt["widget"] and opt["widget"] != "none":
             ws = Path(opt["widget"]).expanduser()
             if not ws.is_file():
@@ -1135,7 +1152,9 @@ def cmd_build(args):
                 keep_w.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ws, keep_w)
             explicit["widget"] = str(keep_w)
-            widget_js = widget_asset(keep_w.read_text(encoding="utf-8"), opt["widget_param"] or [])
+            widget_text = keep_w.read_text(encoding="utf-8")
+            widget_js = widget_asset(widget_text, opt["widget_param"] or [])
+            widget_n = widget_rows(widget_text)
 
         # 카드 결제 자동 등록 (사이트별 설정이 있을 때만)
         cards_cfg = None
@@ -1198,7 +1217,7 @@ def cmd_build(args):
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
         widget_accent = accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8")
         if widget_js:
-            write_widget_resources(res, widget_accent)
+            write_widget_resources(res, widget_accent, widget_n)
 
         # 설정과 매니페스트
         version_code = int(prev.get("version_code", 0)) + 1
@@ -1547,6 +1566,22 @@ def cmd_selftest(args):
                   and "(night)" in res5)
             check("빌드 5: 설정에 강조색", json.loads(zipfile.ZipFile(rec5["apk"]).read("assets/urlapp.json"))["accent"]
                   == "#4F46E5")
+            check("빌드 5: 기본 위젯은 4줄·두 칸 높이", "id/w_row4" in res5 and "id/w_row5" not in res5
+                  and "var MAX_ROWS = 4;" in wasset)
+            w6 = site / "w6.js"
+            w6.write_text("// urlapp:rows 6\nasync function (site) { return null; }", encoding="utf-8")
+            build(base + "/widget6", "--no-fetch", "--widget", str(w6))
+            rec56 = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/widget6"))
+            res56 = run([tp["aapt2"], "dump", "resources", rec56["apk"]], tmp_home, "dump resources")
+            with zipfile.ZipFile(rec56["apk"]) as z:
+                a56 = z.read("assets/urlapp-widget.js").decode("utf-8")
+                info56 = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/urlapp_widget_info.xml", rec56["apk"]],
+                             tmp_home, "xmltree")
+            check("빌드 5-6: urlapp:rows 6 이면 6줄·세 칸 높이", "id/w_row6" in res56 and "id/w_row7" not in res56
+                  and "var MAX_ROWS = 6;" in a56 and re.search(r"targetCellHeight.*=3", info56) is not None, info56[-400:])
+            w9 = site / "w9.js"
+            w9.write_text("// urlapp:rows 9\nasync function () { return null; }", encoding="utf-8")
+            check("위젯 줄 수가 1~8 밖이면 거부", raises(lambda: build(base + "/widget9", "--no-fetch", "--widget", str(w9))))
             build(base + "/widget", "--no-fetch", "--widget", "none")
             rec6 = load_registry(tmp_home)["apps"][id5]
             mf6 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec6["apk"]], tmp_home, "xmltree")

@@ -2,7 +2,10 @@
 // assets/urlapp-widget.js 로 만들고, 앱이 자기 사이트 페이지(맨 위 화면)에만 넣는다.
 // 위젯 스크립트는 사이트 안에서 돌므로 사이트의 로그인 상태·주소를 그대로 쓴다. 돌려준 값만 앱으로 간다.
 // 사이트가 window.urlappWidget(같은 모양의 함수)을 두면 그것이 앱에 넣은 스크립트보다 먼저다.
-//   돌려줄 값: {title: "...", rows: [{label, value, tone: "pos"|"neg"|""}] (최대 4줄), note: "..."} 또는 null(갱신 안 함)
+// 단, 앱의 스크립트가 인자를 하나 받으면(async function (site) {…}) 앱 스크립트가 불리고 사이트 함수(없으면 null)를
+// 넘겨받는다 → 사이트의 요약을 그대로 쓰면서 줄을 덧붙일 수 있다.
+//   돌려줄 값: {title: "...", rows: [{label, value, tone: "pos"|"neg"|""}] (기본 최대 4줄, 스크립트의
+//   "// urlapp:rows N" 으로 8줄까지), note: "..."} 또는 null(갱신 안 함)
 // 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤),
 // 그리고 위젯 스크립트가 null(로그인 전 등)을 돌려주는 동안은 10초마다.
 (function (token) {
@@ -11,6 +14,7 @@
   window.__urlappWidget = true;
   var bridge = window.UrlAppBridge;
   var fn = (/*__WIDGET_FN__*/ null);
+  var MAX_ROWS = /*__WIDGET_ROWS__*/4;
   if (!bridge || typeof fn !== "function") return;
 
   var busy = false;
@@ -29,9 +33,12 @@
     busy = true;
     // 사이트가 직접 위젯 함수를 주면(window.urlappWidget) 그것을 먼저 쓴다 → 사이트를 고쳐도 앱 업데이트 없이 따라간다
     var site = typeof window.urlappWidget === "function" ? window.urlappWidget : null;
-    Promise.resolve().then(function () { return (site || fn)(); }).then(function (d) {
+    Promise.resolve().then(function () {
+      if (fn.length >= 1) return fn(site ? function () { return site(); } : null); // 앱 스크립트가 사이트 요약을 받아 덧붙임
+      return (site || fn)();
+    }).then(function (d) {
       if (!d || typeof d !== "object") { retryLater(); return; }
-      var rows = Array.isArray(d.rows) ? d.rows.slice(0, 4).map(function (r) {
+      var rows = Array.isArray(d.rows) ? d.rows.slice(0, MAX_ROWS).map(function (r) {
         return { label: clip(r && r.label, 24), value: clip(r && r.value, 24), tone: clip(r && r.tone, 3) };
       }) : [];
       bridge.widget(token, JSON.stringify({ title: clip(d.title, 30), rows: rows, note: clip(d.note, 30) }));

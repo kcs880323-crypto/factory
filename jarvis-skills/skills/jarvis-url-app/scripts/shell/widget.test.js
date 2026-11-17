@@ -15,7 +15,13 @@ const GAOPS = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "gaops
 const FAKE_REF = "abcdefghijklmnopqrst"; // 지어낸 Supabase 프로젝트·키·토큰
 const FAKE_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.fakefakefake";
 const SLOT = "(/*__WIDGET_FN__*/ null)";
-const ASSET = RUNNER.replace(SLOT, "(\n" + LEDGER.trim().replace(/;\s*$/, "") + "\n)"); // url_app.py 의 widget_asset 과 같게
+const ROWS_SLOT = "/*__WIDGET_ROWS__*/4";
+// url_app.py 의 widget_asset 과 같게: 스크립트를 자리에 넣고, "// urlapp:rows N" 이 있으면 줄 수를 바꾼다
+function asset(script) {
+  const m = /^\s*\/\/\s*urlapp:rows\s+(\d+)\s*$/m.exec(script);
+  return RUNNER.replace(ROWS_SLOT, m ? m[1] : "4").replace(SLOT, "(\n" + script.trim().replace(/;\s*$/, "") + "\n)");
+}
+const ASSET = asset(LEDGER);
 const TOKEN = "t0k3n";
 
 const results = [];
@@ -27,7 +33,28 @@ function check(label, cond, detail) {
 (async () => {
   let summary = { income: 5000000, fixed: 1200000, variable: 800000, savings: 1000000, investments: 0 };
   const requests = [];
+  const detailReqs = [];
+  // 상세 변동지출 (지어낸 값): 메모에 "카드"가 있는 것만, 창수·지현만 더한다. 같은 줄(id·표)이 두 번 와도 한 번만.
+  const details = [
+    { id: 1, source_table: "monthly_details", date: "2026-11-03", details: "메가커피", amount: 12500, earner_name: "창수", memo: "현대카드" },
+    { id: 2, source_table: "monthly_details", date: "2026-11-04", details: "시장", amount: 5000, earner_name: "창수", memo: "현금" },
+    { id: 3, source_table: "monthly_details", date: "2026-11-05", details: "이마트", amount: 30000, earner_name: "지현", memo: "삼성카드" },
+    { id: 4, source_table: "monthly_details", date: "2026-11-06", details: "약국", amount: 7000, earner_name: "지현", memo: "" },
+    { id: 5, source_table: "monthly_details", date: "2026-11-07", details: "문구점", amount: 9999, earner_name: "태하", memo: "신한카드" },
+    { id: 6, source_table: "monthly_details", date: "2026-11-08", details: "GS25", amount: "1,000", earner_name: "창수 ", memo: "현대카드 M" },
+    { id: 1, source_table: "monthly_details", date: "2026-11-03", details: "메가커피", amount: 12500, earner_name: "창수", memo: "현대카드" },
+  ];
   const server = http.createServer((req, res) => {
+    if (req.url === "/urlapp.json") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ version: 1, cards: { history: { path: "/api/monthly-details?month={month}",
+        fields: { details: "details", amount: "amount", owner: "earner_name", memo: "memo", id: "id", table: "source_table" } } } }));
+    }
+    if (req.url.startsWith("/api/monthly-details?month=")) {
+      detailReqs.push(req.url);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify(details));
+    }
     if (req.url.startsWith("/api/summary")) {
       requests.push(req.url);
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -62,7 +89,8 @@ function check(label, cond, detail) {
   console.log("widget 시험 (크로미움)");
   await page.evaluate(ASSET.replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
   await page.waitForTimeout(500);
-  check("로그인 전에는 읽지 않음", (await page.evaluate(() => __w.length)) === 0 && requests.length === 0, requests);
+  check("로그인 전에는 읽지 않음", (await page.evaluate(() => __w.length)) === 0 && requests.length === 0
+    && detailReqs.length === 0, [requests, detailReqs]);
 
   await page.evaluate(() => { sessionStorage.setItem("isAuthenticated", "true"); window.__urlappWidgetRun(); });
   await page.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
@@ -70,13 +98,15 @@ function check(label, cond, detail) {
   const now = new Date();
   const m = now.getMonth() + 1;
   check("제목", w.title === `${m}월 우리집 가계부`, w.title);
-  check("수입·지출(고정+변동)·저축·차액", JSON.stringify(w.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
-    ["수입", "5,000,000원", "pos"], ["지출", "2,000,000원", "neg"], ["저축", "1,000,000원", ""],
-    ["수입 − 지출", "3,000,000원", "pos"]]), w.rows);
+  check("수입·지출(고정+변동)·저축·차액 + 창수·지현 카드", JSON.stringify(w.rows.map((r) => [r.label, r.value, r.tone]))
+    === JSON.stringify([
+      ["수입", "5,000,000원", "pos"], ["지출", "2,000,000원", "neg"], ["저축", "1,000,000원", ""],
+      ["수입 − 지출", "3,000,000원", "pos"], ["창수 카드", "13,500원", ""], ["지현 카드", "30,000원", ""]]), w.rows);
   const last = new Date(now.getFullYear(), m, 0).getDate();
   const ym = `${now.getFullYear()}-${String(m).padStart(2, "0")}`;
   check("대시보드와 같은 요청 (이번 달, 전체 사용자)",
     requests[0] === `/api/summary?startDate=${ym}-01&endDate=${ym}-${String(last).padStart(2, "0")}&earnerId=all`, requests);
+  check("카드 합계는 이번 달 상세 내역 (연동 파일의 주소)", detailReqs[0] === `/api/monthly-details?month=${ym}`, detailReqs);
 
   // 사이트가 지출을 저장하면(POST) 잠시 뒤 위젯이 다시 읽는다
   await page.evaluate(() => fetch("/api/monthly-details/add-single", { method: "POST", body: "{}" }));
@@ -99,7 +129,17 @@ function check(label, cond, detail) {
   const n0 = await page.evaluate(() => __w.length);
   await page.evaluate(() => window.__urlappWidgetRun());
   await page.waitForFunction((n) => __w.length > n, n0, { timeout: 5000 });
-  check("사이트의 window.urlappWidget 이 먼저", (await page.evaluate(() => __w[__w.length - 1].title)) === "사이트가 만든 위젯");
+  const ws = await page.evaluate(() => __w[__w.length - 1]);
+  check("사이트의 window.urlappWidget 요약을 쓰고 카드 줄을 덧붙임", ws.title === "사이트가 만든 위젯"
+    && JSON.stringify(ws.rows.map((r) => [r.label, r.value])) === JSON.stringify([["a", "1"], ["창수 카드", "13,500원"],
+      ["지현 카드", "30,000원"]]), ws);
+  // 사이트 요약이 실패하면 앱의 계산으로
+  await page.evaluate(() => { window.urlappWidget = async () => { throw new Error("x"); }; });
+  const n1 = await page.evaluate(() => __w.length);
+  await page.evaluate(() => window.__urlappWidgetRun());
+  await page.waitForFunction((n) => __w.length > n, n1, { timeout: 5000 });
+  const wf = await page.evaluate(() => __w[__w.length - 1]);
+  check("사이트 요약이 실패하면 앱이 계산 (6줄)", wf.title.endsWith("우리집 가계부") && wf.rows.length === 6, wf);
   await page.evaluate(() => { delete window.urlappWidget; });
 
   // 값이 크거나 줄이 많아도 잘라서 넘긴다
@@ -116,6 +156,28 @@ function check(label, cond, detail) {
   const clipped = await page2.evaluate(() => __w[0]);
   check("제목 30자·4줄·값 24자로 자름", clipped && clipped.title && clipped.title.length === 30 && clipped.rows.length === 4
     && clipped.rows[0].value.length === 24, clipped);
+
+  // "// urlapp:rows 6" 이면 6줄까지. 인자 없는 스크립트는 사이트 함수가 먼저 (예전 그대로)
+  const page3 = await browser.newPage();
+  await page3.goto(base);
+  await page3.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  await page3.evaluate(asset("// urlapp:rows 6\nasync function(){return {title:'t', rows:[1,2,3,4,5,6,7,8].map(i=>({label:'l'+i,value:'v'}))};}")
+    .replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await page3.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  check("urlapp:rows 6 이면 6줄까지", (await page3.evaluate(() => __w[0].rows.length)) === 6);
+  const page4 = await browser.newPage();
+  await page4.goto(base);
+  await page4.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+    window.urlappWidget = async () => ({ title: "site", rows: [] });
+  }, TOKEN);
+  await page4.evaluate(asset("async function(){return {title:'app', rows:[]};}").replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await page4.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  check("인자 없는 앱 스크립트는 사이트 함수가 먼저", (await page4.evaluate(() => __w[0].title)) === "site");
 
   // AJ GA HUB: 팀 게시판 위젯
   const aj = await browser.newPage();
