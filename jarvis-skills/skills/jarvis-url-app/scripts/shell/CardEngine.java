@@ -134,10 +134,36 @@ final class CardEngine {
         return new LedgerClient(base, c).withAuth(header, store.appKey());
     }
 
-    /** 설정 화면에서 키를 바꾸면 바로 적용. */
-    void setAppKey(String key) {
-        store.setAppKey(key);
+    /** 설정 화면에서 키를 바꾸면 바로 적용. 빈 값이면 바꾸지 않고 false (저장된 키는 그대로). */
+    boolean setAppKey(String key) {
+        if (!store.setAppKey(key)) return false;
         apply(cfg);
+        return true;
+    }
+
+    void clearAppKey() {
+        store.clearAppKey();
+        apply(cfg);
+    }
+
+    /** 저장된 키로 가계부에 실제로 물어본다 (이번 달 내역 읽기). 결과 한 줄. */
+    String checkKey() {
+        if (store.appKey().isEmpty()) return "저장된 키가 없어요.";
+        Calendar c = Calendar.getInstance();
+        String month = String.format(Locale.ROOT, "%04d-%02d", c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1);
+        try {
+            client.history(month);
+            store.noteKeyOk();
+            return "✔ 가계부가 이 키를 받아 줘요.";
+        } catch (Exception e) {
+            int code = client.lastCode();
+            if (code == 401 || code == 403) {
+                store.setAuthErrors(store.authErrors() + 1);
+                return "✖ 가계부가 이 키를 모른다고 해요 (" + client.lastReason() + "). 앱에는 키가 그대로 있어요. 사이트의 "
+                        + "'앱 연동 키 · 보안' 목록에 이 폰의 키가 있는지 봐 주세요. 목록에서 없어졌다면 사이트가 키를 잃어버린 거예요.";
+            }
+            return "확인하지 못했어요: " + failHint(code) + (client.lastReason().isEmpty() ? "" : " (" + client.lastReason() + ")");
+        }
     }
 
     boolean authRequired() {
@@ -338,9 +364,12 @@ final class CardEngine {
             store.setAuthErrors(n);
             if (System.currentTimeMillis() - store.linkAlertAt() > 6 * 3600 * 1000L) {
                 store.setLinkAlertAt(System.currentTimeMillis());
-                notify("auth-needed", "가계부 앱 연동 키를 확인해 주세요",
-                        "가계부가 등록을 거절했어요 (HTTP " + code + "). 사이트에 보안을 켰다면, 사이트 설정에서 만든 "
-                                + "'앱 연동 키'를 카드 자동 등록 설정에 넣어 주세요. 결제는 모아 두었다가 보내요.", null);
+                notify("auth-needed", "가계부가 앱 연동 키를 받지 않았어요",
+                        store.appKey().isEmpty()
+                                ? "가계부가 등록을 거절했어요 (HTTP " + code + "). 사이트의 '앱 연동 키 · 보안'에서 만든 키를 "
+                                + "카드 자동 등록 설정에 넣어 주세요. 결제는 모아 두었다가 보내요."
+                                : "가계부가 등록을 거절했어요 (HTTP " + code + "). 앱에는 키가 그대로 있어요. 사이트의 "
+                                + "'앱 연동 키 · 보안' 목록에 이 폰의 키가 있는지 봐 주세요. 결제는 모아 두었다가 보내요.", null);
             }
             return false; // 키를 넣으면(설정 화면) 바로 다시 보낸다
         }
@@ -363,6 +392,7 @@ final class CardEngine {
         if (ok) {
             e.remove("error");
             e.remove("code");
+            if (!store.appKey().isEmpty()) store.noteKeyOk();
             if (store.linkErrors() > 0) store.setLinkErrors(0, "");
             if (store.authErrors() > 0) store.setAuthErrors(0);
             put(e, "status", CardStore.REGISTERED);

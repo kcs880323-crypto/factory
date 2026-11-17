@@ -7,6 +7,11 @@ package app.jarvis.urlapp;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -24,9 +29,11 @@ final class CardStore {
     private static final int MAX_LOG = 60;
 
     private final SharedPreferences p;
+    private final File keyFile; // 앱 연동 키의 사본 (설정 파일이 깨지거나 비어도 되살린다)
 
     CardStore(Context c) {
         p = c.getSharedPreferences("urlapp_cards", Context.MODE_PRIVATE);
+        keyFile = new File(c.getFilesDir(), "urlapp_app_key");
     }
 
     String owner() {
@@ -290,12 +297,74 @@ final class CardStore {
 
     // ---------- 가계부 앱 연동 키 (사이트에 보안을 켠 뒤, 화면 밖 요청에 붙이는 키) ----------
 
+    // 한 번 넣은 키는 사용자가 '키 지우기'를 확인할 때만 지운다: 빈 값으로 덮지 않고, 바로 디스크에 쓰고(commit),
+    // 앱 전용 파일에 사본을 둔다. 가계부가 키를 거절해도(401) 키는 그대로 둔다 (사이트 쪽 문제일 수 있으므로).
+
     String appKey() {
-        return p.getString("app_key", "");
+        String k = p.getString("app_key", "");
+        if (k.isEmpty()) {
+            k = readKeyFile();
+            if (!k.isEmpty()) p.edit().putString("app_key", k).commit(); // 사본에서 되살림
+        }
+        return k;
     }
 
-    void setAppKey(String key) {
-        p.edit().putString("app_key", key == null ? "" : key.trim()).putInt("auth_errors", 0).apply();
+    /** 새 키 저장. 빈 값이면 아무것도 바꾸지 않고 false. */
+    boolean setAppKey(String key) {
+        String k = key == null ? "" : key.trim();
+        if (k.isEmpty()) return false;
+        boolean ok = p.edit().putString("app_key", k).putLong("app_key_at", System.currentTimeMillis())
+                .putInt("auth_errors", 0).remove("key_ok_at").commit();
+        writeKeyFile(k);
+        return ok;
+    }
+
+    /** 사용자가 '키 지우기'를 확인했을 때만. */
+    void clearAppKey() {
+        p.edit().remove("app_key").remove("app_key_at").remove("key_ok_at").putInt("auth_errors", 0).commit();
+        //noinspection ResultOfMethodCallIgnored
+        keyFile.delete();
+    }
+
+    long appKeyAt() {
+        return p.getLong("app_key_at", 0);
+    }
+
+    /** 가계부가 이 키로 요청을 받아 준 마지막 시각. */
+    long keyOkAt() {
+        return p.getLong("key_ok_at", 0);
+    }
+
+    void noteKeyOk() {
+        p.edit().putLong("key_ok_at", System.currentTimeMillis()).putInt("auth_errors", 0).apply();
+    }
+
+    private String readKeyFile() {
+        if (!keyFile.isFile() || keyFile.length() > 4096) return "";
+        try (FileInputStream in = new FileInputStream(keyFile)) {
+            byte[] b = new byte[(int) keyFile.length()];
+            int n = 0;
+            while (n < b.length) {
+                int r = in.read(b, n, b.length - n);
+                if (r < 0) break;
+                n += r;
+            }
+            return new String(b, 0, n, StandardCharsets.UTF_8).trim();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private void writeKeyFile(String k) {
+        File tmp = new File(keyFile.getPath() + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(tmp)) {
+            out.write(k.getBytes(StandardCharsets.UTF_8));
+            out.getFD().sync();
+        } catch (Exception e) {
+            return;
+        }
+        //noinspection ResultOfMethodCallIgnored
+        tmp.renameTo(keyFile); // 한 번에 바꿔 끼운다 (쓰다 끊겨도 반쪽 키가 남지 않게)
     }
 
     int authErrors() {

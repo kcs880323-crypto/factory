@@ -320,36 +320,74 @@ public class CardSettingsActivity extends Activity {
                 + "4) 저장하고 켜기. 카드로 결제하면 위 '마지막으로 받은 카드 알림'에 시각이 떠요.");
     }
 
-    /** 가계부 앱 연동 키: 사이트에 보안을 켜면 화면 밖(카드 자동 등록) 요청에 필요. */
+    /** 가계부 앱 연동 키: 사이트에 보안을 켜면 화면 밖(카드 자동 등록) 요청에 필요. 한 번 넣으면 '키 지우기'로만 지운다. */
     private void renderAppKey() {
         String key = engine.store.appKey();
         boolean needed = engine.authRequired() || engine.store.authErrors() > 0;
-        TextView t = para((key.isEmpty() ? (needed ? "✖ " : "△ ") : "✔ ") + "가계부 앱 연동 키: "
-                + (key.isEmpty() ? (needed ? "필요해요 — 사이트 설정에서 만든 키를 넣어 주세요" : "없음 (사이트에 보안을 켜기 전에는 필요 없어요)")
-                : "넣음 (" + key.substring(0, Math.min(4, key.length())) + "…)"));
-        if (key.isEmpty() && needed) t.setTextColor(Color.rgb(225, 29, 72));
-        if (!key.isEmpty() && engine.store.authErrors() > 0) {
-            TextView bad = para("✖ 최근 가계부가 이 키를 받지 않았어요. 사이트의 '앱 연동 키 · 보안'에서 키를 새로 만들어 "
-                    + "다시 붙여 넣어 주세요.");
-            bad.setTextColor(Color.rgb(225, 29, 72));
+        SimpleDateFormat f = new SimpleDateFormat("M/d HH:mm", Locale.KOREA);
+        if (key.isEmpty()) {
+            TextView t = para((needed ? "✖ " : "△ ") + "가계부 앱 연동 키: "
+                    + (needed ? "필요해요 — 사이트의 '앱 연동 키 · 보안'에서 만든 키를 넣어 주세요" : "없음 (사이트에 보안을 켜기 전에는 필요 없어요)"));
+            if (needed) t.setTextColor(Color.rgb(225, 29, 72));
+        } else {
+            long at = engine.store.appKeyAt(), ok = engine.store.keyOkAt();
+            para("✔ 가계부 앱 연동 키: 저장됨 (" + key.substring(0, Math.min(4, key.length())) + "…"
+                    + (at > 0 ? ", " + f.format(new Date(at)) + " 저장" : "") + ")"
+                    + (ok > 0 ? "\n   마지막으로 가계부가 받아 준 시각: " + f.format(new Date(ok)) : "")
+                    + "\n   한 번 저장한 키는 앱을 업데이트해도 그대로예요. 아래 칸은 키를 바꿀 때만 써요.");
+            if (engine.store.authErrors() > 0) {
+                TextView bad = para("✖ 최근 가계부가 이 키를 받지 않았어요. 앱에는 키가 그대로 있어요. 사이트의 '앱 연동 키 · 보안' "
+                        + "목록에 이 폰의 키가 있는지 먼저 봐 주세요. 목록에 있으면 아래 '키 확인'을, 없어졌다면 사이트가 키를 "
+                        + "잃어버린 것이니 새로 만들어 '바꾸기'로 넣어 주세요.");
+                bad.setTextColor(Color.rgb(225, 29, 72));
+            }
+            row("", "키 확인", v -> {
+                Toast.makeText(this, "가계부에 물어보는 중…", Toast.LENGTH_SHORT).show();
+                engine.exec.execute(() -> {
+                    String r = engine.checkKey();
+                    boolean had = r.startsWith("✔") && engine.hasPending();
+                    String sent = had ? " " + engine.flush() : "";
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, r + sent, Toast.LENGTH_LONG).show();
+                        render();
+                    });
+                });
+            });
         }
         EditText k = new EditText(this);
         k.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        k.setHint("앱 연동 키 붙여 넣기");
+        k.setHint(key.isEmpty() ? "앱 연동 키 붙여 넣기" : "새 키로 바꿀 때만 붙여 넣기");
         box.addView(k);
-        row("", "저장", v -> {
+        row("", key.isEmpty() ? "저장" : "바꾸기", v -> {
             String value = k.getText().toString().trim();
+            if (value.isEmpty()) { // 빈 칸으로는 저장된 키를 지우지 않는다
+                Toast.makeText(this, key.isEmpty() ? "칸이 비어 있어요. 사이트에서 만든 키를 붙여 넣어 주세요."
+                        : "칸이 비어 있어요. 저장된 키는 그대로예요.", Toast.LENGTH_LONG).show();
+                return;
+            }
             engine.exec.execute(() -> {
-                engine.setAppKey(value);
-                boolean had = engine.hasPending();
-                String result = engine.flush(); // 모아 둔 결제를 새 키로 바로 보낸다
+                boolean saved = engine.setAppKey(value);
+                String check = saved ? engine.checkKey() : "저장하지 못했어요.";
+                boolean had = saved && check.startsWith("✔") && engine.hasPending();
+                String result = had ? " " + engine.flush() : ""; // 모아 둔 결제를 새 키로 바로 보낸다
                 runOnUiThread(() -> {
-                    Toast.makeText(this, (value.isEmpty() ? "키를 지웠어요" : "키를 저장했어요") + (had ? ". " + result : ""),
-                            Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, (saved ? "키를 저장했어요. " : "") + check + result, Toast.LENGTH_LONG).show();
                     render();
                 });
             });
         });
+        if (!key.isEmpty()) {
+            row("", "키 지우기", v -> new android.app.AlertDialog.Builder(this)
+                    .setTitle("앱 연동 키를 지울까요?")
+                    .setMessage("지우면 카드 결제를 가계부에 보내지 못해요. 사이트에서 이 폰의 키를 지웠을 때만 지우세요.")
+                    .setPositiveButton("지우기", (d, w) -> {
+                        engine.clearAppKey();
+                        Toast.makeText(this, "키를 지웠어요", Toast.LENGTH_SHORT).show();
+                        render();
+                    })
+                    .setNegativeButton("취소", null)
+                    .show());
+        }
     }
 
     private void copy(String label, String value) {
