@@ -1139,7 +1139,7 @@ def cmd_build(args):
 
         # 카드 결제 자동 등록 (사이트별 설정이 있을 때만)
         cards_cfg = None
-        cards_via = opt["cards_via"] or "intent"
+        cards_via = opt["cards_via"] or "listener"  # 사용자가 고른 기본: 앱이 직접 알림을 읽는다
         if cards_via not in ("intent", "listener"):
             raise Fail("--cards-via 는 intent(MacroDroid) 또는 listener(앱이 직접 알림 읽기) 입니다.")
         if opt["cards"] and opt["cards"] != "none":
@@ -1561,19 +1561,19 @@ def cmd_selftest(args):
             check("위젯 값 자리 채움 (따옴표 이스케이프)", "title: 'a\\\"b'" in a7 and "__PARAM_" not in a7, a7[-120:])
             check("잘못된 --widget-param 거부", raises(lambda: build(base + "/param", "--no-fetch", "--widget-param", "bad")))
             cards_json = HERE.parent / "cards" / "smart-ledger.json"
-            build(base + "/cards", "--no-fetch", "--cards", str(cards_json))
+            build(base + "/cards", "--no-fetch", "--cards", str(cards_json), "--cards-via", "intent")
             id8, rec8 = next((k, v) for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/cards"))
             mf8 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec8["apk"]], tmp_home, "xmltree")
             sc8 = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/shortcuts.xml", rec8["apk"]], tmp_home, "xmltree")
             z8 = zipfile.ZipFile(rec8["apk"])
-            check("카드(기본 MacroDroid): 키를 확인하는 받는 곳, 알림 읽기 권한 없음",
+            check("카드(intent, MacroDroid): 키를 확인하는 받는 곳, 알림 읽기 권한 없음",
                   "app.jarvis.urlapp.CardIntentReceiver" in mf8 and "app.jarvis.urlapp.action.CARD_NOTIFICATION" in mf8
                   and "CardListenerService" not in mf8 and "BIND_NOTIFICATION_LISTENER_SERVICE" not in mf8
                   and json.loads(z8.read("assets/urlapp-cards.json"))["via"] == "intent")
-            build(base + "/cards-l", "--no-fetch", "--cards", str(cards_json), "--cards-via", "listener")
+            build(base + "/cards-l", "--no-fetch", "--cards", str(cards_json))  # 기본 = listener
             id9, rec9 = next((k, v) for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/cards-l"))
             mf9 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec9["apk"]], tmp_home, "xmltree")
-            check("카드(listener): 알림 듣기 서비스는 시스템만 묶을 수 있게", "app.jarvis.urlapp.CardListenerService" in mf9
+            check("카드(기본 listener): 알림 듣기 서비스는 시스템만 묶을 수 있게", "app.jarvis.urlapp.CardListenerService" in mf9
                   and "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" in mf9
                   and "android.service.notification.NotificationListenerService" in mf9 and "CardIntentReceiver" not in mf9)
             lf = link_file_json(load_cards_config(cards_json))
@@ -1628,8 +1628,8 @@ def build_parser():
     b.add_argument("--accent", help="강조색 #RRGGBB (진행 막대, 위젯의 수입 같은 강조 숫자). 기본: 아이콘 바탕색 → 테마색")
     b.add_argument("--cards", help="카드 결제 알림 자동 등록을 넣는다: 사이트별 설정(.json) 경로. 'none' 이면 뺀다 (cards/ 의 예시 참고)")
     b.add_argument("--cards-via", dest="cards_via", choices=["intent", "listener"],
-                   help="카드 알림을 받는 방법: intent(기본, MacroDroid 가 넘겨줌 — Play 프로텍트가 설치를 막지 않음) | "
-                        "listener(앱이 직접 알림 읽기 — 직접 설치가 막힐 수 있음)")
+                   help="카드 알림을 받는 방법: listener(기본, 앱이 직접 알림 읽기 — 직접 설치를 Play 프로텍트가 막을 수 있어 "
+                        "설치할 때 앱 검사를 잠깐 끈다) | intent(MacroDroid 가 넘겨줌 — 설치가 막히지 않음)")
     b.add_argument("--widget", help="홈 화면 위젯을 넣는다: 위젯 스크립트(.js) 경로. 'none' 이면 뺀다 (widgets/ 의 예시 참고)")
     b.add_argument("--widget-param", dest="widget_param", action="append", default=[],
                    help="위젯 스크립트의 __PARAM_이름__ 자리에 넣을 값: 이름=값 (여러 번). 값은 출력하지 않고 이 컴퓨터에만 기억")
