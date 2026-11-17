@@ -2,7 +2,8 @@ package app.jarvis.urlapp;
 
 // 홈 화면 위젯. 앱이 열려 있을 때 "위젯 스크립트"(assets/urlapp-widget.js)가 사이트에서 읽은 요약을
 // MainActivity 의 통로로 넘기면 여기서 저장하고 그린다. 위젯이 직접 인터넷에 접속하지는 않는다.
-// 데이터 모양: {"title": "11월 가계부", "rows": [{"label": "수입", "value": "1,234원", "tone": "pos|neg"}], "note": "…"}
+// 데이터 모양: {"title": "11월 가계부", "rows": [{"label": "수입", "value": "1,234원", "tone": "pos|neg"}], "note": "…",
+//              "alt": {같은 모양}}  ← alt 는 두 번째 위젯(WidgetProviderAlt, 예: '카드 사용')이 그린다
 // 위젯이 없는 앱에도 이 클래스는 들어 있지만, 매니페스트에 receiver 가 없으면 쓰이지 않는다.
 
 import android.app.PendingIntent;
@@ -27,9 +28,14 @@ public class WidgetProvider extends AppWidgetProvider {
     static final String PREFS = "urlapp_widget";
     static final int MAX_ROWS = 8; // 레이아웃에 있는 줄(w_row1…)까지만 그린다 (기본 4줄, 스크립트가 정하면 8줄까지)
 
+    /** 두 번째 위젯(WidgetProviderAlt)이면 true: 저장한 값의 "alt" 를 그린다. */
+    boolean alt() {
+        return false;
+    }
+
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
-        mgr.updateAppWidget(ids, build(ctx));
+        mgr.updateAppWidget(ids, build(ctx, alt()));
     }
 
     /** 통로에서 부른다: 받은 요약을 저장하고 홈 화면의 위젯을 모두 다시 그린다. */
@@ -42,8 +48,17 @@ public class WidgetProvider extends AppWidgetProvider {
     static void refresh(Context ctx) {
         AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
         if (mgr == null) return;
-        int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, WidgetProvider.class));
-        if (ids != null && ids.length > 0) mgr.updateAppWidget(ids, build(ctx));
+        update(ctx, mgr, WidgetProvider.class, false);
+        update(ctx, mgr, WidgetProviderAlt.class, true); // 두 번째 위젯이 없는 앱이면 놓인 것이 없다
+    }
+
+    private static void update(Context ctx, AppWidgetManager mgr, Class<?> cls, boolean alt) {
+        try {
+            int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, cls));
+            if (ids != null && ids.length > 0) mgr.updateAppWidget(ids, build(ctx, alt));
+        } catch (RuntimeException e) {
+            // 매니페스트에 없는 위젯
+        }
     }
 
     private static int id(Resources res, String pkg, String name) {
@@ -60,7 +75,7 @@ public class WidgetProvider extends AppWidgetProvider {
         }
     }
 
-    static RemoteViews build(Context ctx) {
+    static RemoteViews build(Context ctx, boolean alt) {
         Resources res = ctx.getResources();
         String pkg = ctx.getPackageName();
         RemoteViews v = new RemoteViews(pkg, res.getIdentifier("urlapp_widget", "layout", pkg));
@@ -71,6 +86,7 @@ public class WidgetProvider extends AppWidgetProvider {
         try {
             String raw = p.getString("data", null);
             if (raw != null) data = new JSONObject(raw);
+            if (alt) data = data != null ? data.optJSONObject("alt") : null;
         } catch (Exception e) {
             data = null;
         }

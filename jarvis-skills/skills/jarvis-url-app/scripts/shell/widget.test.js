@@ -107,6 +107,13 @@ function check(label, cond, detail) {
   check("대시보드와 같은 요청 (이번 달, 전체 사용자)",
     requests[0] === `/api/summary?startDate=${ym}-01&endDate=${ym}-${String(last).padStart(2, "0")}&earnerId=all`, requests);
   check("카드 합계는 이번 달 상세 내역 (연동 파일의 주소)", detailReqs[0] === `/api/monthly-details?month=${ym}`, detailReqs);
+  const alt = w.alt || {};
+  check("두 번째 위젯(카드 사용): 제목에 합계", alt.title === `${m}월 카드 사용 43,500원`, alt.title);
+  check("두 번째 위젯: 사람별 합계 + 최근 카드 내역 (최신순, 현금·다른 사람 제외, 중복 한 번)",
+    JSON.stringify((alt.rows || []).map((r) => [r.label, r.value])) === JSON.stringify([
+      ["창수 합계", "13,500원"], ["지현 합계", "30,000원"], ["11/8 창수 · GS25", "1,000원"],
+      ["11/5 지현 · 이마트", "30,000원"], ["11/3 창수 · 메가커피", "12,500원"]]), alt.rows);
+  check("두 번째 위젯: 아래 줄에 건수", alt.note === "이번 달 카드 3건", alt.note);
 
   // 사이트가 지출을 저장하면(POST) 잠시 뒤 위젯이 다시 읽는다
   await page.evaluate(() => fetch("/api/monthly-details/add-single", { method: "POST", body: "{}" }));
@@ -140,6 +147,15 @@ function check(label, cond, detail) {
   await page.waitForFunction((n) => __w.length > n, n1, { timeout: 5000 });
   const wf = await page.evaluate(() => __w[__w.length - 1]);
   check("사이트 요약이 실패하면 앱이 계산 (6줄)", wf.title.endsWith("우리집 가계부") && wf.rows.length === 6, wf);
+  // 카드 내역을 못 읽으면: 첫 위젯은 4줄, 두 번째 위젯은 이유
+  await page.route("**/api/monthly-details?month=*", (route) => route.fulfill({ status: 401, body: "{}" }));
+  const n2 = await page.evaluate(() => __w.length);
+  await page.evaluate(() => window.__urlappWidgetRun());
+  await page.waitForFunction((n) => __w.length > n, n2, { timeout: 5000 });
+  const wu = await page.evaluate(() => __w[__w.length - 1]);
+  check("카드 내역을 못 읽으면 4줄 + 두 번째 위젯에 이유", wu.rows.length === 4 && wu.alt && wu.alt.rows.length === 0
+    && wu.alt.note === "카드 내역을 읽지 못했어요", wu);
+  await page.unroute("**/api/monthly-details?month=*");
   await page.evaluate(() => { delete window.urlappWidget; });
 
   // 값이 크거나 줄이 많아도 잘라서 넘긴다
@@ -168,6 +184,17 @@ function check(label, cond, detail) {
     .replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
   await page3.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
   check("urlapp:rows 6 이면 6줄까지", (await page3.evaluate(() => __w[0].rows.length)) === 6);
+  const page5 = await browser.newPage();
+  await page5.goto(base);
+  await page5.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  await page5.evaluate(asset("async function(){return {title:'a', rows:[], alt:{title:'y'.repeat(50), rows:[1,2,3,4,5,6].map(i=>({label:'l'+i,value:'v'}))}};}")
+    .replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await page5.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  const a5 = await page5.evaluate(() => __w[0].alt);
+  check("두 번째 위젯 값도 같은 규칙으로 자름 (30자·줄 수)", a5 && a5.title.length === 30 && a5.rows.length === 4, a5);
   const page4 = await browser.newPage();
   await page4.goto(base);
   await page4.evaluate((tok) => {

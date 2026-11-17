@@ -41,6 +41,7 @@ WIDGET_RUNNER = HERE / "shell" / "widget-runner.js"  # 위젯 스크립트를 �
 WIDGET_SLOT = "(/*__WIDGET_FN__*/ null)"
 WIDGET_ROWS_SLOT = "/*__WIDGET_ROWS__*/4"
 WIDGET_ROWS_RE = re.compile(r"^\s*//\s*urlapp:rows\s+(\d+)\s*$", re.M)
+WIDGET_LABEL_RE = re.compile(r"^\s*//\s*urlapp:(label|alt-label)[ \t]+(\S[^\n]*?)\s*$", re.M)
 ICON_TOOL = HERE / "UrlAppIcon.java"
 SHELL_CLASS = "app.jarvis.urlapp.MainActivity"
 MIN_SDK = 24      # 안드로이드 7.0
@@ -645,23 +646,30 @@ def android_string(s):
 
 # ---------------------------------------------------------------- 프로젝트 파일
 
-def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None):
-    """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기)."""
+def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False):
+    """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
+    widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
     orient_attr = f'\n            android:screenOrientation="{orient}"' if orient else ""
     # 안드로이드 16 은 큰 화면(태블릿)에서 방향 고정을 무시한다. 고정을 원하면 임시 예외 속성을 넣는다.
     prop = ('\n            <property android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"'
             ' android:value="true" />') if orient else ""
-    receiver = f"""
+    def widget_receiver(cls, label):
+        return f"""
         <receiver
-            android:name="app.jarvis.urlapp.WidgetProvider"
+            android:name="app.jarvis.urlapp.{cls}"
             android:exported="false"
-            android:label="@string/app_name">
+            android:label="{label}">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/urlapp_widget_info" />
-        </receiver>""" if widget else ""
+        </receiver>"""
+    receiver = ""
+    if widget:
+        receiver = widget_receiver("WidgetProvider", "@string/widget_name" if widget_label else "@string/app_name")
+        if widget_alt:
+            receiver += widget_receiver("WidgetProviderAlt", "@string/widget_alt_name")
     # 카드 자동 등록: 알림 듣기(사용자가 '알림 접근'을 켜야 동작), 설정 화면, 되돌리기 단추, 다시 보내기 작업
     listener = """
         <service
@@ -849,7 +857,17 @@ def widget_rows(script_text):
     return n
 
 
-def write_widget_resources(res, accent, rows=4):
+def widget_labels(script_text):
+    """위젯 목록에 보일 이름: "// urlapp:label 이름"(첫 위젯), "// urlapp:alt-label 이름"(두 번째 위젯, 있으면 생김)."""
+    out = {"label": None, "alt-label": None}
+    for kind, value in WIDGET_LABEL_RE.findall(script_text or ""):
+        if len(value) > 30:
+            raise Fail(f"위젯 이름은 30자까지입니다: {value}")
+        out[kind] = value
+    return out["label"], out["alt-label"]
+
+
+def write_widget_resources(res, accent, rows=4, label=None, alt_label=None):
     """홈 화면 위젯의 모양 (RemoteViews 로 그릴 수 있는 LinearLayout·TextView·ImageView 만 쓴다).
     rows: 줄 수. 4줄이 넘으면 처음 크기를 세 칸 높이로 한다 (이미 놓인 위젯은 사용자가 늘린다)."""
     def w(rel, text):
@@ -867,11 +885,13 @@ def write_widget_resources(res, accent, rows=4):
     w("values-night/widget_colors.xml", colors({
         "widget_bg": "#1E293B", "widget_title": "#F1F5F9", "widget_label": "#94A3B8", "widget_value": "#F8FAFC",
         "widget_note": "#64748B", "widget_accent": mix(accent, "#FFFFFF", 0.35), "widget_negative": "#FB7185"}))
-    w("values/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
+    names = "".join(f'    <string name="{k}">{android_string(v)}</string>\n'
+                    for k, v in (("widget_name", label), ("widget_alt_name", alt_label)) if v)
+    w("values/widget_strings.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_desc">앱의 요약을 홈 화면에 보여 줍니다</string>
     <string name="widget_hint">앱을 열고 로그인하면 여기에 요약이 보여요</string>
-</resources>
+{names}</resources>
 """)
     w("values-en/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
 <resources>
@@ -1143,6 +1163,7 @@ def cmd_build(args):
         # 위젯 (사이트별 위젯 스크립트가 있을 때만)
         widget_js = None
         widget_n = 4
+        widget_label = widget_alt_label = None
         if opt["widget"] and opt["widget"] != "none":
             ws = Path(opt["widget"]).expanduser()
             if not ws.is_file():
@@ -1155,6 +1176,7 @@ def cmd_build(args):
             widget_text = keep_w.read_text(encoding="utf-8")
             widget_js = widget_asset(widget_text, opt["widget_param"] or [])
             widget_n = widget_rows(widget_text)
+            widget_label, widget_alt_label = widget_labels(widget_text)
 
         # 카드 결제 자동 등록 (사이트별 설정이 있을 때만)
         cards_cfg = None
@@ -1217,7 +1239,7 @@ def cmd_build(args):
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
         widget_accent = accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8")
         if widget_js:
-            write_widget_resources(res, widget_accent, widget_n)
+            write_widget_resources(res, widget_accent, widget_n, widget_label, widget_alt_label)
 
         # 설정과 매니페스트
         version_code = int(prev.get("version_code", 0)) + 1
@@ -1239,7 +1261,9 @@ def cmd_build(args):
                                                       encoding="utf-8")
         cleartext = urllib.parse.urlsplit(url).scheme == "http"
         (workdir / "AndroidManifest.xml").write_text(manifest_xml(app_id, cleartext, opt["orientation"], bool(widget_js),
-                                                                  cards_via if cards_cfg else None),
+                                                                  cards_via if cards_cfg else None,
+                                                                  widget_label=bool(widget_js and widget_label),
+                                                                  widget_alt=bool(widget_js and widget_alt_label)),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1292,7 +1316,8 @@ def cmd_build(args):
                else "앱이 직접 알림을 읽는다 (알림 접근 권한. 직접 설치는 Play 프로텍트가 막을 수 있음)")
         say(f"  카드 결제 자동 등록: 있음 (담당자 {', '.join(cards_cfg['owners'])}; {how}). 앱이 처음 열릴 때 설정을 묻는다")
     if widget_js:
-        say("  홈 화면 위젯: 있음 (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
+        kinds = (f" 2종: '{widget_label or name}', '{widget_alt_label}'" if widget_alt_label else "")
+        say(f"  홈 화면 위젯: 있음{kinds} (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
     say(f"  다른 사이트 링크: {'브라우저로' if opt['external'] == 'browser' else '앱 안에서'} | 앱 안에서 여는 사이트: "
         + ", ".join(cfg["hosts"]))
     say("설치: 이 APK 를 태블릿·폰으로 옮겨 파일을 누르고 '출처를 알 수 없는 앱 설치'를 그 앱(파일 관리자 등)에만 허용한다."
@@ -1566,10 +1591,11 @@ def cmd_selftest(args):
                   and "(night)" in res5)
             check("빌드 5: 설정에 강조색", json.loads(zipfile.ZipFile(rec5["apk"]).read("assets/urlapp.json"))["accent"]
                   == "#4F46E5")
-            check("빌드 5: 기본 위젯은 4줄·두 칸 높이", "id/w_row4" in res5 and "id/w_row5" not in res5
-                  and "var MAX_ROWS = 4;" in wasset)
+            check("빌드 5: 기본 위젯은 4줄·두 칸 높이·한 종류", "id/w_row4" in res5 and "id/w_row5" not in res5
+                  and "var MAX_ROWS = 4;" in wasset and "WidgetProviderAlt" not in mf)
             w6 = site / "w6.js"
-            w6.write_text("// urlapp:rows 6\nasync function (site) { return null; }", encoding="utf-8")
+            w6.write_text("// urlapp:rows 6\n// urlapp:label 전체 & '요약'\n// urlapp:alt-label 카드 사용\n"
+                          "async function (site) { return null; }", encoding="utf-8")
             build(base + "/widget6", "--no-fetch", "--widget", str(w6))
             rec56 = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/widget6"))
             res56 = run([tp["aapt2"], "dump", "resources", rec56["apk"]], tmp_home, "dump resources")
@@ -1579,6 +1605,14 @@ def cmd_selftest(args):
                              tmp_home, "xmltree")
             check("빌드 5-6: urlapp:rows 6 이면 6줄·세 칸 높이", "id/w_row6" in res56 and "id/w_row7" not in res56
                   and "var MAX_ROWS = 6;" in a56 and re.search(r"targetCellHeight.*=3", info56) is not None, info56[-400:])
+            mf56 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec56["apk"]], tmp_home, "xmltree")
+            check("빌드 5-6: alt-label 이면 위젯 2종 (각자 이름)", "app.jarvis.urlapp.WidgetProviderAlt" in mf56
+                  and "app.jarvis.urlapp.WidgetProvider\"" in mf56 and "string/widget_name" in res56
+                  and "string/widget_alt_name" in res56 and "전체 & 'x'".replace("x", "요약") in res56
+                  and "카드 사용" in res56, res56[-600:])
+            wl = site / "wl.js"
+            wl.write_text("// urlapp:alt-label " + "가" * 31 + "\nasync function () { return null; }", encoding="utf-8")
+            check("위젯 이름이 30자를 넘으면 거부", raises(lambda: build(base + "/widgetl", "--no-fetch", "--widget", str(wl))))
             w9 = site / "w9.js"
             w9.write_text("// urlapp:rows 9\nasync function () { return null; }", encoding="utf-8")
             check("위젯 줄 수가 1~8 밖이면 거부", raises(lambda: build(base + "/widget9", "--no-fetch", "--widget", str(w9))))
