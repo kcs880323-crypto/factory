@@ -183,7 +183,9 @@ public class CardSettingsActivity extends Activity {
             String label = new SimpleDateFormat("M/d", Locale.KOREA).format(new Date(e.optLong("when"))) + "  "
                     + e.optString("merchant") + " " + CardEngine.won(e.optLong("amount")) + "\n"
                     + e.optString("large") + (e.optString("medium").isEmpty() ? "" : "›" + e.optString("medium"))
-                    + " · " + e.optString("owner") + " · " + statusText(st);
+                    + " · " + e.optString("owner") + " · " + statusText(st)
+                    + (CardStore.PENDING.equals(st) && e.has("error")
+                            ? "\n⚠ " + CardEngine.failHint(e.optInt("code")) + " (" + e.optString("error") + ")" : "");
             boolean canUndo = CardStore.REGISTERED.equals(st) || CardStore.PENDING.equals(st);
             final String id = e.optString("id");
             row(label, canUndo ? "되돌리기" : null, v -> engine.exec.execute(() -> {
@@ -195,10 +197,16 @@ public class CardSettingsActivity extends Activity {
             }));
         }
         if (shown == 0) note("아직 없어요. 카드로 결제하면 1분 안에 여기에 보여요.");
-        if (engine.hasPending()) row("인터넷이 연결되면 대기 중인 건을 보내요.", "지금 보내기", v -> engine.exec.execute(() -> {
-            engine.flush();
-            runOnUiThread(this::render);
-        }));
+        if (engine.hasPending()) row("인터넷이 연결되면 대기 중인 건을 보내요.", "지금 보내기", v -> {
+            Toast.makeText(this, "보내는 중…", Toast.LENGTH_SHORT).show();
+            engine.exec.execute(() -> {
+                String result = engine.flush();
+                runOnUiThread(() -> {
+                    Toast.makeText(this, result, Toast.LENGTH_LONG).show();
+                    render();
+                });
+            });
+        });
 
         // 6) 감지했지만 쓰지 않은 앱
         List<String> detected = engine.store.detected();
@@ -248,8 +256,9 @@ public class CardSettingsActivity extends Activity {
         row("배운 가맹점: " + engine.learnedCount() + "곳", "다시 배우기", v -> engine.exec.execute(() -> {
             int n = engine.refreshLearned();
             runOnUiThread(() -> {
-                Toast.makeText(this, n < 0 ? "가계부에 연결하지 못했어요" : "가맹점 " + n + "곳을 배웠어요",
-                        Toast.LENGTH_SHORT).show();
+                String why = engine.lastReason();
+                Toast.makeText(this, n < 0 ? "가계부에 연결하지 못했어요" + (why.isEmpty() ? "" : " (" + why + ")")
+                        : "가맹점 " + n + "곳을 배웠어요", Toast.LENGTH_LONG).show();
                 render();
             });
         }));
@@ -302,6 +311,11 @@ public class CardSettingsActivity extends Activity {
                 + (key.isEmpty() ? (needed ? "필요해요 — 사이트 설정에서 만든 키를 넣어 주세요" : "없음 (사이트에 보안을 켜기 전에는 필요 없어요)")
                 : "넣음 (" + key.substring(0, Math.min(4, key.length())) + "…)"));
         if (key.isEmpty() && needed) t.setTextColor(Color.rgb(225, 29, 72));
+        if (!key.isEmpty() && engine.store.authErrors() > 0) {
+            TextView bad = para("✖ 최근 가계부가 이 키를 받지 않았어요. 사이트의 '앱 연동 키 · 보안'에서 키를 새로 만들어 "
+                    + "다시 붙여 넣어 주세요.");
+            bad.setTextColor(Color.rgb(225, 29, 72));
+        }
         EditText k = new EditText(this);
         k.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         k.setHint("앱 연동 키 붙여 넣기");
@@ -310,9 +324,11 @@ public class CardSettingsActivity extends Activity {
             String value = k.getText().toString().trim();
             engine.exec.execute(() -> {
                 engine.setAppKey(value);
-                engine.flush(); // 모아 둔 결제를 새 키로 바로 보낸다
+                boolean had = engine.hasPending();
+                String result = engine.flush(); // 모아 둔 결제를 새 키로 바로 보낸다
                 runOnUiThread(() -> {
-                    Toast.makeText(this, value.isEmpty() ? "키를 지웠어요" : "키를 저장했어요", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, (value.isEmpty() ? "키를 지웠어요" : "키를 저장했어요") + (had ? ". " + result : ""),
+                            Toast.LENGTH_LONG).show();
                     render();
                 });
             });

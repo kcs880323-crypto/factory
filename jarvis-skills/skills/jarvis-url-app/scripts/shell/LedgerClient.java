@@ -28,6 +28,7 @@ public final class LedgerClient {
     private final String base;   // https://사이트 (끝에 / 없음)
     private final JSONObject cfg;
     private volatile int lastCode; // 마지막 응답 코드 (0 = 연결 못 함). 연동이 끊겼는지 가리는 데 쓴다
+    private volatile String lastReason = ""; // 마지막 실패 이유 (예: "HTTP 401 · unauthorized"). 화면에 보여 준다
     private String authHeader;     // 사이트에 보안을 켰을 때: 예) X-App-Key
     private String authValue;
 
@@ -51,6 +52,35 @@ public final class LedgerClient {
         return lastCode;
     }
 
+    /** 마지막 요청이 실패한 이유 (성공이면 ""). 사이트가 준 오류 문구를 짧게 붙인다. */
+    public String lastReason() {
+        return lastReason;
+    }
+
+    /** 사이트 응답에서 사람이 읽을 오류 문구만 짧게 (JSON 의 error·message, 아니면 글자만). */
+    static String shortMessage(String body) {
+        if (body == null) return "";
+        String m;
+        String t = body.trim();
+        if (t.startsWith("{")) {
+            try {
+                JSONObject o = new JSONObject(t);
+                m = o.optString("error", o.optString("message", ""));
+            } catch (Exception e) {
+                m = "";
+            }
+        } else {
+            m = t.replaceAll("(?s)<[^>]*>", " "); // HTML 오류 쪽 등: 글자만
+        }
+        m = m.replaceAll("\\s+", " ").trim();
+        return m.length() > 60 ? m.substring(0, 60) + "…" : m;
+    }
+
+    private void fail(Response r) {
+        String m = shortMessage(r.body);
+        lastReason = "HTTP " + r.code + (m.isEmpty() ? "" : " · " + m);
+    }
+
     /** 사이트 안의 파일 하나를 글로 받는다 (예: /urlapp.json). 200 이 아니면 null. */
     public String fetchText(String path) throws IOException {
         Response r = request("GET", base + (path.startsWith("/") ? path : "/" + path), null);
@@ -62,6 +92,7 @@ public final class LedgerClient {
         JSONObject a = cfg.getJSONObject("add");
         Object body = fill(a.get("body"), vars);
         Response r = request(a.optString("method", "POST"), url(a.getString("path"), vars), body.toString());
+        if (!r.ok()) fail(r);
         return r.ok();
     }
 
@@ -71,7 +102,10 @@ public final class LedgerClient {
         java.util.HashMap<String, Object> v = new java.util.HashMap<>();
         v.put("month", month);
         Response r = request("GET", url(h.getString("path"), v), null);
-        if (!r.ok()) throw new IOException("history HTTP " + r.code);
+        if (!r.ok()) {
+            fail(r);
+            throw new IOException("history HTTP " + r.code);
+        }
         Object json = new org.json.JSONTokener(r.body).nextValue();
         JSONObject f = h.optJSONObject("fields");
         String detailsKey = f == null ? "details" : f.optString("details", "details");
@@ -119,6 +153,7 @@ public final class LedgerClient {
             v.put("table", row.opt(kTable) == null ? "" : row.opt(kTable));
             JSONObject d = cfg.getJSONObject("delete");
             Response r = request(d.optString("method", "DELETE"), url(d.getString("path"), v), fill(d.get("body"), v).toString());
+            if (!r.ok()) fail(r);
             return r.ok();
         }
         return false;
@@ -218,6 +253,20 @@ public final class LedgerClient {
 
     private Response request(String method, String url, String body) throws IOException {
         lastCode = 0;
+        lastReason = "";
+        try {
+            return send(method, url, body);
+        } catch (IOException e) {
+            if (lastCode == 0) {
+                String m = e.getMessage() == null ? "" : e.getMessage();
+                if (m.length() > 60) m = m.substring(0, 60) + "…";
+                lastReason = "연결 실패 · " + e.getClass().getSimpleName() + (m.isEmpty() ? "" : ": " + m);
+            }
+            throw e;
+        }
+    }
+
+    private Response send(String method, String url, String body) throws IOException {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         try {
             c.setConnectTimeout(15000);
@@ -229,7 +278,7 @@ public final class LedgerClient {
                 byte[] b = body.getBytes(StandardCharsets.UTF_8);
                 c.setDoOutput(true);
                 c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                c.setFixedLengthStreamingMode(b.length);
+                // 고정 길이 스트리밍은 쓰지 않는다: PC 자바에서는 그러면 401 응답의 본문(오류 문구)을 읽지 못한다. 본문은 작다.
                 try (OutputStream os = c.getOutputStream()) {
                     os.write(b);
                 }

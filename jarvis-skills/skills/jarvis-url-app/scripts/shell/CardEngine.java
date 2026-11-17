@@ -301,8 +301,8 @@ final class CardEngine {
         }
     }
 
-    /** 한 건 보내기. 실패하면 대기로 두고 인터넷이 될 때 다시. */
-    private void send(JSONObject e) {
+    /** 한 건 보내기. 실패하면 대기로 두고(이유를 적어 둔다) 인터넷이 될 때 다시. 보냈으면 true. */
+    private boolean send(JSONObject e) {
         Map<String, Object> v = new HashMap<>();
         v.put("date", e.optString("date"));
         v.put("large", e.optString("large"));
@@ -313,12 +313,18 @@ final class CardEngine {
         v.put("card", e.optString("card"));
         boolean ok;
         LedgerClient c = client;
+        String why = "";
         try {
             ok = c.add(v);
         } catch (Exception ex) {
             ok = false;
+            why = ex.getClass().getSimpleName();
         }
         int code = c.lastCode();
+        if (!ok) {
+            put(e, "error", c.lastReason().isEmpty() ? (why.isEmpty() ? "HTTP " + code : why) : c.lastReason());
+            put(e, "code", code);
+        }
         if (!ok && (code == 401 || code == 403)) { // 사이트에 보안을 켰는데 앱 연동 키가 없거나 틀림
             put(e, "status", CardStore.PENDING);
             put(e, "tries", e.optInt("tries") + 1);
@@ -331,7 +337,7 @@ final class CardEngine {
                         "가계부가 등록을 거절했어요 (HTTP " + code + "). 사이트에 보안을 켰다면, 사이트 설정에서 만든 "
                                 + "'앱 연동 키'를 카드 자동 등록 설정에 넣어 주세요. 결제는 모아 두었다가 보내요.", null);
             }
-            return; // 키를 넣으면(설정 화면) 바로 다시 보낸다
+            return false; // 키를 넣으면(설정 화면) 바로 다시 보낸다
         }
         boolean refused = !ok && code != 0 && code < 500; // 사이트가 거절 (주소·모양이 바뀜) ↔ 0·5xx = 인터넷·서버 문제
         if (refused && System.currentTimeMillis() - store.linkChecked() > 10 * 60 * 1000L) {
@@ -344,8 +350,14 @@ final class CardEngine {
             }
             code = c.lastCode();
             refused = !ok && code != 0 && code < 500;
+            if (!ok) {
+                put(e, "error", c.lastReason().isEmpty() ? "HTTP " + code : c.lastReason());
+                put(e, "code", code);
+            }
         }
         if (ok) {
+            e.remove("error");
+            e.remove("code");
             if (store.linkErrors() > 0) store.setLinkErrors(0, "");
             if (store.authErrors() > 0) store.setAuthErrors(0);
             put(e, "status", CardStore.REGISTERED);
@@ -370,14 +382,39 @@ final class CardEngine {
             }
             scheduleRetry();
         }
+        return ok;
     }
 
-    /** 대기 중인 건 다시 보내기 (앱을 열 때, 인터넷이 돌아올 때). */
-    void flush() {
+    /** 대기 중인 건 다시 보내기 (앱을 열 때, 인터넷이 돌아올 때). 결과를 한 줄로 돌려준다 (설정 화면이 보여 줌). */
+    String flush() {
         List<JSONObject> pending = store.pending();
-        if (pending.isEmpty()) return;
+        if (pending.isEmpty()) return "보낼 건이 없어요.";
         if (store.linkErrors() > 0) ensureLink(10 * 60 * 1000L);
-        for (JSONObject e : pending) send(e);
+        int sent = 0;
+        JSONObject failed = null;
+        for (JSONObject e : pending) {
+            if (send(e)) sent++;
+            else failed = e;
+        }
+        if (failed == null) return sent + "건을 가계부에 보냈어요.";
+        return (sent > 0 ? sent + "건은 보냈지만 " : "") + "보내지 못했어요: " + failHint(failed.optInt("code"))
+                + " (" + failed.optString("error") + ")";
+    }
+
+    /** 실패 코드를 사람이 할 일로. */
+    static String failHint(int code) {
+        if (code == 0) return "인터넷이나 사이트에 연결하지 못했어요";
+        if (code == 401 || code == 403) return "가계부가 앱 연동 키를 받지 않았어요. 사이트에서 만든 키를 다시 붙여 넣어 주세요";
+        if (code == 404 || code == 405) return "가계부의 주소가 바뀌었어요. 사이트의 /urlapp.json 을 확인해 주세요";
+        if (code == 429) return "요청이 너무 많다고 해요. 잠시 뒤 다시 보내요";
+        if (code >= 500) return "가계부 서버에서 오류가 났어요";
+        if (code >= 200 && code < 300) return "가계부가 실패라고 답했어요";
+        return "가계부가 내용을 거절했어요";
+    }
+
+    /** 마지막 요청의 실패 이유 (다시 배우기 결과 등에 쓴다). */
+    String lastReason() {
+        return client.lastReason();
     }
 
     void flushAsync() {

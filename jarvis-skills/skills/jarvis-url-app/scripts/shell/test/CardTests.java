@@ -219,6 +219,7 @@ public class CardTests {
                     last[2]);
             failAdd[0] = true;
             check("사이트가 success:false 면 실패로", !client.add(v), null);
+            check("실패 이유: success:false 의 오류 문구", client.lastReason().equals("HTTP 200 · x"), client.lastReason());
             failAdd[0] = false;
             List<JSONObject> rows = client.history("2026-11");
             check("기록 읽기 (변동·고정 모두)", rows.size() == 2, rows);
@@ -231,8 +232,22 @@ public class CardTests {
             check("다른 금액은 지우지 않음", !client.deleteMatching("2026-11-17", "메가커피 강남점", 12000, "창수", "현대카드"), null);
             requireKey[0] = true; // 사이트에 보안(앱 연동 키)을 켠 뒤
             check("보안 켠 뒤: 키 없으면 401 (앱은 '키를 확인해 주세요')", !client.add(v) && client.lastCode() == 401, client.lastCode());
+            check("실패 이유: HTTP 401 과 사이트 문구", client.lastReason().equals("HTTP 401 · unauthorized"), client.lastReason());
             LedgerClient keyed = new LedgerClient(base, cfg).withAuth("X-App-Key", "k1-secret");
             check("보안 켠 뒤: 맞는 키를 붙이면 등록·기록 읽기 됨", keyed.add(v) && keyed.history("2026-11").size() == 2, keyed.lastCode());
+            check("성공하면 실패 이유가 비어 있음", keyed.lastReason().isEmpty(), keyed.lastReason());
+            LedgerClient off = new LedgerClient("http://127.0.0.1:1/", cfg);
+            boolean threw = false;
+            try {
+                off.add(v);
+            } catch (java.io.IOException ex) {
+                threw = true;
+            }
+            check("실패 이유: 연결 못 함", threw && off.lastCode() == 0 && off.lastReason().startsWith("연결 실패 · "), off.lastReason());
+            check("실패 이유: HTML 오류 쪽은 글자만 짧게",
+                    LedgerClient.shortMessage("<html><body><h1>502</h1> Bad   Gateway</body></html>").equals("502 Bad Gateway")
+                            && LedgerClient.shortMessage("{\"message\":\"" + "가".repeat(80) + "\"}").length() == 61,
+                    LedgerClient.shortMessage("<html><body><h1>502</h1> Bad   Gateway</body></html>"));
             check("키 이름이 이상하면 붙이지 않음", !new LedgerClient(base, cfg).withAuth("X-App-Key\r\nEvil", "k1-secret").add(v), null);
             requireKey[0] = false;
         } finally {
