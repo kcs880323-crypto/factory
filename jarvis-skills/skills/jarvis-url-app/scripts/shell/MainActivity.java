@@ -988,20 +988,26 @@ public class MainActivity extends Activity {
         if (CardEngine.available(this)) CardEngine.get(this).flushAsync(); // 못 보낸 카드 결제가 있으면 지금
     }
 
-    /** 카드 자동 등록이 들어 있는 앱: 처음 한 번 설정할지 묻는다. */
+    /** 카드 자동 등록이 들어 있는 앱: 설정이 덜 끝났으면(담당자 없음, 알림 접근 꺼짐) 앱을 열 때 묻는다. */
     private void maybeOfferCards() {
         if (!CardEngine.available(this)) return;
-        CardStore store = CardEngine.get(this).store;
-        if (store.owner() != null || store.prompted()) return;
+        CardEngine engine = CardEngine.get(this);
+        CardStore store = engine.store;
+        boolean ownerMissing = store.owner() == null;
+        boolean accessOff = "listener".equals(engine.via()) && !engine.listenerEnabled();
+        if (!ownerMissing && !accessOff) return; // 다 됐으면 묻지 않는다
+        if (store.neverAsk()) return;
         store.setPrompted();
+        String why = ownerMissing ? t("이 폰의 담당자를 골라야 시작해요.", "Choose who uses this phone to start.")
+                : t("알림 접근이 꺼져 있어서 카드 결제를 읽지 못하고 있어요.", "Notification access is off, so card payments are not read.");
         new AlertDialog.Builder(this)
                 .setTitle(t("카드 결제 자동 등록", "Card payment auto-entry"))
-                .setMessage(t("카드 결제 알림을 읽어 가계부에 바로 등록할까요? 담당자와 알림 접근 권한을 정하면 시작해요. "
-                                + "(앱 아이콘을 길게 눌러 '카드 자동 등록'에서 언제든 바꿀 수 있어요)",
-                        "Read card payment notifications and add them to the ledger automatically?"))
-                .setPositiveButton(t("설정하기", "Set up"),
+                .setMessage(why + t("\n\n설정 화면은 앱 아이콘을 길게 눌러 '카드 자동 등록'으로도 열 수 있어요.",
+                        "\n\nYou can also open it by long-pressing the app icon → 'Card auto-entry'."))
+                .setPositiveButton(t("설정 열기", "Open settings"),
                         (d, w) -> startActivity(new Intent(this, CardSettingsActivity.class)))
                 .setNegativeButton(t("나중에", "Later"), null)
+                .setNeutralButton(t("다시 묻지 않기", "Don't ask again"), (d, w) -> store.setNeverAsk())
                 .show();
     }
 

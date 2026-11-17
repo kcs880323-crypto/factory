@@ -53,6 +53,15 @@ final class CardStore {
         p.edit().putBoolean("prompted", true).apply();
     }
 
+    /** 설정이 덜 끝났을 때 앱을 열면 묻기 — 사용자가 '다시 묻지 않기'를 누르면 끈다. */
+    boolean neverAsk() {
+        return p.getBoolean("never_ask", false);
+    }
+
+    void setNeverAsk() {
+        p.edit().putBoolean("never_ask", true).apply();
+    }
+
     // ---------- 허용·감지한 앱 ----------
 
     synchronized boolean allowed(String pkg) {
