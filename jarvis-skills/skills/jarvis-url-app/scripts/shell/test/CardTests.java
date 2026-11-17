@@ -45,6 +45,16 @@ public class CardTests {
         check(label, good, t == null ? "null" : t + " when=" + new java.util.Date(t.when));
     }
 
+    /** 보낸 앱(source·appName)과 카드 상품명까지 보는 시험. */
+    static CardParser.Txn txn2(String label, String title, String body, String source, String appName, String card,
+                               String product, boolean cancel, long amount, String merchant, long when) {
+        CardParser.Txn t = CardParser.parse(title, body, at(2026, 11, 17, 12, 59), source, appName);
+        boolean good = t != null && t.card.equals(card) && t.product.equals(product) && t.cancel == cancel
+                && t.amount == amount && t.merchant.equals(merchant) && (when < 0 || t.when == when);
+        check(label, good, t == null ? "null" : t + " [" + t.product + "] when=" + new java.util.Date(t.when));
+        return t;
+    }
+
     static void none(String label, String title, String body) {
         CardParser.Txn t = CardParser.parse(title, body, at(2026, 11, 17, 12, 59));
         check(label, t == null, t);
@@ -78,6 +88,80 @@ public class CardTests {
                 "현대카드", false, 12500, "메가커피", -1);
         txn("롯데 앱 알림 (디지로카)", "디지로카", "롯데카드 승인 8,900원 일시불 11/17 12:10 배달의민족",
                 "롯데카드", false, 8900, "배달의민족", at(2026, 11, 17, 12, 10));
+
+        System.out.println("1-2) 카카오톡 카드영수증·카드사별 카드 상품명 (줄인 카드사 이름 + 상품명 + 승인)");
+        String kakao = "com.kakao.talk", receipt = "카카오톡 카드영수증";
+        long t1157 = at(2026, 11, 17, 11, 57);
+        CardParser.Txn kr = txn2("카톡 카드영수증: 현대 네이버", receipt,
+                "현대 네이버 승인 김*수 12,300원 일시불 11/17 11:57 행복분식문정점 누적123,456원", kakao, "카카오톡",
+                "현대카드", "네이버", false, 12300, "행복분식문정점", t1157);
+        txn2("삼성 taptap O", receipt, "삼성 taptap O 승인 김*수 8,000원 일시불 11/17 12:01 GS25 문정점 누적45,000원", kakao, null,
+                "삼성카드", "taptap O", false, 8000, "GS25 문정점", at(2026, 11, 17, 12, 1));
+        txn2("롯데 LOCA LIKIT", receipt, "롯데 LOCA LIKIT 승인 김*수 15,000원 일시불 11/17 12:05 스타벅스 문정점 누적99,000원",
+                kakao, null, "롯데카드", "LOCA LIKIT", false, 15000, "스타벅스 문정점", -1);
+        txn2("신한 Deep Dream", receipt, "신한 Deep Dream 승인 김*수 4,500원 일시불 11/17 12:06 메가커피 문정점 누적9,000원",
+                kakao, null, "신한카드", "Deep Dream", false, 4500, "메가커피 문정점", -1);
+        txn2("NH농협 채움", receipt, "NH농협 채움 승인 김*수 30,000원 일시불 11/17 12:07 하나로마트 송파점 누적60,000원",
+                kakao, null, "농협카드", "채움", false, 30000, "하나로마트 송파점", -1);
+        txn2("KB국민 체크", receipt, "KB국민 체크 승인 김*수 7,700원 11/17 12:08 다이소 문정점", kakao, null,
+                "KB국민카드", "체크", false, 7700, "다이소 문정점", -1);
+        txn2("하나 1Q", receipt, "하나 1Q 승인 김*수 5,000원 일시불 11/17 12:09 CU 문정점", kakao, null,
+                "하나카드", "1Q", false, 5000, "CU 문정점", -1);
+        txn2("우리 카드의정석", receipt, "우리 카드의정석 승인 김*수 6,000원 일시불 11/17 12:10 이디야 문정점", kakao, null,
+                "우리카드", "카드의정석", false, 6000, "이디야 문정점", -1);
+        txn2("BC 바로", receipt, "BC 바로 승인 김*수 9,900원 일시불 11/17 12:11 올리브영 문정점", kakao, null,
+                "BC카드", "", false, 9900, "올리브영 문정점", -1);
+        txn2("카톡 카드영수증 승인취소", receipt, "현대 네이버 승인취소 김*수 12,300원 일시불 11/17 12:12 행복분식문정점", kakao, null,
+                "현대카드", "네이버", true, 12300, "행복분식문정점", -1);
+        txn2("문자: 현대카드 M (상품명 M)", "", "[Web발신]\n현대카드 M 승인\n김*수\n12,500원 일시불\n11/17 12:30\n메가커피 강남점",
+                "com.samsung.android.messaging", "메시지", "현대카드", "M", false, 12500, "메가커피 강남점", -1);
+        check("카톡은 카드영수증·카드사 채널만 믿음", CardParser.cardSender("카카오톡 카드영수증") && CardParser.cardSender("현대카드")
+                && CardParser.cardSender("KB국민카드") && CardParser.cardSender("NH농협카드") && !CardParser.cardSender("이성희 대리님")
+                && !CardParser.cardSender("엄마") && !CardParser.cardSender(null), null);
+        none("\"우리 아이 …\" 같은 말은 카드사가 아님", "", "[Web발신]\n우리 아이 학원비 150,000원 결제 부탁드려요");
+        none("\"현대 백화점 …\"·\"롯데 시네마 …\"는 카드사가 아님", "", "[Web발신]\n현대 백화점 상품권 50,000원 사용 완료");
+        none("\"롯데 시네마 …\"는 카드사가 아님", "", "[Web발신]\n롯데 시네마 예매 취소 15,000원 환불 예정");
+
+        System.out.println("1-3) 삼성 월렛 (카드사 없음: ₩금액 결제 완료)·카드사 앱 (문구에 카드사 없음)");
+        String spay = "com.samsung.android.spay";
+        CardParser.Txn wr = txn2("월렛: ₩ 금액 + 가맹점", "₩12,300 결제 완료", "행복분식문정점", spay, "Samsung Wallet",
+                CardParser.WALLET_CARD, "", false, 12300, "행복분식문정점", at(2026, 11, 17, 12, 59));
+        check("월렛만 온 결제도 메모에 '카드'", CardParser.WALLET_CARD.contains("카드"), null);
+        check("월렛 모양은 월렛 앱에서 온 것만", CardParser.parse("₩12,300 결제 완료", "행복분식문정점", t1157) == null
+                && CardParser.parse("₩12,300 결제 완료", "행복분식문정점", t1157, "com.samsung.android.messaging") == null, null);
+        txn2("월렛: 롯데리아는 가맹점 (롯데카드 아님)", "₩8,000 결제 완료", "롯데리아 강남점", spay, null,
+                CardParser.WALLET_CARD, "", false, 8000, "롯데리아 강남점", -1);
+        txn2("월렛: 현대백화점은 가맹점 (현대카드 아님)", "₩30,000 결제 완료", "현대백화점 판교점", spay, null,
+                CardParser.WALLET_CARD, "", false, 30000, "현대백화점 판교점", -1);
+        check("월렛: 충전은 결제가 아님", CardParser.parse("₩10,000 충전 완료", "교통카드", t1157, spay) == null, null);
+        CardParser.Txn lotte = txn2("디지로카 앱: 제목이 가맹점, 카드사는 앱 이름, 상품명은 번호 앞",
+                "행복카페 문정점", "10,700원 승인\n라스베가스(9*0*)", "com.lcacApp", "롯데카드",
+                "롯데카드", "라스베가스", false, 10700, "행복카페 문정점", at(2026, 11, 17, 12, 59));
+        txn2("디지로카 앱: 잘린 꼬리(…)·앱 이름 없이 패키지로", "행복카페 문정점", "10,700원 승인\n라스베가스(9*0*)...", "com.lcacApp", null,
+                "롯데카드", "라스베가스", false, 10700, "행복카페 문정점", -1);
+        txn2("디지로카 앱: 시각이 있어도 가맹점은 제목", "행복카페 문정점", "10,700원 승인\n라스베가스(9*0*)\n일시불 11/17 12:34",
+                "com.lcacApp", "롯데카드", "롯데카드", "라스베가스", false, 10700, "행복카페 문정점", at(2026, 11, 17, 12, 34));
+        check("카드사 아닌 앱은 앱 이름으로 카드사를 정하지 않음",
+                CardParser.parse("행복카페 문정점", "10,700원 승인", t1157, "com.example.shop", "쇼핑") == null, null);
+
+        System.out.println("1-4) 같은 결제의 월렛 + 카톡/카드사 앱 알림 → 한 건");
+        CardParser.Txn w2 = CardParser.parse("₩12,300 결제 완료", "행복분식문정점", t1157, spay);
+        CardParser.Txn k2 = CardParser.parse(receipt, "현대 네이버 승인 김*수 12,300원 일시불 11/17 11:57 행복분식문정점 누적123,456원",
+                t1157, kakao);
+        check("월렛(카드사 모름)과 카톡은 같은 결제", CardParser.sameTxn(w2, k2), w2 + " / " + k2);
+        CardParser.Txn mk = CardParser.richer(w2, k2);
+        check("합치면 카드 이름은 카톡의 '현대카드 네이버'", mk.label().equals("현대카드 네이버") && mk.merchant.equals("행복분식문정점")
+                && mk.whenFromText, mk + " [" + mk.label() + "]");
+        CardParser.Txn w3 = CardParser.parse("₩10,700 결제 완료", "행복카페 문정점", at(2026, 11, 17, 12, 34), spay);
+        CardParser.Txn l3 = CardParser.parse("행복카페 문정점", "10,700원 승인\n라스베가스(9*0*)", at(2026, 11, 17, 12, 34), "com.lcacApp", "롯데카드");
+        CardParser.Txn m3 = CardParser.sameTxn(w3, l3) ? CardParser.richer(l3, w3) : null;
+        check("월렛 + 디지로카 → '롯데카드 라스베가스' 한 건", m3 != null && m3.label().equals("롯데카드 라스베가스")
+                && m3.merchant.equals("행복카페 문정점"), m3);
+        CardParser.Txn hc = CardParser.parse("", "[Web발신]\n현대카드 M 승인\n김*수\n12,300원 일시불\n11/17 11:57\n행복분식문정점",
+                t1157, "com.samsung.android.messaging");
+        check("다른 카드사끼리는 합치지 않음", !CardParser.sameTxn(hc, CardParser.parse("", "[Web발신]\n삼성1234승인 김*수\n12,300원 일시불\n11/17 11:57 행복분식문정점", t1157)), null);
+        check("상품명이 알림마다 달라도(문자 'M' / 카톡 '네이버') 같은 카드사면 같은 결제", CardParser.sameTxn(hc, kr), null);
+
         none("해외 결제 (원화 금액 없음)", "", "[Web발신]\n신한카드(1234)승인 김*수 USD 12.34 11/17 12:34 AMAZON 누적1,234,000원");
         none("카드와 무관한 메시지", "엄마", "오늘 점심 12,000원 나눠 내자");
         none("카드 광고", "", "[Web발신](광고)현대카드 이벤트 결제 시 최대 50,000원 캐시백");

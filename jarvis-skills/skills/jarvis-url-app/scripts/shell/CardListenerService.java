@@ -52,13 +52,20 @@ public class CardListenerService extends NotificationListenerService {
             if (last != null && body.indexOf(last.toString()) < 0) body.append('\n').append(last);
         }
         String all = (title == null ? "" : title) + "\n" + body;
-        if (all.indexOf('원') < 0) return; // 빠른 거르기
+        if (all.indexOf('원') < 0 && all.indexOf('₩') < 0 && all.indexOf('￦') < 0) return; // 빠른 거르기 (월렛은 ₩58,600)
 
         String sig = pkg + "|" + all.hashCode();
         synchronized (seen) {
             if (seen.containsKey(sig)) return;
             seen.put(sig, Boolean.TRUE);
         }
-        engine.handleNotification(pkg, title == null ? "" : title.toString(), body.toString(), sbn.getPostTime(), true);
+        String appName = null; // 보낸 앱 이름 (예: "롯데카드"): 문구에 카드사 이름이 없는 카드사 앱 알림에 쓴다
+        try {
+            appName = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg, 0)).toString();
+        } catch (Exception e) {
+            appName = null;
+        }
+        engine.handleNotification(pkg, title == null ? "" : title.toString(), body.toString(), sbn.getPostTime(), true,
+                appName);
     }
 }

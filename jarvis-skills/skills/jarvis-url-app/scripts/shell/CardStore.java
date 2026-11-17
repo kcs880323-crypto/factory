@@ -109,6 +109,7 @@ final class CardStore {
             e.put("merchant", t.merchant.isEmpty() ? t.card + " 결제" : t.merchant);
             e.put("amount", t.amount);
             e.put("card", t.card);
+            e.put("product", t.product);
             e.put("large", pick.large);
             e.put("medium", pick.medium);
             e.put("source", pick.source);
@@ -120,6 +121,11 @@ final class CardStore {
         }
         save(e);
         return e;
+    }
+
+    /** 가계부 메모에 쓰는 카드 이름 (카드사 + 상품명, 예: "현대카드 네이버"). 되돌리기도 같은 이름으로 찾는다. */
+    static String memo(JSONObject e) {
+        return CardParser.label(e.optString("card"), e.optString("product", ""));
     }
 
     synchronized void save(JSONObject e) {
@@ -152,7 +158,7 @@ final class CardStore {
     synchronized boolean recentlyHandled(CardParser.Txn t) {
         for (JSONObject e : log()) {
             boolean cancelEntry = e.optBoolean("cancel", false);
-            if (cancelEntry == t.cancel && e.optLong("amount") == t.amount && t.card.equals(e.optString("card"))
+            if (cancelEntry == t.cancel && e.optLong("amount") == t.amount && CardParser.sameCard(t.card, e.optString("card"))
                     && Math.abs(e.optLong("when") - t.when) <= 10 * 60 * 1000L) {
                 return true;
             }
@@ -165,7 +171,7 @@ final class CardStore {
         JSONObject best = null;
         for (JSONObject e : log()) {
             if (!REGISTERED.equals(e.optString("status")) || e.optBoolean("cancel", false)) continue;
-            if (e.optLong("amount") != t.amount || !t.card.equals(e.optString("card"))) continue;
+            if (e.optLong("amount") != t.amount || !CardParser.sameCard(t.card, e.optString("card"))) continue;
             if (t.when - e.optLong("when") > 31L * 24 * 3600 * 1000 || e.optLong("when") - t.when > 3600 * 1000) continue;
             if (!t.merchant.isEmpty() && t.merchant.equals(e.optString("merchant"))) return e;
             if (best == null) best = e;
@@ -203,6 +209,7 @@ final class CardStore {
         JSONObject o = new JSONObject();
         try {
             o.put("card", t.card);
+            o.put("product", t.product);
             o.put("cancel", t.cancel);
             o.put("amount", t.amount);
             o.put("when", t.when);
@@ -231,6 +238,7 @@ final class CardStore {
             }
             CardParser.Txn t = new CardParser.Txn();
             t.card = o.optString("card");
+            t.product = o.optString("product", "");
             t.cancel = o.optBoolean("cancel");
             t.amount = o.optLong("amount");
             t.when = o.optLong("when");

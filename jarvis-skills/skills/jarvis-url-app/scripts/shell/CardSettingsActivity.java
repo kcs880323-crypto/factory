@@ -152,7 +152,7 @@ public class CardSettingsActivity extends Activity {
         TextView out = new TextView(this);
         row("", "읽어 보기", v -> {
             testText = in.getText().toString();
-            CardParser.Txn t = CardParser.parse("", testText, System.currentTimeMillis());
+            CardParser.Txn t = CardParser.parse("", testText, System.currentTimeMillis(), "*"); // 시험 칸: 월렛 모양도
             out.setTypeface(Typeface.DEFAULT_BOLD);
             if (t == null) {
                 out.setTextColor(Color.rgb(225, 29, 72));
@@ -161,7 +161,7 @@ public class CardSettingsActivity extends Activity {
             } else {
                 out.setTextColor(Color.rgb(79, 70, 229));
                 CardCategorizer.Pick p = engine.pick(t.merchant);
-                out.setText((t.cancel ? "승인취소 " : "승인 ") + t.card + " " + CardEngine.won(t.amount)
+                out.setText((t.cancel ? "승인취소 " : "승인 ") + t.label() + " " + CardEngine.won(t.amount)
                         + "\n가맹점: " + (t.merchant.isEmpty() ? "(없음 → '" + t.card + " 결제')" : t.merchant)
                         + "\n날짜: " + new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.KOREA).format(new Date(t.when))
                         + "\n분류: " + p.large + (p.medium.isEmpty() ? "" : " › " + p.medium) + "  ("

@@ -58,7 +58,6 @@ final class CardEngine {
             "com.kakao.talk", "jp.naver.line.android", "org.telegram.messenger", "com.facebook.orca",
             "com.instagram.android", "com.discord", "com.whatsapp", "com.nhn.android.band", "com.kakao.story",
     };
-    private static final Pattern CARD_SENDER = Pattern.compile("현대카드|삼성카드|롯데카드|농협카드|NH농협|신한카드");
 
     private static final String[] MESSENGER_NAMES = {
             "line", "라인", "telegram", "텔레그램", "messenger", "메신저", "instagram", "인스타그램", "band", "밴드",
@@ -203,10 +202,10 @@ final class CardEngine {
         return flat != null && flat.contains(new ComponentName(app, CardListenerService.class).flattenToString());
     }
 
-    /** 어느 앱의 알림을 믿을지. 카카오톡은 보낸 쪽(제목)이 카드사 채널일 때만 (친구 대화로 등록되지 않게). */
+    /** 어느 앱의 알림을 믿을지. 카카오톡은 보낸 쪽(제목)이 카드영수증·카드사 채널일 때만 (친구 대화로 등록되지 않게). */
     boolean trusted(String pkg, CharSequence title) {
+        if ("com.kakao.talk".equals(pkg)) return CardParser.cardSender(title); // '허용'을 눌러도 친구 대화는 쓰지 않는다
         if (store.allowed(pkg)) return true;
-        if ("com.kakao.talk".equals(pkg)) return title != null && CARD_SENDER.matcher(title).find();
         for (String m : MESSENGERS) if (m.equals(pkg)) return false;
         for (String k : KNOWN) if (k.equals(pkg)) return true;
         String low = pkg.toLowerCase(Locale.ROOT);
@@ -220,7 +219,7 @@ final class CardEngine {
         String a = app.trim();
         if (a.matches("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")) return trusted(a, title);
         String low = a.toLowerCase(Locale.ROOT);
-        if (low.contains("카카오") || low.contains("kakao")) return title != null && CARD_SENDER.matcher(title).find();
+        if (low.contains("카카오") || low.contains("kakao")) return CardParser.cardSender(title);
         for (String m : MESSENGER_NAMES) if (low.equals(m) || (m.length() > 2 && low.contains(m))) return false;
         return true;
     }
@@ -229,11 +228,17 @@ final class CardEngine {
 
     /** 알림 한 건 (알림 듣기 서비스 또는 MacroDroid). 카드 결제로 읽혀 모아 두면 true. */
     boolean handleNotification(String app, String title, String body, long when, boolean appIsPackage) {
-        CardParser.Txn t = CardParser.parse(title, body, when);
+        return handleNotification(app, title, body, when, appIsPackage, appIsPackage ? null : app);
+    }
+
+    /** appName: 보낸 앱의 이름 (예: "롯데카드"). 문구에 카드사 이름이 없는 카드사 앱 알림의 카드사를 정하는 데 쓴다. */
+    boolean handleNotification(String app, String title, String body, long when, boolean appIsPackage, String appName) {
+        CardParser.Txn t = CardParser.parse(title, body, when, app, appName);
         if (t == null) return false;
         boolean ok = appIsPackage ? trusted(app, title) : trustedSource(app, title);
         if (!ok) {
-            store.noteDetected(app);
+            // 카카오톡은 '허용'해도 친구 대화는 쓰지 않으므로(카드영수증·카드사 채널만) 목록에 올리지 않는다
+            if (!"com.kakao.talk".equals(app)) store.noteDetected(app);
             return false;
         }
         offer(t);
@@ -284,7 +289,7 @@ final class CardEngine {
         JSONObject e = store.findForCancel(t);
         if (e == null) {
             notify("cancel-" + t.when, "카드 결제 취소 알림",
-                    t.card + " " + won(t.amount) + (t.merchant.isEmpty() ? "" : " · " + t.merchant)
+                    t.label() + " " + won(t.amount) + (t.merchant.isEmpty() ? "" : " · " + t.merchant)
                             + " — 가계부에서 같은 내역을 찾지 못했어요. 직접 확인해 주세요.", null);
             return;
         }
@@ -310,7 +315,7 @@ final class CardEngine {
         v.put("merchant", e.optString("merchant"));
         v.put("amount", String.valueOf(e.optLong("amount")));
         v.put("owner", e.optString("owner"));
-        v.put("card", e.optString("card"));
+        v.put("card", CardStore.memo(e));
         boolean ok;
         LedgerClient c = client;
         String why = "";
@@ -365,7 +370,7 @@ final class CardEngine {
             notify(e.optString("id"), "가계부에 등록했어요",
                     e.optString("merchant") + " " + won(e.optLong("amount")) + " · " + e.optString("large")
                             + (e.optString("medium").isEmpty() ? "" : "›" + e.optString("medium"))
-                            + " (" + e.optString("card") + ", " + e.optString("owner") + ")", e.optString("id"));
+                            + " (" + CardStore.memo(e) + ", " + e.optString("owner") + ")", e.optString("id"));
         } else {
             put(e, "status", CardStore.PENDING);
             put(e, "tries", e.optInt("tries") + 1);
@@ -455,7 +460,7 @@ final class CardEngine {
     private boolean deleteEntry(JSONObject e) throws Exception {
         ensureLink(6 * 3600 * 1000L);
         return client.deleteMatching(e.optString("date"), e.optString("merchant"), e.optLong("amount"),
-                e.optString("owner"), e.optString("card"));
+                e.optString("owner"), CardStore.memo(e));
     }
 
     // ---------- 분류 ----------
