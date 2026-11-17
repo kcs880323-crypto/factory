@@ -138,6 +138,11 @@
   AI Studio 에 "frame-ancestors 를 'self' https://aistudio.google.com https://*.aistudio.google.com https://*.google.com
   https://*.googleusercontent.com 으로 바꿔 줘. 다른 보안 설정은 그대로" 라고 요청한다 (2026-11-17 실제로 겪음).
 - **고친 뒤 꼭 오른쪽 위 Publish(게시)** 를 눌러야 실제 주소(csjhth.ai.studio)에 반영된다. AI Studio 의 '검증 결과'는 미리보기 서버 기준이다.
+- **보안 강화 뒤 AI Studio 가 "Enter your environment variable to continue" 로 NAS_URL·APP_PASSWORD 를 물으면**: 서버가 쓰는 비밀 값이다.
+  NAS_URL 은 원래 쓰던 집 NAS 주소(View changes 의 지워진 줄, 또는 톱니바퀴 → Secrets), APP_PASSWORD 는 사용자가 새로 정하는 가족 로그인 비밀번호.
+  값은 그 칸에만 넣고 대화창·저장소에 쓰지 않는다. 이 값이 없으면 서버가 켜지지 않아 미리보기가 깨진 그림으로 보인다.
+- **점검(읽기만)**: 로그인 없이 /api/monthly-details·/api/summary·/api/backup/export → 401, /api/session → JSON,
+  /urlapp.json 에 "auth": {"header": "X-App-Key"}, 공개 스크립트에 AIza 키 없음, 다른 출처 Origin → 403. (2026-11-17 모두 확인)
 
 - 가. 는 카드 자동 등록·위젯용, 나. 는 보안용입니다. 가. 가 없어도 앱은 앱에 넣어 둔 기본 설정·위젯 스크립트로 동작하고,
   있으면 사이트를 고쳐도 앱 업데이트 없이 따라갑니다.
