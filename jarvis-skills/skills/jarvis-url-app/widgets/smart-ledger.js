@@ -1,6 +1,6 @@
 // 우리집 가계부(Smart Ledger, csjhth.ai.studio) 위젯 2종 (홈 화면의 위젯 목록에서 골라 놓는다):
 //   '가계부 전체': 이번 달 수입·지출·저축·(수입 − 지출) + 사람별 카드 사용 합계
-//   '카드 사용'  : 이번 달 카드 사용 합계(제목), 창수·지현 합계, 최근 카드 내역 4건 (날짜 담당자 · 가맹점, 금액)
+//   '카드 사용'  : 3×2 크기. 이번 달 카드 사용 합계(제목), 창수·지현 합계, 최근 카드 내역 2건 (날짜 담당자 · 가맹점, 금액)
 // 위 4줄: 사이트가 window.urlappWidget 을 주면 그 요약을 그대로 쓰고(사이트를 고쳐도 따라감), 없으면 아래 계산
 //         (대시보드와 같은 요청 /api/summary, 전체 사용자, 총 지출 = 고정 + 변동).
 // 아래 2줄: 이번 달 상세 변동지출 중 메모에 "카드"가 있는 것(카드 자동 등록이 카드사 이름을 메모에 넣고, 사이트의
@@ -11,6 +11,7 @@
 // urlapp:rows 6
 // urlapp:label 가계부 전체
 // urlapp:alt-label 카드 사용
+// urlapp:alt-rows 4
 async function (site) {
   if (sessionStorage.getItem("isAuthenticated") !== "true") return null;
   const OWNERS = ["창수", "지현"];
@@ -100,7 +101,7 @@ async function (site) {
   cards.forEach((c) => { sum[c.owner] += c.amount; });
   const total = OWNERS.reduce((a, n) => a + sum[n], 0);
   const md = (d) => { const x = /^\d{4}-(\d{1,2})-(\d{1,2})/.exec(d); return x ? `${+x[1]}/${+x[2]} ` : ""; };
-  const recent = cards.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id)).slice(0, 4);
+  const recent = cards.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id)).slice(0, 2);
   return {
     title: base.title,
     note: base.note,

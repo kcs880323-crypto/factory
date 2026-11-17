@@ -65,6 +65,16 @@ public class WidgetProvider extends AppWidgetProvider {
         return res.getIdentifier(name, "id", pkg);
     }
 
+    private static int integer(Resources res, String pkg, String name, int fallback) {
+        int r = res.getIdentifier(name, "integer", pkg);
+        if (r == 0) return fallback;
+        try {
+            return res.getInteger(r);
+        } catch (Resources.NotFoundException e) {
+            return fallback;
+        }
+    }
+
     private static int color(Resources res, String pkg, String name, int fallback) {
         int c = res.getIdentifier(name, "color", pkg);
         if (c == 0) return fallback;
@@ -78,7 +88,13 @@ public class WidgetProvider extends AppWidgetProvider {
     static RemoteViews build(Context ctx, boolean alt) {
         Resources res = ctx.getResources();
         String pkg = ctx.getPackageName();
-        RemoteViews v = new RemoteViews(pkg, res.getIdentifier("urlapp_widget", "layout", pkg));
+        // 두 번째 위젯은 자기 모양(urlapp_widget_alt, 줄 수가 다를 수 있음)으로. 없으면 첫 위젯 모양.
+        int layout = alt ? res.getIdentifier("urlapp_widget_alt", "layout", pkg) : 0;
+        boolean ownLayout = layout != 0;
+        if (layout == 0) layout = res.getIdentifier("urlapp_widget", "layout", pkg);
+        RemoteViews v = new RemoteViews(pkg, layout);
+        // 그 모양에 있는 줄 수 (줄 id 는 두 모양이 같이 쓰므로, 모양에 없는 줄을 건드리면 위젯이 깨진다)
+        int count = integer(res, pkg, ownLayout ? "urlapp_widget_alt_rows" : "urlapp_widget_rows", MAX_ROWS);
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         boolean ko = "ko".equals(Locale.getDefault().getLanguage());
 
@@ -99,7 +115,7 @@ public class WidgetProvider extends AppWidgetProvider {
         int negative = color(res, pkg, "widget_negative", 0xFFE11D48);
         int normal = color(res, pkg, "widget_value", 0xFF0F172A);
         JSONArray rows = data != null ? data.optJSONArray("rows") : null;
-        for (int i = 0; i < MAX_ROWS; i++) {
+        for (int i = 0; i < Math.min(count, MAX_ROWS); i++) {
             int row = id(res, pkg, "w_row" + (i + 1));
             if (row == 0) break; // 이 앱의 위젯은 여기까지
             JSONObject r = rows != null ? rows.optJSONObject(i) : null;

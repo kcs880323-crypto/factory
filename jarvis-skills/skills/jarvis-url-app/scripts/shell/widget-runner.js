@@ -7,6 +7,7 @@
 //   돌려줄 값: {title: "...", rows: [{label, value, tone: "pos"|"neg"|""}] (기본 최대 4줄, 스크립트의
 //   "// urlapp:rows N" 으로 8줄까지), note: "...", alt: {같은 모양}} 또는 null(갱신 안 함)
 //   alt 는 두 번째 위젯(스크립트에 "// urlapp:alt-label 이름" 이 있으면 위젯 목록에 따로 생김)이 그린다.
+//   두 번째 위젯의 줄 수는 "// urlapp:alt-rows N" (4줄 이하면 처음 크기 3×2, 넘으면 3×3).
 // 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤),
 // 그리고 위젯 스크립트가 null(로그인 전 등)을 돌려주는 동안은 10초마다.
 (function (token) {
@@ -16,6 +17,7 @@
   var bridge = window.UrlAppBridge;
   var fn = (/*__WIDGET_FN__*/ null);
   var MAX_ROWS = /*__WIDGET_ROWS__*/4;
+  var ALT_ROWS = /*__WIDGET_ALT_ROWS__*/0 || MAX_ROWS; // 두 번째 위젯의 줄 수 ("// urlapp:alt-rows N", 없으면 같게)
   if (!bridge || typeof fn !== "function") return;
 
   var busy = false;
@@ -29,8 +31,8 @@
     s = String(s == null ? "" : s);
     return s.length > n ? s.slice(0, n) : s;
   }
-  function shape(d) {
-    var rows = Array.isArray(d.rows) ? d.rows.slice(0, MAX_ROWS).map(function (r) {
+  function shape(d, max) {
+    var rows = Array.isArray(d.rows) ? d.rows.slice(0, max).map(function (r) {
       return { label: clip(r && r.label, 24), value: clip(r && r.value, 24), tone: clip(r && r.tone, 3) };
     }) : [];
     return { title: clip(d.title, 30), rows: rows, note: clip(d.note, 30) };
@@ -45,8 +47,8 @@
       return (site || fn)();
     }).then(function (d) {
       if (!d || typeof d !== "object") { retryLater(); return; }
-      var out = shape(d);
-      if (d.alt && typeof d.alt === "object") out.alt = shape(d.alt);
+      var out = shape(d, MAX_ROWS);
+      if (d.alt && typeof d.alt === "object") out.alt = shape(d.alt, ALT_ROWS);
       bridge.widget(token, JSON.stringify(out));
     }).catch(function () { /* 사이트가 바쁘거나 로그인 전: 다음에 다시 */ }).then(function () {
       busy = false;

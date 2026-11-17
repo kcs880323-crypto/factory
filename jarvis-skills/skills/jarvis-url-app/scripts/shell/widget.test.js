@@ -16,10 +16,14 @@ const FAKE_REF = "abcdefghijklmnopqrst"; // 지어낸 Supabase 프로젝트·키
 const FAKE_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiYW5vbiJ9.fakefakefake";
 const SLOT = "(/*__WIDGET_FN__*/ null)";
 const ROWS_SLOT = "/*__WIDGET_ROWS__*/4";
+const ALT_ROWS_SLOT = "/*__WIDGET_ALT_ROWS__*/0";
 // url_app.py 의 widget_asset 과 같게: 스크립트를 자리에 넣고, "// urlapp:rows N" 이 있으면 줄 수를 바꾼다
 function asset(script) {
   const m = /^\s*\/\/\s*urlapp:rows\s+(\d+)\s*$/m.exec(script);
-  return RUNNER.replace(ROWS_SLOT, m ? m[1] : "4").replace(SLOT, "(\n" + script.trim().replace(/;\s*$/, "") + "\n)");
+  const a = /^\s*\/\/\s*urlapp:alt-rows\s+(\d+)\s*$/m.exec(script);
+  const rows = m ? m[1] : "4";
+  return RUNNER.replace(ROWS_SLOT, rows).replace(ALT_ROWS_SLOT, a ? a[1] : rows)
+    .replace(SLOT, "(\n" + script.trim().replace(/;\s*$/, "") + "\n)");
 }
 const ASSET = asset(LEDGER);
 const TOKEN = "t0k3n";
@@ -109,10 +113,10 @@ function check(label, cond, detail) {
   check("카드 합계는 이번 달 상세 내역 (연동 파일의 주소)", detailReqs[0] === `/api/monthly-details?month=${ym}`, detailReqs);
   const alt = w.alt || {};
   check("두 번째 위젯(카드 사용): 제목에 합계", alt.title === `${m}월 카드 사용 43,500원`, alt.title);
-  check("두 번째 위젯: 사람별 합계 + 최근 카드 내역 (최신순, 현금·다른 사람 제외, 중복 한 번)",
+  check("두 번째 위젯(3×2, 4줄): 사람별 합계 + 최근 카드 내역 2건 (최신순, 현금·다른 사람 제외)",
     JSON.stringify((alt.rows || []).map((r) => [r.label, r.value])) === JSON.stringify([
       ["창수 합계", "13,500원"], ["지현 합계", "30,000원"], ["11/8 창수 · GS25", "1,000원"],
-      ["11/5 지현 · 이마트", "30,000원"], ["11/3 창수 · 메가커피", "12,500원"]]), alt.rows);
+      ["11/5 지현 · 이마트", "30,000원"]]), alt.rows);
   check("두 번째 위젯: 아래 줄에 건수", alt.note === "이번 달 카드 3건", alt.note);
 
   // 사이트가 지출을 저장하면(POST) 잠시 뒤 위젯이 다시 읽는다
@@ -195,6 +199,17 @@ function check(label, cond, detail) {
   await page5.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
   const a5 = await page5.evaluate(() => __w[0].alt);
   check("두 번째 위젯 값도 같은 규칙으로 자름 (30자·줄 수)", a5 && a5.title.length === 30 && a5.rows.length === 4, a5);
+  const page6 = await browser.newPage();
+  await page6.goto(base);
+  await page6.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  await page6.evaluate(asset("// urlapp:rows 6\n// urlapp:alt-rows 3\nasync function(){var r=[1,2,3,4,5,6,7].map(i=>({label:'l'+i,value:'v'}));"
+    + "return {title:'a', rows:r, alt:{title:'b', rows:r}};}").replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await page6.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  const w6 = await page6.evaluate(() => __w[0]);
+  check("첫 위젯과 두 번째 위젯의 줄 수가 따로 (6·3)", w6.rows.length === 6 && w6.alt.rows.length === 3, w6);
   const page4 = await browser.newPage();
   await page4.goto(base);
   await page4.evaluate((tok) => {

@@ -41,6 +41,8 @@ WIDGET_RUNNER = HERE / "shell" / "widget-runner.js"  # 위젯 스크립트를 �
 WIDGET_SLOT = "(/*__WIDGET_FN__*/ null)"
 WIDGET_ROWS_SLOT = "/*__WIDGET_ROWS__*/4"
 WIDGET_ROWS_RE = re.compile(r"^\s*//\s*urlapp:rows\s+(\d+)\s*$", re.M)
+WIDGET_ALT_ROWS_RE = re.compile(r"^\s*//\s*urlapp:alt-rows\s+(\d+)\s*$", re.M)
+WIDGET_ALT_ROWS_SLOT = "/*__WIDGET_ALT_ROWS__*/0"
 WIDGET_LABEL_RE = re.compile(r"^\s*//\s*urlapp:(label|alt-label)[ \t]+(\S[^\n]*?)\s*$", re.M)
 ICON_TOOL = HERE / "UrlAppIcon.java"
 SHELL_CLASS = "app.jarvis.urlapp.MainActivity"
@@ -654,7 +656,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
     # 안드로이드 16 은 큰 화면(태블릿)에서 방향 고정을 무시한다. 고정을 원하면 임시 예외 속성을 넣는다.
     prop = ('\n            <property android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"'
             ' android:value="true" />') if orient else ""
-    def widget_receiver(cls, label):
+    def widget_receiver(cls, label, info="urlapp_widget_info"):
         return f"""
         <receiver
             android:name="app.jarvis.urlapp.{cls}"
@@ -663,13 +665,13 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/urlapp_widget_info" />
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/{info}" />
         </receiver>"""
     receiver = ""
     if widget:
         receiver = widget_receiver("WidgetProvider", "@string/widget_name" if widget_label else "@string/app_name")
         if widget_alt:
-            receiver += widget_receiver("WidgetProviderAlt", "@string/widget_alt_name")
+            receiver += widget_receiver("WidgetProviderAlt", "@string/widget_alt_name", "urlapp_widget_alt_info")
     # 카드 자동 등록: 알림 듣기(사용자가 '알림 접근'을 켜야 동작), 설정 화면, 되돌리기 단추, 다시 보내기 작업
     listener = """
         <service
@@ -846,14 +848,15 @@ def mix(hex_color, other, t):
     return "#%02X%02X%02X" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
 
-def widget_rows(script_text):
-    """위젯 스크립트가 "// urlapp:rows N" 으로 정한 줄 수 (기본 4, 1~8)."""
-    m = WIDGET_ROWS_RE.search(script_text or "")
+def widget_rows(script_text, alt=False):
+    """위젯 스크립트가 "// urlapp:rows N" 으로 정한 줄 수 (기본 4, 1~8).
+    alt=True: 두 번째 위젯의 줄 수 "// urlapp:alt-rows N" (없으면 첫 위젯과 같다)."""
+    m = (WIDGET_ALT_ROWS_RE if alt else WIDGET_ROWS_RE).search(script_text or "")
     if not m:
-        return 4
+        return widget_rows(script_text) if alt else 4
     n = int(m.group(1))
     if not 1 <= n <= 8:
-        raise Fail(f"위젯 스크립트의 urlapp:rows 는 1~8 이어야 합니다: {n}")
+        raise Fail(f"위젯 스크립트의 urlapp:{'alt-rows' if alt else 'rows'} 는 1~8 이어야 합니다: {n}")
     return n
 
 
@@ -867,9 +870,10 @@ def widget_labels(script_text):
     return out["label"], out["alt-label"]
 
 
-def write_widget_resources(res, accent, rows=4, label=None, alt_label=None):
+def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_rows=None):
     """홈 화면 위젯의 모양 (RemoteViews 로 그릴 수 있는 LinearLayout·TextView·ImageView 만 쓴다).
-    rows: 줄 수. 4줄이 넘으면 처음 크기를 세 칸 높이로 한다 (이미 놓인 위젯은 사용자가 늘린다)."""
+    rows: 줄 수. 4줄이 넘으면 처음 크기를 세 칸 높이로 한다 (이미 놓인 위젯은 사용자가 늘린다).
+    alt_label 이 있으면 두 번째 위젯의 모양(urlapp_widget_alt, 줄 수 alt_rows)과 크기 정보도 따로 만든다."""
     def w(rel, text):
         f = res / rel
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -905,7 +909,8 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None):
     <corners android:radius="22dp" />
 </shape>
 """)
-    rows_xml = "".join(f"""
+    def layout(n, name, info):
+        rows_xml = "".join(f"""
     <LinearLayout
         android:id="@+id/w_row{i}"
         android:layout_width="match_parent"
@@ -931,8 +936,8 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None):
             android:textColor="@color/widget_value"
             android:textSize="16sp"
             android:textStyle="bold" />
-    </LinearLayout>""" for i in range(1, rows + 1))
-    w("layout/urlapp_widget.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+    </LinearLayout>""" for i in range(1, n + 1))
+        w(f"layout/{name}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/w_root"
     android:layout_width="match_parent"
@@ -978,22 +983,30 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None):
         android:textSize="10sp" />
 </LinearLayout>
 """)
-    tall = rows > 4
-    w("xml/urlapp_widget_info.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+        tall = n > 4
+        w(f"xml/{info}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_desc"
-    android:initialLayout="@layout/urlapp_widget"
+    android:initialLayout="@layout/{name}"
     android:minWidth="180dp"
     android:minHeight="{170 if tall else 110}dp"
     android:minResizeWidth="140dp"
     android:minResizeHeight="{130 if tall else 90}dp"
-    android:previewLayout="@layout/urlapp_widget"
+    android:previewLayout="@layout/{name}"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="3"
     android:targetCellHeight="{3 if tall else 2}"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />
 """)
+
+    layout(rows, "urlapp_widget", "urlapp_widget_info")
+    counts = f'    <integer name="urlapp_widget_rows">{rows}</integer>\n'
+    if alt_label:
+        alt_n = alt_rows or rows
+        layout(alt_n, "urlapp_widget_alt", "urlapp_widget_alt_info")
+        counts += f'    <integer name="urlapp_widget_alt_rows">{alt_n}</integer>\n'
+    w("values/widget_rows.xml", '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n' + counts + "</resources>\n")
 
 
 PARAM_RE = re.compile(r"__PARAM_([A-Z0-9_]+)__")
@@ -1017,9 +1030,10 @@ def widget_asset(script_text, params=()):
     if not body:
         raise Fail("위젯 스크립트가 비어 있습니다.")
     runner = WIDGET_RUNNER.read_text(encoding="utf-8")
-    if runner.count(WIDGET_SLOT) != 1 or runner.count(WIDGET_ROWS_SLOT) != 1:
+    if runner.count(WIDGET_SLOT) != 1 or runner.count(WIDGET_ROWS_SLOT) != 1 or runner.count(WIDGET_ALT_ROWS_SLOT) != 1:
         raise Fail("widget-runner.js 의 자리 표시가 없습니다.")
     runner = runner.replace(WIDGET_ROWS_SLOT, str(widget_rows(script_text)))
+    runner = runner.replace(WIDGET_ALT_ROWS_SLOT, str(widget_rows(script_text, alt=True)))
     return runner.replace(WIDGET_SLOT, "(\n" + body + "\n)")
 
 
@@ -1164,6 +1178,7 @@ def cmd_build(args):
         widget_js = None
         widget_n = 4
         widget_label = widget_alt_label = None
+        widget_text = ""
         if opt["widget"] and opt["widget"] != "none":
             ws = Path(opt["widget"]).expanduser()
             if not ws.is_file():
@@ -1239,7 +1254,8 @@ def cmd_build(args):
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
         widget_accent = accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8")
         if widget_js:
-            write_widget_resources(res, widget_accent, widget_n, widget_label, widget_alt_label)
+            write_widget_resources(res, widget_accent, widget_n, widget_label, widget_alt_label,
+                                   widget_rows(widget_text, alt=True))
 
         # 설정과 매니페스트
         version_code = int(prev.get("version_code", 0)) + 1
@@ -1592,9 +1608,10 @@ def cmd_selftest(args):
             check("빌드 5: 설정에 강조색", json.loads(zipfile.ZipFile(rec5["apk"]).read("assets/urlapp.json"))["accent"]
                   == "#4F46E5")
             check("빌드 5: 기본 위젯은 4줄·두 칸 높이·한 종류", "id/w_row4" in res5 and "id/w_row5" not in res5
-                  and "var MAX_ROWS = 4;" in wasset and "WidgetProviderAlt" not in mf)
+                  and "var MAX_ROWS = 4;" in wasset and "WidgetProviderAlt" not in mf
+                  and "layout/urlapp_widget_alt" not in res5)
             w6 = site / "w6.js"
-            w6.write_text("// urlapp:rows 6\n// urlapp:label 전체 & '요약'\n// urlapp:alt-label 카드 사용\n"
+            w6.write_text("// urlapp:rows 6\n// urlapp:label 전체 & '요약'\n// urlapp:alt-label 카드 사용\n// urlapp:alt-rows 4\n"
                           "async function (site) { return null; }", encoding="utf-8")
             build(base + "/widget6", "--no-fetch", "--widget", str(w6))
             rec56 = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/widget6"))
@@ -1610,6 +1627,17 @@ def cmd_selftest(args):
                   and "app.jarvis.urlapp.WidgetProvider\"" in mf56 and "string/widget_name" in res56
                   and "string/widget_alt_name" in res56 and "전체 & 'x'".replace("x", "요약") in res56
                   and "카드 사용" in res56, res56[-600:])
+            with zipfile.ZipFile(rec56["apk"]) as z:
+                alt_info = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/urlapp_widget_alt_info.xml", rec56["apk"]],
+                               tmp_home, "xmltree")
+            check("빌드 5-6: 두 번째 위젯은 자기 모양·4줄·3×2 (첫 위젯은 6줄·3×3)",
+                  "layout/urlapp_widget_alt" in res56 and re.search(r"targetCellHeight.*=2", alt_info) is not None
+                  and re.search(r"WidgetProviderAlt[\s\S]*?android:resource\(0x01010025\)=@" + re.escape(
+                      (re.search(r"resource (0x[0-9a-f]+) xml/urlapp_widget_alt_info", res56) or [None, "?"])[1]), mf56)
+                  is not None
+                  and re.search(r"integer/urlapp_widget_alt_rows\n\s+\(\) 4", res56) is not None
+                  and re.search(r"integer/urlapp_widget_rows\n\s+\(\) 6", res56) is not None
+                  and "var ALT_ROWS = 4 ||" in a56, alt_info[-300:])
             wl = site / "wl.js"
             wl.write_text("// urlapp:alt-label " + "가" * 31 + "\nasync function () { return null; }", encoding="utf-8")
             check("위젯 이름이 30자를 넘으면 거부", raises(lambda: build(base + "/widgetl", "--no-fetch", "--widget", str(wl))))
