@@ -97,6 +97,17 @@ export default function Home() {
         ))}
       </View>
 
+      {settings.sites.length ? (
+        <Section title="내 채널">
+          <Card style={{ gap: 8 }}>
+            {settings.sites.map((x) => (
+              <Button key={x.url} kind="secondary" icon="open" label={`${x.label} 열기`} href={x.url} />
+            ))}
+            <T v="caption">추천 페이지에 상품을 올리는 일은 자비스(🛒 → 🌐 추천 페이지에 올리기)에서 해요. 링크는 링크 탭의 &lsquo;자비스로 보내기&rsquo;로 넘겨요.</T>
+          </Card>
+        </Section>
+      ) : null}
+
       {mode !== 'manual' ? (
         <Section
           title="최근 7일"

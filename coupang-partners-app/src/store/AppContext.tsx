@@ -6,6 +6,7 @@ import { Alert, Platform, Share } from 'react-native';
 import { CoupangApiError, createClient, type ApiClient } from '../api/client';
 import { createDemoClient } from '../demo/demoData';
 import { DEFAULT_DISCLOSURE } from '../lib/compose';
+import { DEFAULT_SITES, type SiteLink } from '../lib/jarvis';
 import { budget, clampLimit, DEFAULT_HOURLY_LIMIT, type Budget } from '../lib/rateGuard';
 import { API_AVAILABLE, PROXY_URL } from '../lib/hosting';
 import { SYNCED_KEYS } from './artifactDb';
@@ -30,6 +31,8 @@ export interface Settings {
   hourlyLimit: number;
   disclosure: string;
   demoMode: boolean;
+  /** 쿠팡 파트너스에 등록한 내 채널(웹사이트·블로그·SNS) */
+  sites: SiteLink[];
 }
 
 export interface SavedLink {
@@ -69,6 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hourlyLimit: DEFAULT_HOURLY_LIMIT,
   disclosure: DEFAULT_DISCLOSURE,
   demoMode: false,
+  sites: DEFAULT_SITES,
 };
 
 interface Checklist {
@@ -149,7 +153,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         loadArray<number>(K.calls),
         loadJson<Checklist>(K.checklist, { date: '', done: {} }),
       ]);
-      settingsRef.current = { ...DEFAULT_SETTINGS, ...s, hourlyLimit: clampLimit(s.hourlyLimit) };
+      settingsRef.current = {
+        ...DEFAULT_SETTINGS,
+        ...s,
+        hourlyLimit: clampLimit(s.hourlyLimit),
+        sites: Array.isArray(s.sites) ? s.sites : DEFAULT_SITES,
+      };
       setSettings(settingsRef.current);
       setKeys(k);
       linksRef.current = l;
@@ -173,7 +182,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const showToast = useCallback((message: string) => {
     setToast(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2200);
+    // 긴 안내(붙여 넣을 곳 등)는 읽을 시간을 더 준다
+    toastTimer.current = setTimeout(() => setToast(null), Math.min(6000, Math.max(2200, message.length * 70)));
   }, []);
 
   // 아티팩트 화면에서 서버 저장이 실패하면 알린다 (이 브라우저에는 남아 있음).

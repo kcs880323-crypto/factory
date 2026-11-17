@@ -19,13 +19,14 @@ export default function Compose() {
 
   const link = useMemo(() => links.find((l) => l.id === linkId), [links, linkId]);
   const disclosure = settings.disclosure;
+  const profileSite = settings.sites[0];
 
   const draft = useMemo(() => {
     const input = link
       ? { title: link.title, url: link.url, price: link.price, memo: link.memo, isRocket: link.isRocket }
       : { title: manualTitle, url: manualUrl || '(링크를 여기에)' };
-    return composePost(channel, { ...input, disclosure });
-  }, [link, channel, manualTitle, manualUrl, disclosure]);
+    return composePost(channel, { ...input, disclosure, profileLabel: profileSite?.label });
+  }, [link, channel, manualTitle, manualUrl, disclosure, profileSite]);
   const text = edit && edit.from === draft ? edit.text : draft;
   const setText = (v: string) => setEdit({ from: draft, text: v });
 
@@ -118,6 +119,14 @@ export default function Compose() {
       </Row>
       {channel === 'instagram' && link ? (
         <Button kind="ghost" icon="copy" label="링크만 따로 복사 (프로필·스토리용)" onPress={() => copy(link.url, '링크를 복사했어요')} />
+      ) : null}
+      {channel === 'instagram' && profileSite ? (
+        <Button
+          kind="ghost"
+          icon="copy"
+          label={`${profileSite.label} 주소 복사 (인스타 프로필 링크에 넣기)`}
+          onPress={() => copy(profileSite.url, `${profileSite.label} 주소를 복사했어요`)}
+        />
       ) : null}
       <T v="caption">가격은 바뀔 수 있어서 글에 &lsquo;게시 시점 기준&rsquo;을 붙여 뒀어요. 후기·장점은 직접 써 보고 확인한 내용만 넣어 주세요.</T>
     </Screen>
