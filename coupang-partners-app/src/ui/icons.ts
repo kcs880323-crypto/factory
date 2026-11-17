@@ -33,6 +33,14 @@ export const ICONS = {
   eye: { ios: 'eye', android: 'visibility', cp: 0xe8f4 },
   eyeOff: { ios: 'eye.slash', android: 'visibility_off', cp: 0xe8f5 },
   person: { ios: 'person', android: 'person', cp: 0xe7fd },
+  movie: { ios: 'film', android: 'movie', cp: 0xe02c },
+  sparkle: { ios: 'sparkles', android: 'auto_awesome', cp: 0xe65f },
+  trend: { ios: 'chart.line.uptrend.xyaxis', android: 'trending_up', cp: 0xe8e5 },
+  photo: { ios: 'photo', android: 'image', cp: 0xe3f4 },
+  download: { ios: 'arrow.down.circle', android: 'download', cp: 0xf090 },
+  play: { ios: 'play.fill', android: 'play_arrow', cp: 0xe037 },
+  stop: { ios: 'stop.fill', android: 'stop', cp: 0xe047 },
+  article: { ios: 'doc.richtext', android: 'article', cp: 0xef42 },
 } as const;
 
 export type IconName = keyof typeof ICONS;

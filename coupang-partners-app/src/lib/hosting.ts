@@ -14,3 +14,6 @@ export const API_AVAILABLE = HOSTING !== 'artifact';
 
 /** 웹사이트는 같은 주소의 중계(api/coupang.js)를 거쳐 쿠팡에 요청한다. */
 export const PROXY_URL = HOSTING === 'web' ? '/api/coupang' : undefined;
+
+/** 웹사이트는 네이버도 같은 주소의 중계(api/naver.js)를 거친다. */
+export const NAVER_PROXY_URL = HOSTING === 'web' ? '/api/naver' : undefined;

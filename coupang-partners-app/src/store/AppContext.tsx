@@ -4,25 +4,30 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Alert, Platform, Share } from 'react-native';
 
 import { CoupangApiError, createClient, type ApiClient } from '../api/client';
+import { createNaverClient, hasHub, hasShop, type NaverClient } from '../api/naver';
 import { createDemoClient } from '../demo/demoData';
 import { DEFAULT_DISCLOSURE } from '../lib/compose';
 import { DEFAULT_SITES, type SiteLink } from '../lib/jarvis';
 import { budget, clampLimit, DEFAULT_HOURLY_LIMIT, type Budget } from '../lib/rateGuard';
-import { API_AVAILABLE, PROXY_URL } from '../lib/hosting';
+import { API_AVAILABLE, NAVER_PROXY_URL, PROXY_URL } from '../lib/hosting';
 import { SYNCED_KEYS } from './artifactDb';
 import { CallBudget } from './callBudget';
 import { kstYmd } from '../lib/dates';
 import {
   allKeys,
   deleteKeys,
+  deleteNaverKeys,
   loadArray,
   loadJson,
   loadKeys,
+  loadNaverKeys,
   onRemoteSaveError,
   removeKeys,
   saveJson,
   saveKeys,
+  saveNaverKeys,
   type Keys,
+  type NaverKeySet,
 } from './storage';
 
 export interface Settings {
@@ -33,6 +38,10 @@ export interface Settings {
   demoMode: boolean;
   /** 쿠팡 파트너스에 등록한 내 채널(웹사이트·블로그·SNS) */
   sites: SiteLink[];
+  /** 블로그 글·영상의 글쓴이 이름 (예: 찰스) */
+  penName: string;
+  /** 영상 끝 장면·캡션의 안내: 댓글 '가격' → DM, 또는 프로필 링크 */
+  reelCta: 'dm' | 'profile';
 }
 
 export interface SavedLink {
@@ -46,6 +55,11 @@ export interface SavedLink {
   isRocket?: boolean;
   subId?: string;
   memo?: string;
+  /** 생활용품 / 여행 상품 (글·영상 구성이 달라진다) */
+  kind?: 'shop' | 'travel';
+  category?: string;
+  rank?: number;
+  isFreeShipping?: boolean;
   createdAt: number;
   source: 'api' | 'manual' | 'demo';
 }
@@ -62,6 +76,7 @@ const K = {
   settings: 'cp.settings',
   links: 'cp.links',
   calls: 'cp.calls',
+  naverCalls: 'cp.ncalls',
   checklist: 'cp.checklist',
   cachePrefix: 'cp.cache.',
 };
@@ -73,7 +88,12 @@ export const DEFAULT_SETTINGS: Settings = {
   disclosure: DEFAULT_DISCLOSURE,
   demoMode: false,
   sites: DEFAULT_SITES,
+  penName: '찰스',
+  reelCta: 'dm',
 };
+
+/** 네이버 호출 한도 (앱 안의 안전장치). 쇼핑인사이트는 하루 1,000회로 알려져 있어 넉넉하다. */
+export const NAVER_HOURLY_LIMIT = 60;
 
 interface Checklist {
   date: string;
@@ -94,6 +114,15 @@ interface AppState {
   hasKeys: boolean;
   setApiKeys: (keys: Keys) => Promise<void>;
   clearApiKeys: () => Promise<void>;
+  /** 네이버 키가 있는지 (값은 화면에 내보내지 않는다) */
+  naverHub: boolean;
+  naverShop: boolean;
+  setNaverKeys: (kind: 'hub' | 'shop', id: string, secret: string) => Promise<void>;
+  clearNaverKeys: (kind: 'hub' | 'shop') => Promise<void>;
+  /** 네이버 클라이언트 (키가 있고 바깥 요청을 보낼 수 있는 화면일 때만) */
+  naver: NaverClient | null;
+  /** 아무 함수 결과나 ttl 동안 저장해 둔다 (네이버 추천 등) */
+  remember: <T>(key: string, ttlMs: number, fetcher: () => Promise<T>, force?: boolean) => Promise<Cached<T>>;
   mode: Mode;
   client: ApiClient | null;
   links: SavedLink[];
@@ -131,9 +160,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [keys, setKeys] = useState<Keys | null>(null);
+  const [naverKeys, setNaverKeyState] = useState<NaverKeySet>({});
   const [links, setLinks] = useState<SavedLink[]>([]);
   const [calls, setCalls] = useState<number[]>([]);
   const [callBudget] = useState(() => new CallBudget((c) => saveJson(K.calls, c)));
+  const [naverBudget] = useState(() => new CallBudget((c) => saveJson(K.naverCalls, c)));
   const [now, setNow] = useState(() => Date.now());
   const [checklist, setChecklist] = useState<Checklist>(() => ({ date: kstYmd(new Date()), done: {} }));
   // 콜백 안에서 최신 값을 읽기 위한 ref. 상태를 바꾸는 곳에서 함께 갱신한다.
@@ -146,21 +177,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const [s, k, l, c, cl] = await Promise.all([
+      const [s, k, l, c, cl, nk, nc] = await Promise.all([
         loadJson<Settings>(K.settings, DEFAULT_SETTINGS),
         loadKeys(),
         loadArray<SavedLink>(K.links),
         loadArray<number>(K.calls),
         loadJson<Checklist>(K.checklist, { date: '', done: {} }),
+        loadNaverKeys(),
+        loadArray<number>(K.naverCalls),
       ]);
       settingsRef.current = {
         ...DEFAULT_SETTINGS,
         ...s,
         hourlyLimit: clampLimit(s.hourlyLimit),
         sites: Array.isArray(s.sites) ? s.sites : DEFAULT_SITES,
+        penName: typeof s.penName === 'string' && s.penName.trim() ? s.penName.trim().slice(0, 20) : DEFAULT_SETTINGS.penName,
+        reelCta: s.reelCta === 'profile' ? 'profile' : 'dm',
       };
       setSettings(settingsRef.current);
       setKeys(k);
+      setNaverKeyState(nk);
+      naverBudget.load(nc);
       linksRef.current = l;
       setLinks(l);
       callBudget.load(c);
@@ -169,7 +206,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setChecklist(checklistRef.current);
       setReady(true);
     })();
-  }, [callBudget]);
+  }, [callBudget, naverBudget]);
 
   useEffect(() => callBudget.subscribe(setCalls), [callBudget]);
 
@@ -210,6 +247,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await deleteKeys();
     setKeys(null);
   }, []);
+
+  const setNaverKeys = useCallback(async (kind: 'hub' | 'shop', id: string, secret: string) => {
+    await saveNaverKeys(kind, id, secret);
+    setNaverKeyState(await loadNaverKeys());
+  }, []);
+
+  const clearNaverKeys = useCallback(async (kind: 'hub' | 'shop') => {
+    await deleteNaverKeys(kind);
+    setNaverKeyState(await loadNaverKeys());
+  }, []);
+
+  const naver = useMemo<NaverClient | null>(() => {
+    if (!API_AVAILABLE || (!hasHub(naverKeys) && !hasShop(naverKeys))) return null;
+    return createNaverClient({ keys: naverKeys, proxyUrl: NAVER_PROXY_URL, beforeCall: () => naverBudget.take(NAVER_HOURLY_LIMIT) });
+  }, [naverKeys, naverBudget]);
 
   const mode: Mode = settings.demoMode ? 'demo' : keys && API_AVAILABLE ? 'api' : 'manual';
 
@@ -284,6 +336,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [client, cacheKey, peekCache],
   );
 
+  const remember = useCallback(
+    async <T,>(key: string, ttlMs: number, fetcher: () => Promise<T>, force = false): Promise<Cached<T>> => {
+      if (!force) {
+        const hit = await peekCache<T>(key);
+        if (hit && Date.now() - hit.fetchedAt < ttlMs) return hit;
+      }
+      const data = await fetcher();
+      const t = Date.now();
+      await saveJson(cacheKey(key), { t, data });
+      return { data, fetchedAt: t, fromCache: false };
+    },
+    [cacheKey, peekCache],
+  );
+
   const clearCache = useCallback(async () => {
     const ks = (await allKeys()).filter((k) => k.startsWith(K.cachePrefix));
     await removeKeys([...ks]);
@@ -293,7 +359,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const ks = (await allKeys()).filter((k) => k.startsWith('cp.'));
     await removeKeys([...new Set([...ks, ...SYNCED_KEYS])]);
     await deleteKeys();
+    await deleteNaverKeys('all');
     setKeys(null);
+    setNaverKeyState({});
+    naverBudget.reset();
     settingsRef.current = DEFAULT_SETTINGS;
     setSettings(DEFAULT_SETTINGS);
     linksRef.current = [];
@@ -301,7 +370,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     callBudget.reset();
     checklistRef.current = { date: kstYmd(new Date()), done: {} };
     setChecklist(checklistRef.current);
-  }, [callBudget]);
+  }, [callBudget, naverBudget]);
 
   const toggleChecklist = useCallback(async (id: string) => {
     const today = kstYmd(new Date());
@@ -362,6 +431,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     hasKeys: !!keys,
     setApiKeys,
     clearApiKeys,
+    naverHub: hasHub(naverKeys),
+    naverShop: hasShop(naverKeys),
+    setNaverKeys,
+    clearNaverKeys,
+    naver,
+    remember,
     mode,
     client,
     links,

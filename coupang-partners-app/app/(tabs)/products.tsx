@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { BEST_CATEGORIES } from '@/src/api/categories';
@@ -62,6 +62,18 @@ export default function Products() {
     },
     [cached, category, keyword, subId, mode],
   );
+
+  // 다른 화면(네이버 추천의 '이달의 말' 등)에서 검색어를 넘겨받으면 그 말로 검색한다.
+  const params = useLocalSearchParams<{ q?: string }>();
+  const handledQ = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const q = typeof params.q === 'string' ? params.q.trim().slice(0, 40) : '';
+    if (!q || handledQ.current === q || mode === 'manual') return;
+    handledQ.current = q;
+    setTab('search');
+    setKeyword(q);
+    load('search', { keyword: q });
+  }, [params.q, mode, load]);
 
   const pick = (next: Tab) => {
     setTab(next);

@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -39,6 +39,14 @@ export default function Compose() {
 
   return (
     <Screen>
+      <Card style={{ gap: 6 }}>
+        <T v="h3">긴 블로그 글이나 영상이 필요하면</T>
+        <T v="sub">자비스 방식(상품 정보만 근거, 써 본 척 금지, 검사 후 완성)으로 블로그 소개 글과 세로 홍보 영상을 만들 수 있어요.</T>
+        <Row>
+          <Button style={{ flex: 1 }} small kind="secondary" icon="article" label="블로그 소개 글" onPress={() => router.push({ pathname: '/post', params: link ? { linkId: link.id } : {} })} />
+          <Button style={{ flex: 1 }} small kind="secondary" icon="movie" label="홍보 영상" onPress={() => router.push({ pathname: '/reel', params: link ? { linkId: link.id } : {} })} />
+        </Row>
+      </Card>
       <View style={{ gap: 6 }}>
         <T v="h3">어떤 링크로 쓸까요?</T>
         {links.length ? (

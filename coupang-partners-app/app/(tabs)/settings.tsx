@@ -1,5 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
+
+import { NaverKeysSection, PostVideoSection } from '@/src/ui/naverSettings';
 import { Pressable, Switch, View } from 'react-native';
 
 import { DEFAULT_DISCLOSURE } from '@/src/lib/compose';
@@ -160,6 +162,8 @@ export default function Settings() {
         </Section>
       )}
 
+      <NaverKeysSection />
+
       <Section title="호출 한도 (계정 보호)">
         <Card>
           <UsageMeter />
@@ -274,6 +278,8 @@ export default function Settings() {
           <Button kind="secondary" icon="share" label={`자비스로 보내기 (CSV 복사)`} onPress={sendToJarvis} />
         </Card>
       </Section>
+
+      <PostVideoSection />
 
       <Section title="대가성 문구">
         <Card>

@@ -13,10 +13,12 @@ import { useTheme } from '@/src/ui/theme';
 import { Screen } from '@/src/ui/kit';
 
 const ACTIONS: { label: string; desc: string; icon: IconName; href: Href }[] = [
-  { label: '링크 저장·변환', desc: '쿠팡 주소 붙여넣기', icon: 'link', href: '/links' },
-  { label: '홍보 글 만들기', desc: '대가성 문구 자동', icon: 'write', href: '/compose' },
+  { label: '네이버 상품 추천', desc: '뜨는 분야·이달의 말', icon: 'trend', href: '/recommend' },
   { label: '상품 찾기', desc: '검색·골드박스·베스트', icon: 'search', href: '/products' },
-  { label: '실적 보기', desc: '클릭·주문·수익', icon: 'chart', href: '/reports' },
+  { label: '블로그 소개 글', desc: '자비스 방식 · AI', icon: 'article', href: '/post' },
+  { label: '홍보 영상', desc: '릴스·쇼츠 세로 영상', icon: 'movie', href: '/reel' },
+  { label: '링크 저장·변환', desc: '쿠팡 주소 붙여넣기', icon: 'link', href: '/links' },
+  { label: '짧은 홍보 글', desc: '인스타·카톡·스레드', icon: 'write', href: '/compose' },
 ];
 
 export default function Home() {

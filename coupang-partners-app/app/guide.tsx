@@ -63,8 +63,9 @@ export default function Guide() {
         <Button label="링크 탭으로" icon="link" kind="secondary" onPress={() => router.push('/links')} />
       </Step>
 
-      <Step n={3} title="홍보 글 올리기" icon="megaphone">
-        <Li>홈 또는 링크 카드에서 &lsquo;글 만들기&rsquo;를 누르고 올릴 곳(블로그·인스타·카톡·스레드)을 골라요.</Li>
+      <Step n={3} title="홍보 글·영상 올리기" icon="megaphone">
+        <Li>링크 카드의 &lsquo;짧은 글&rsquo;은 인스타·카톡·스레드용 짧은 글, &lsquo;블로그 글&rsquo;은 자비스 방식의 긴 소개 글, &lsquo;영상&rsquo;은 릴스·쇼츠용 세로 영상이에요.</Li>
+        <Li>블로그 글·영상은 상품 정보와 내가 적은 메모(상품 페이지에서 확인한 것)만 근거로 써요. 없는 숫자·써 본 척·과장 표현은 앱이 검사해서 막거나 빼요.</Li>
         <Li>대가성 문구는 글의 제목이나 첫 부분에 보여야 해요 (공정위 추천·보증 심사지침, 2024년 12월 개정). 앱이 맨 앞에 넣고, 빠지면 복사를 막아요.</Li>
         <Li>기본 문구: &ldquo;{DEFAULT_DISCLOSURE}&rdquo;</Li>
         <Li>인스타그램 캡션의 링크는 눌리지 않아서 프로필 링크나 스토리 링크를 함께 써요.</Li>
@@ -74,6 +75,7 @@ export default function Guide() {
         <Li>가입 직후에는 활동을 지켜보는 단계이고, 일정 실적을 채우면 최종 승인 심사를 받는다고 안내돼 있어요. 기준은 자료마다 &lsquo;누적 판매액 15만 원 이상&rsquo;으로 알려져 있지만, 정확한 조건은 사이트 공지를 확인하세요.</Li>
         <Li>API 키(Access Key, Secret Key)는 파트너스 사이트의 파트너스 API 메뉴에서 받아요.</Li>
         <Li>키를 설정 탭에 넣으면 상품 검색, 골드박스·카테고리 베스트, 자동 링크 변환, 실적 조회가 열려요.</Li>
+        <Li>네이버 API HUB 키(쇼핑인사이트)를 넣으면 &lsquo;네이버 상품 추천&rsquo;에서 요즘 클릭이 오르는 분야를 함께 봐요. 자비스와 같은 키를 써도 돼요.</Li>
         <Li>키는 비밀번호처럼 다뤄요. 남에게 보내거나 글·스크린샷에 노출하지 마세요.</Li>
         <Button label="설정 탭에서 키 넣기" icon="key" kind="secondary" onPress={() => router.push('/settings')} />
       </Step>

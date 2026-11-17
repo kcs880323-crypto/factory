@@ -54,6 +54,9 @@ function RootNav() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="compose" options={{ title: '홍보 글 만들기', presentation: 'modal' }} />
         <Stack.Screen name="guide" options={{ title: '가입·운영 가이드' }} />
+        <Stack.Screen name="recommend" options={{ title: '네이버 상품 추천' }} />
+        <Stack.Screen name="post" options={{ title: '블로그 소개 글' }} />
+        <Stack.Screen name="reel" options={{ title: '홍보 영상' }} />
       </Stack>
       <Toast />
       <ConfirmDialog />
