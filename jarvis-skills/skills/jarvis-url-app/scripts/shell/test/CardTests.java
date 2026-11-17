@@ -132,7 +132,21 @@ public class CardTests {
         check("기록이 규칙보다 먼저 (사용자가 만든 분류도)", p2.large.equals("쇼핑") && p2.medium.equals("가전"), p2.large);
         check("분류 기본값", cat.pick("처음보는가게").source.equals("default"), null);
 
-        System.out.println("4) 가계부 사이트와 주고받기 (시험 서버)");
+        System.out.println("4) 사이트 연동 파일 (/urlapp.json)");
+        JSONObject m1 = LinkConfig.merge(cfg, "{\"cards\":{\"add\":{\"method\":\"POST\",\"path\":\"/api/v2/expense\","
+                + "\"body\":{\"when\":\"{date}\",\"price\":\"{amount}\"}}}}");
+        check("사이트 파일의 add 가 앱 기본값을 덮음 (나머지는 그대로)", m1.getJSONObject("add").getString("path").equals("/api/v2/expense")
+                && m1.getJSONObject("delete").getString("path").equals("/api/monthly-details/delete-single")
+                && m1.optBoolean("_from_site") && m1.getJSONArray("owners").length() == 2, m1.optJSONObject("add"));
+        check("다른 사이트 주소는 거부 (기본값 그대로)", LinkConfig.merge(cfg,
+                "{\"cards\":{\"add\":{\"path\":\"//evil.example/x\",\"body\":{}}}}") == cfg, null);
+        check("http 주소도 거부", LinkConfig.merge(cfg,
+                "{\"cards\":{\"add\":{\"path\":\"/x?u=https://evil.example\",\"body\":{}}}}") == cfg, null);
+        check("모양이 이상하면 기본값", LinkConfig.merge(cfg, "<!doctype html><html>") == cfg
+                && LinkConfig.merge(cfg, "{\"cards\":{\"default_category\":[\"기타\"]}}") == cfg
+                && LinkConfig.merge(cfg, null) == cfg, null);
+
+        System.out.println("5) 가계부 사이트와 주고받기 (시험 서버)");
         final List<String[]> seen = new ArrayList<>();
         HttpServer srv = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         final boolean[] failAdd = {false};

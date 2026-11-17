@@ -1,6 +1,6 @@
 package app.jarvis.urlapp;
 
-// 인터넷이 안 될 때 못 보낸 카드 결제를 인터넷이 돌아오면 다시 보낸다 (안드로이드 JobScheduler).
+// 모아 둔 카드 결제를 45초 뒤 처리하고(HOLD_JOB), 인터넷이 안 될 때 못 보낸 결제를 다시 보낸다(RETRY_JOB).
 
 import android.app.job.JobParameters;
 import android.app.job.JobService;
@@ -10,9 +10,11 @@ public class CardRetryJob extends JobService {
     public boolean onStartJob(JobParameters params) {
         if (!CardEngine.available(this)) return false;
         final CardEngine engine = CardEngine.get(this);
+        final boolean hold = params.getJobId() == CardEngine.HOLD_JOB;
         engine.exec.execute(() -> {
+            if (hold) engine.processHolding(); // 모아 둔 결제 처리 (같은 결제 합치기 → 등록)
             engine.flush();
-            jobFinished(params, engine.hasPending());
+            jobFinished(params, !hold && engine.hasPending());
         });
         return true;
     }

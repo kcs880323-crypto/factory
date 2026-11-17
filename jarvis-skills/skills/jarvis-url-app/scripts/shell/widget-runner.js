@@ -1,6 +1,7 @@
 // URL 앱의 위젯 실행기. url_app.py 가 사이트별 "위젯 스크립트"(함수 하나)를 아래 자리에 넣어
 // assets/urlapp-widget.js 로 만들고, 앱이 자기 사이트 페이지(맨 위 화면)에만 넣는다.
 // 위젯 스크립트는 사이트 안에서 돌므로 사이트의 로그인 상태·주소를 그대로 쓴다. 돌려준 값만 앱으로 간다.
+// 사이트가 window.urlappWidget(같은 모양의 함수)을 두면 그것이 앱에 넣은 스크립트보다 먼저다.
 //   돌려줄 값: {title: "...", rows: [{label, value, tone: "pos"|"neg"|""}] (최대 4줄), note: "..."} 또는 null(갱신 안 함)
 // 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤),
 // 그리고 위젯 스크립트가 null(로그인 전 등)을 돌려주는 동안은 10초마다.
@@ -26,7 +27,9 @@
   function run() {
     if (busy) { again = true; return; }
     busy = true;
-    Promise.resolve().then(function () { return fn(); }).then(function (d) {
+    // 사이트가 직접 위젯 함수를 주면(window.urlappWidget) 그것을 먼저 쓴다 → 사이트를 고쳐도 앱 업데이트 없이 따라간다
+    var site = typeof window.urlappWidget === "function" ? window.urlappWidget : null;
+    Promise.resolve().then(function () { return (site || fn)(); }).then(function (d) {
       if (!d || typeof d !== "object") { retryLater(); return; }
       var rows = Array.isArray(d.rows) ? d.rows.slice(0, 4).map(function (r) {
         return { label: clip(r && r.label, 24), value: clip(r && r.value, 24), tone: clip(r && r.tone, 3) };

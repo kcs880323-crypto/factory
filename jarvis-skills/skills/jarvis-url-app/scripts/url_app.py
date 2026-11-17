@@ -643,7 +643,8 @@ def android_string(s):
 
 # ---------------------------------------------------------------- 프로젝트 파일
 
-def manifest_xml(app_id, cleartext, orientation, widget=False, cards=False):
+def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None):
+    """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
     orient_attr = f'\n            android:screenOrientation="{orient}"' if orient else ""
     # 안드로이드 16 은 큰 화면(태블릿)에서 방향 고정을 무시한다. 고정을 원하면 임시 예외 속성을 넣는다.
@@ -660,7 +661,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=False):
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/urlapp_widget_info" />
         </receiver>""" if widget else ""
     # 카드 자동 등록: 알림 듣기(사용자가 '알림 접근'을 켜야 동작), 설정 화면, 되돌리기 단추, 다시 보내기 작업
-    card_parts = """
+    listener = """
         <service
             android:name="app.jarvis.urlapp.CardListenerService"
             android:exported="true"
@@ -668,7 +669,17 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=False):
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
-        </service>
+        </service>""" if cards == "listener" else ""
+    # MacroDroid 가 보내는 브로드캐스트를 받는 곳 (비밀 키를 확인한다). 민감한 권한이 없어 Play 프로텍트가 막지 않는다.
+    intent_rx = """
+        <receiver
+            android:name="app.jarvis.urlapp.CardIntentReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="app.jarvis.urlapp.action.CARD_NOTIFICATION" />
+            </intent-filter>
+        </receiver>""" if cards == "intent" else ""
+    card_parts = (listener + intent_rx + """
         <service
             android:name="app.jarvis.urlapp.CardRetryJob"
             android:exported="false"
@@ -679,7 +690,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=False):
         <activity
             android:name="app.jarvis.urlapp.CardSettingsActivity"
             android:exported="false"
-            android:label="@string/sc_cards" />""" if cards else ""
+            android:label="@string/sc_cards" />""") if cards else ""
     card_perm = '\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' if cards else ""
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
@@ -1054,7 +1065,7 @@ def save_registry(home, reg):
     tmp.replace(p)
 
 
-EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "color", "bg", "orientation", "external", "allow_host", "desktop",
+EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto"}
@@ -1128,6 +1139,9 @@ def cmd_build(args):
 
         # 카드 결제 자동 등록 (사이트별 설정이 있을 때만)
         cards_cfg = None
+        cards_via = opt["cards_via"] or "intent"
+        if cards_via not in ("intent", "listener"):
+            raise Fail("--cards-via 는 intent(MacroDroid) 또는 listener(앱이 직접 알림 읽기) 입니다.")
         if opt["cards"] and opt["cards"] != "none":
             cs = Path(opt["cards"]).expanduser()
             if not cs.is_file():
@@ -1138,6 +1152,7 @@ def cmd_build(args):
                 shutil.copyfile(cs, keep_c)
             explicit["cards"] = str(keep_c)
             cards_cfg = load_cards_config(keep_c)
+            cards_cfg["via"] = cards_via
 
         # 아이콘
         icon_choice = opt["icon"] or "auto"
@@ -1205,7 +1220,7 @@ def cmd_build(args):
                                                       encoding="utf-8")
         cleartext = urllib.parse.urlsplit(url).scheme == "http"
         (workdir / "AndroidManifest.xml").write_text(manifest_xml(app_id, cleartext, opt["orientation"], bool(widget_js),
-                                                                  bool(cards_cfg)),
+                                                                  cards_via if cards_cfg else None),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1254,8 +1269,9 @@ def cmd_build(args):
     say(f"  이름 {name} | id {app_id} | 버전 {version_name} (코드 {version_code}) | 안드로이드 7.0 이상")
     say(f"  색 {theme} / 배경 {bg} | 아이콘: {icon_from}")
     if cards_cfg:
-        say(f"  카드 결제 자동 등록: 있음 (담당자 {', '.join(cards_cfg['owners'])}. 설치 후 앱이 처음 열릴 때 설정을 묻는다: "
-            "담당자 고르기 → 알림 접근 허용 → 배터리 최적화 제외)")
+        how = ("MacroDroid 가 카드 알림을 넘겨준다 (설정 화면에 키·넣을 값)" if cards_via == "intent"
+               else "앱이 직접 알림을 읽는다 (알림 접근 권한. 직접 설치는 Play 프로텍트가 막을 수 있음)")
+        say(f"  카드 결제 자동 등록: 있음 (담당자 {', '.join(cards_cfg['owners'])}; {how}). 앱이 처음 열릴 때 설정을 묻는다")
     if widget_js:
         say("  홈 화면 위젯: 있음 (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
     say(f"  다른 사이트 링크: {'브라우저로' if opt['external'] == 'browser' else '앱 안에서'} | 앱 안에서 여는 사이트: "
@@ -1263,6 +1279,85 @@ def cmd_build(args):
     say("설치: 이 APK 를 태블릿·폰으로 옮겨 파일을 누르고 '출처를 알 수 없는 앱 설치'를 그 앱(파일 관리자 등)에만 허용한다."
         + (" 같은 키로 서명했으므로 기존 앱 위에 업데이트된다 (로그인 유지)." if version_code > 1 else ""))
     return 0
+
+
+def link_file_json(cards_cfg):
+    """사이트에 둘 연동 약속 파일(/urlapp.json)의 내용 — 카드 등록이 쓰는 주소와 칸 이름."""
+    keep = {k: cards_cfg[k] for k in ("add", "history", "delete", "default_category") if k in cards_cfg}
+    return {
+        "_comment": "우리집 가계부 앱(안드로이드)과의 연동 약속. 지출 추가·월별 내역·삭제 API 의 주소나 칸 이름을 바꾸면 "
+                    "이 파일도 같이 바꿔 주세요. 앱은 이 파일을 읽어 따라갑니다.",
+        "version": 1,
+        "cards": keep,
+    }
+
+
+def cmd_link_file(args):
+    print(json.dumps(link_file_json(load_cards_config(Path(args.cards).expanduser())), ensure_ascii=False, indent=2))
+    return 0
+
+
+def static_part(path):
+    return path.split("{")[0].split("?")[0]
+
+
+def cmd_link_check(args):
+    """재배포 뒤 연동 점검: 사이트의 /urlapp.json 과 사이트 코드(자바스크립트)만 본다. 가계 데이터는 받지 않는다."""
+    url = normalize_url(args.url)
+    origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(url))
+    problems, notes = [], []
+    link = None
+    try:
+        _, _, body = http_get(origin + "/urlapp.json", 200_000)
+        if body.lstrip()[:1] == b"<":
+            raise ValueError("아직 없음 (사이트가 화면 페이지를 돌려줌)")
+        link = json.loads(body.decode("utf-8"))
+        if not isinstance(link, dict) or not isinstance(link.get("cards"), dict):
+            problems.append("/urlapp.json 에 cards 가 없습니다")
+            link = None
+        else:
+            notes.append("/urlapp.json 있음")
+    except Exception as e:  # noqa: BLE001
+        why = str(e) if isinstance(e, ValueError) and "아직 없음" in str(e) else type(e).__name__
+        problems.append(f"/urlapp.json 을 읽지 못함 ({why}) — 앱은 앱 기본 설정을 쓴다")
+    cards = (link or {}).get("cards") or {}
+    if args.cards:
+        base_cfg = load_cards_config(Path(args.cards).expanduser())
+        for k in ("add", "history", "delete"):
+            cards.setdefault(k, base_cfg[k])
+    for k in ("add", "history", "delete"):
+        v = cards.get(k)
+        if not (isinstance(v, dict) and isinstance(v.get("path"), str) and v["path"].startswith("/")
+                and not v["path"].startswith("//")):
+            problems.append(f"cards.{k}.path 가 없거나 같은 사이트 주소가 아님")
+    # 사이트 코드에 그 주소·칸 이름이 아직 있는지 (화면이 같은 API 를 쓰는지)
+    js_text = ""
+    try:
+        _, _, page = http_get(url, 3_000_000)
+        for src in re.findall(r'<script[^>]+src="([^"]+\.js)"', page.decode("utf-8", "replace")):
+            if src.startswith("http") and urllib.parse.urlsplit(src).netloc != urllib.parse.urlsplit(origin).netloc:
+                continue
+            _, _, js = http_get(urllib.parse.urljoin(url, src), 8_000_000)
+            js_text += js.decode("utf-8", "replace")
+    except Exception as e:  # noqa: BLE001
+        problems.append(f"사이트 코드를 읽지 못함 ({type(e).__name__})")
+    if js_text:
+        for k in ("add", "history", "delete"):
+            v = cards.get(k)
+            if isinstance(v, dict) and isinstance(v.get("path"), str):
+                sp = static_part(v["path"])
+                (notes if sp in js_text else problems).append(
+                    f"{k}: 사이트 코드에 {sp} " + ("있음" if sp in js_text else "없음 — API 가 바뀌었을 수 있음"))
+        body = (cards.get("add") or {}).get("body") or {}
+        for field in body:
+            if field not in js_text:
+                problems.append(f"add: 칸 이름 {field} 가 사이트 코드에 없음 — 칸 이름이 바뀌었을 수 있음")
+    for n in notes:
+        say(f"  ✔ {n}")
+    for p_ in problems:
+        say(f"  ✖ {p_}")
+    say("연동 점검: " + ("문제 없음" if not problems else f"확인할 것 {len(problems)}개"))
+    return 0 if not problems else 1
 
 
 def cmd_list(args):
@@ -1471,9 +1566,26 @@ def cmd_selftest(args):
             mf8 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec8["apk"]], tmp_home, "xmltree")
             sc8 = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/shortcuts.xml", rec8["apk"]], tmp_home, "xmltree")
             z8 = zipfile.ZipFile(rec8["apk"])
-            check("카드: 알림 듣기 서비스는 시스템만 묶을 수 있게", "app.jarvis.urlapp.CardListenerService" in mf8
-                  and "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" in mf8
-                  and "android.service.notification.NotificationListenerService" in mf8)
+            check("카드(기본 MacroDroid): 키를 확인하는 받는 곳, 알림 읽기 권한 없음",
+                  "app.jarvis.urlapp.CardIntentReceiver" in mf8 and "app.jarvis.urlapp.action.CARD_NOTIFICATION" in mf8
+                  and "CardListenerService" not in mf8 and "BIND_NOTIFICATION_LISTENER_SERVICE" not in mf8
+                  and json.loads(z8.read("assets/urlapp-cards.json"))["via"] == "intent")
+            build(base + "/cards-l", "--no-fetch", "--cards", str(cards_json), "--cards-via", "listener")
+            id9, rec9 = next((k, v) for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/cards-l"))
+            mf9 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec9["apk"]], tmp_home, "xmltree")
+            check("카드(listener): 알림 듣기 서비스는 시스템만 묶을 수 있게", "app.jarvis.urlapp.CardListenerService" in mf9
+                  and "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" in mf9
+                  and "android.service.notification.NotificationListenerService" in mf9 and "CardIntentReceiver" not in mf9)
+            lf = link_file_json(load_cards_config(cards_json))
+            (site / "urlapp.json").write_text(json.dumps(lf, ensure_ascii=False), encoding="utf-8")
+            (site / "lc").mkdir()
+            (site / "lc" / "index.html").write_text('<script type="module" src="/lc/app.js"></script>', encoding="utf-8")
+            (site / "lc" / "app.js").write_text('fetch("/api/monthly-details/add-single");fetch(`/api/monthly-details?month=${m}`);'
+                                                'fetch("/api/monthly-details/delete-single");const f={date:1,type:1,category_large:1,'
+                                                'category_medium:1,details:1,amount:1,earner_name:1,memo:1};', encoding="utf-8")
+            check("연동 점검: 맞는 사이트는 문제 없음", cmd_link_check(parser.parse_args(["link-check", base + "/lc/"])) == 0)
+            (site / "lc" / "app.js").write_text('fetch("/api/v2/expenses");', encoding="utf-8")
+            check("연동 점검: API 가 바뀐 사이트는 알려 줌", cmd_link_check(parser.parse_args(["link-check", base + "/lc/"])) == 1)
             check("카드: 되돌리기·다시 보내기·설정 화면, 알림 권한", "CardUndoReceiver" in mf8 and "CardRetryJob" in mf8
                   and "android.permission.BIND_JOB_SERVICE" in mf8 and "CardSettingsActivity" in mf8
                   and "android.permission.POST_NOTIFICATIONS" in mf8)
@@ -1515,6 +1627,9 @@ def build_parser():
     b.add_argument("--icon", help="auto(기본, 사이트 아이콘) | letter(글자 아이콘) | 이미지 파일 경로 | 이미지 주소")
     b.add_argument("--accent", help="강조색 #RRGGBB (진행 막대, 위젯의 수입 같은 강조 숫자). 기본: 아이콘 바탕색 → 테마색")
     b.add_argument("--cards", help="카드 결제 알림 자동 등록을 넣는다: 사이트별 설정(.json) 경로. 'none' 이면 뺀다 (cards/ 의 예시 참고)")
+    b.add_argument("--cards-via", dest="cards_via", choices=["intent", "listener"],
+                   help="카드 알림을 받는 방법: intent(기본, MacroDroid 가 넘겨줌 — Play 프로텍트가 설치를 막지 않음) | "
+                        "listener(앱이 직접 알림 읽기 — 직접 설치가 막힐 수 있음)")
     b.add_argument("--widget", help="홈 화면 위젯을 넣는다: 위젯 스크립트(.js) 경로. 'none' 이면 뺀다 (widgets/ 의 예시 참고)")
     b.add_argument("--widget-param", dest="widget_param", action="append", default=[],
                    help="위젯 스크립트의 __PARAM_이름__ 자리에 넣을 값: 이름=값 (여러 번). 값은 출력하지 않고 이 컴퓨터에만 기억")
@@ -1537,6 +1652,11 @@ def build_parser():
     b.add_argument("--out", help="APK 를 둘 폴더 (기본: ~/.jarvis-url-app/apk)")
     b.add_argument("--no-fetch", dest="no_fetch", action="store_true", help="사이트를 읽지 않고 만든다")
     sub.add_parser("list", help="만든 앱 목록")
+    lf = sub.add_parser("link-file", help="사이트에 둘 연동 약속 파일(/urlapp.json) 내용 출력")
+    lf.add_argument("--cards", required=True, help="카드 설정(.json)")
+    lc = sub.add_parser("link-check", help="재배포 뒤 연동 점검 (사이트의 /urlapp.json 과 코드만 본다)")
+    lc.add_argument("url")
+    lc.add_argument("--cards", help="앱에 넣은 카드 설정(.json) — 사이트에 연동 파일이 없을 때 이것으로 점검")
     sub.add_parser("selftest", help="자체 시험")
     return ap
 
@@ -1550,6 +1670,7 @@ def main(argv=None):
             pass
     args = build_parser().parse_args(argv)
     handler = {"doctor": cmd_doctor, "setup": cmd_setup, "build": cmd_build, "list": cmd_list,
+               "link-file": cmd_link_file, "link-check": cmd_link_check,
                "selftest": cmd_selftest}[args.cmd]
     try:
         return handler(args)

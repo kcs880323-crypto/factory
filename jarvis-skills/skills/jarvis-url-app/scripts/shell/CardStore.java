@@ -187,6 +187,126 @@ final class CardStore {
         return out;
     }
 
+    // ---------- 모아 두기 (같은 결제를 45초 모아 하나로. 앱이 꺼져도 남게 저장) ----------
+
+    synchronized void addHolding(CardParser.Txn t) {
+        JSONArray a = arr("holding");
+        JSONObject o = new JSONObject();
+        try {
+            o.put("card", t.card);
+            o.put("cancel", t.cancel);
+            o.put("amount", t.amount);
+            o.put("when", t.when);
+            o.put("whenFromText", t.whenFromText);
+            o.put("merchant", t.merchant);
+            o.put("received", System.currentTimeMillis());
+        } catch (JSONException ignored) {
+            return;
+        }
+        a.put(o);
+        p.edit().putString("holding", a.toString()).apply();
+    }
+
+    /** 받은 지 olderThanMs 가 지난 것을 꺼낸다 (나머지는 남긴다). */
+    synchronized List<CardParser.Txn> takeHolding(long olderThanMs) {
+        JSONArray a = arr("holding");
+        JSONArray keep = new JSONArray();
+        List<CardParser.Txn> out = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject o = a.optJSONObject(i);
+            if (o == null) continue;
+            if (now - o.optLong("received") < olderThanMs) {
+                keep.put(o);
+                continue;
+            }
+            CardParser.Txn t = new CardParser.Txn();
+            t.card = o.optString("card");
+            t.cancel = o.optBoolean("cancel");
+            t.amount = o.optLong("amount");
+            t.when = o.optLong("when");
+            t.whenFromText = o.optBoolean("whenFromText");
+            t.merchant = o.optString("merchant");
+            out.add(t);
+        }
+        p.edit().putString("holding", keep.toString()).apply();
+        return out;
+    }
+
+    synchronized boolean hasHolding() {
+        return arr("holding").length() > 0;
+    }
+
+    // ---------- MacroDroid 연결 ----------
+
+    /** MacroDroid 가 함께 보내야 하는 비밀 키 (처음 한 번 만든다). 다른 앱이 가짜 결제를 넣지 못하게. */
+    synchronized String token() {
+        String t = p.getString("token", null);
+        if (t == null) {
+            String abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+            java.security.SecureRandom r = new java.security.SecureRandom();
+            StringBuilder b = new StringBuilder();
+            for (int i = 0; i < 16; i++) b.append(abc.charAt(r.nextInt(abc.length())));
+            t = b.toString();
+            p.edit().putString("token", t).apply();
+        }
+        return t;
+    }
+
+    boolean tokenMatches(String given) {
+        if (given == null) return false;
+        byte[] a = token().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] b = given.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return java.security.MessageDigest.isEqual(a, b);
+    }
+
+    void noteReceived(boolean card, boolean badToken) {
+        SharedPreferences.Editor e = p.edit().putLong("rx_at", System.currentTimeMillis());
+        if (badToken) e.putLong("rx_bad_token_at", System.currentTimeMillis());
+        else if (card) e.putLong("rx_card_at", System.currentTimeMillis());
+        e.apply();
+    }
+
+    long receivedAt(String which) {
+        return p.getLong(which, 0);
+    }
+
+    // ---------- 사이트 연동 파일 (/urlapp.json) ----------
+
+    synchronized void saveLink(String json, boolean found) {
+        p.edit().putString("link", found ? json : null).putLong("link_checked", System.currentTimeMillis())
+                .putBoolean("link_found", found).apply();
+    }
+
+    String link() {
+        return p.getString("link", null);
+    }
+
+    long linkChecked() {
+        return p.getLong("link_checked", 0);
+    }
+
+    /** 사이트가 요청을 거절한 횟수 (사이트가 바뀌어 연동이 끊겼을 때). 성공하면 0. */
+    int linkErrors() {
+        return p.getInt("link_errors", 0);
+    }
+
+    void setLinkErrors(int n, String why) {
+        p.edit().putInt("link_errors", n).putString("link_error_why", why).apply();
+    }
+
+    String linkErrorWhy() {
+        return p.getString("link_error_why", "");
+    }
+
+    long linkAlertAt() {
+        return p.getLong("link_alert_at", 0);
+    }
+
+    void setLinkAlertAt(long t) {
+        p.edit().putLong("link_alert_at", t).apply();
+    }
+
     // ---------- 분류 학습 ----------
 
     synchronized void saveLearned(List<String[]> rows) {

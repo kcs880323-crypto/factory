@@ -27,12 +27,23 @@ import java.util.Map;
 public final class LedgerClient {
     private final String base;   // https://사이트 (끝에 / 없음)
     private final JSONObject cfg;
+    private volatile int lastCode; // 마지막 응답 코드 (0 = 연결 못 함). 연동이 끊겼는지 가리는 데 쓴다
 
     public LedgerClient(String baseUrl, JSONObject cfg) {
         String b = baseUrl;
         while (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         this.base = b;
         this.cfg = cfg;
+    }
+
+    public int lastCode() {
+        return lastCode;
+    }
+
+    /** 사이트 안의 파일 하나를 글로 받는다 (예: /urlapp.json). 200 이 아니면 null. */
+    public String fetchText(String path) throws IOException {
+        Response r = request("GET", base + (path.startsWith("/") ? path : "/" + path), null);
+        return r.code == 200 ? r.body : null;
     }
 
     /** 한 건 추가. 사이트가 {"success":true} 나 2xx 로 답하면 true. */
@@ -194,7 +205,8 @@ public final class LedgerClient {
         }
     }
 
-    private static Response request(String method, String url, String body) throws IOException {
+    private Response request(String method, String url, String body) throws IOException {
+        lastCode = 0;
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         try {
             c.setConnectTimeout(15000);
@@ -211,6 +223,7 @@ public final class LedgerClient {
                 }
             }
             int code = c.getResponseCode();
+            lastCode = code;
             InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
             String text = "";
             if (in != null) {

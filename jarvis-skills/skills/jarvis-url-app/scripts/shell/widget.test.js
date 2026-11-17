@@ -94,6 +94,14 @@ function check(label, cond, detail) {
   await page.waitForTimeout(400);
   check("두 번 넣어도 실행기는 하나", (await page.evaluate(() => __w.length)) === before);
 
+  // 사이트가 직접 위젯 함수를 주면 그것을 먼저 쓴다 (사이트를 고쳐도 앱 업데이트 없이)
+  await page.evaluate(() => { window.urlappWidget = async () => ({ title: "사이트가 만든 위젯", rows: [{ label: "a", value: "1" }] }); });
+  const n0 = await page.evaluate(() => __w.length);
+  await page.evaluate(() => window.__urlappWidgetRun());
+  await page.waitForFunction((n) => __w.length > n, n0, { timeout: 5000 });
+  check("사이트의 window.urlappWidget 이 먼저", (await page.evaluate(() => __w[__w.length - 1].title)) === "사이트가 만든 위젯");
+  await page.evaluate(() => { delete window.urlappWidget; });
+
   // 값이 크거나 줄이 많아도 잘라서 넘긴다
   const page2 = await browser.newPage();
   await page2.goto(base);

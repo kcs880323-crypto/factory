@@ -59,12 +59,6 @@ public class CardListenerService extends NotificationListenerService {
             if (seen.containsKey(sig)) return;
             seen.put(sig, Boolean.TRUE);
         }
-        CardParser.Txn t = CardParser.parse(title == null ? "" : title.toString(), body.toString(), sbn.getPostTime());
-        if (t == null) return;
-        if (!engine.trusted(pkg, title)) {
-            engine.store.noteDetected(pkg);
-            return;
-        }
-        engine.offer(t);
+        engine.handleNotification(pkg, title == null ? "" : title.toString(), body.toString(), sbn.getPostTime(), true);
     }
 }
