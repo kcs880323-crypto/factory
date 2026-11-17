@@ -126,11 +126,18 @@
    - 입력값 검사: 금액은 숫자(0 이상, 너무 큰 값 거부), 날짜는 YYYY-MM-DD, 글자 칸은 길이 제한(예: 200자).
    - 오류 응답에 내부 정보(스택, SQL, 파일 경로)를 넣지 마.
    - 다른 사이트에서 이 API 를 부르지 못하게 CORS 는 같은 사이트만 허용해.
-   - 보안 헤더(X-Content-Type-Options: nosniff, Referrer-Policy, frame-ancestors 'self')를 붙여 줘.
+   - 보안 헤더(X-Content-Type-Options: nosniff, Referrer-Policy, Content-Security-Policy 의 frame-ancestors)를 붙여 줘.
+     frame-ancestors 는 'self' https://aistudio.google.com https://*.aistudio.google.com https://*.google.com
+     https://*.googleusercontent.com 으로 해 줘 (AI Studio 미리보기가 사이트를 틀 안에 띄우므로, 'self' 만 두면 미리보기가 막힌다).
    - 바꾼 뒤, 로그인 안 한 상태에서 /api/monthly-details?month=2026-11 을 열면 401 이 나오는지 확인해 줘.
 ```
 
 ## 참고
+
+- **AI Studio 미리보기에 "…에서 연결을 거부했습니다"가 뜨면**: 보안 헤더 frame-ancestors 가 'self' 만 허용해서 미리보기 틀이 막힌 것.
+  AI Studio 에 "frame-ancestors 를 'self' https://aistudio.google.com https://*.aistudio.google.com https://*.google.com
+  https://*.googleusercontent.com 으로 바꿔 줘. 다른 보안 설정은 그대로" 라고 요청한다 (2026-11-17 실제로 겪음).
+- **고친 뒤 꼭 오른쪽 위 Publish(게시)** 를 눌러야 실제 주소(csjhth.ai.studio)에 반영된다. AI Studio 의 '검증 결과'는 미리보기 서버 기준이다.
 
 - 가. 는 카드 자동 등록·위젯용, 나. 는 보안용입니다. 가. 가 없어도 앱은 앱에 넣어 둔 기본 설정·위젯 스크립트로 동작하고,
   있으면 사이트를 고쳐도 앱 업데이트 없이 따라갑니다.
