@@ -186,6 +186,7 @@ export function LinkCard({ link }: { link: SavedLink }) {
             {link.subId ? <Badge label={`채널 ${link.subId}`} tone="accent" /> : null}
             {link.source === 'demo' ? <Badge label="예시" tone="demo" /> : null}
             {link.source === 'manual' ? <Badge label="직접 저장" tone="info" /> : null}
+            {link.source === 'ai' ? <Badge label="AI 검색" tone="accent" /> : null}
             <T v="caption" color={t.faint}>
               {dateTimeText(link.createdAt)}
             </T>

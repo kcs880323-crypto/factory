@@ -60,6 +60,7 @@ export default function Guide() {
         <Li>만들어진 짧은 링크(link.coupang.com/a/…)를 복사해요.</Li>
         <Li>이 앱의 링크 탭에서 &lsquo;붙여넣기&rsquo; → 상품 이름을 적고 저장해요.</Li>
         <Li>일반 쿠팡 주소(coupang.com/vp/products/…)를 그대로 올리면 수익이 잡히지 않아요. 앱이 경고해 줘요.</Li>
+        <Li>홈의 &lsquo;AI 상품 찾기&rsquo;에 제품 이름을 적으면 같은 상품 중 가장 싼 것을 찾아 링크로 저장해요 (API 키가 있으면 버튼 하나로, 없으면 Claude가 내 브라우저로 대신 찾아 줘요).</Li>
         <Button label="링크 탭으로" icon="link" kind="secondary" onPress={() => router.push('/links')} />
       </Step>
 

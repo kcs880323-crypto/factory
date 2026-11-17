@@ -6,6 +6,7 @@ import { CHANNELS, composePost, ensureDisclosureOnTop, hasDisclosureOnTop, type 
 import { won } from '@/src/lib/format';
 import { useApp } from '@/src/store/AppContext';
 import { Banner, Button, Card, Chip, Field, Row, Screen, T } from '@/src/ui/kit';
+import { VaultPickerButton } from '@/src/ui/VaultPicker';
 
 export default function Compose() {
   const params = useLocalSearchParams<{ linkId?: string }>();
@@ -48,10 +49,13 @@ export default function Compose() {
         </Row>
       </Card>
       <View style={{ gap: 6 }}>
-        <T v="h3">어떤 링크로 쓸까요?</T>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <T v="h3">어떤 링크로 쓸까요?</T>
+          {links.length ? <VaultPickerButton links={links} selectedId={link?.id} onPick={(l) => setLinkId(l.id)} /> : null}
+        </Row>
         {links.length ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {links.slice(0, 30).map((l) => (
+            {(link && links.indexOf(link) >= 30 ? [link, ...links.slice(0, 29)] : links.slice(0, 30)).map((l) => (
               <Chip key={l.id} label={l.title.length > 18 ? `${l.title.slice(0, 17)}…` : l.title} selected={l.id === linkId} onPress={() => setLinkId(l.id)} />
             ))}
             <Chip label="직접 입력" selected={!link} onPress={() => setLinkId(undefined)} />

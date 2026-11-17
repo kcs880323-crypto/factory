@@ -61,7 +61,8 @@ export interface SavedLink {
   rank?: number;
   isFreeShipping?: boolean;
   createdAt: number;
-  source: 'api' | 'manual' | 'demo';
+  /** api: 쿠팡 API로 저장 / manual: 직접 붙여 넣기 / demo: 예시 / ai: AI 상품 찾기 */
+  source: 'api' | 'manual' | 'demo' | 'ai';
 }
 
 export type Mode = 'api' | 'demo' | 'manual';

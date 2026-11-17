@@ -6,6 +6,7 @@ import { won } from '../lib/format';
 import { affiliateOf, type ProductInfo, type ProductKind } from '../lib/productRules';
 import type { SavedLink } from '../store/AppContext';
 import { Badge, Card, Chip, Field, Row, T } from './kit';
+import { VaultPickerButton } from './VaultPicker';
 
 export interface PickState {
   linkId?: string;
@@ -62,10 +63,13 @@ export function ProductInput({ value, onChange, links }: { value: PickState; onC
   return (
     <View style={{ gap: 10 }}>
       <View style={{ gap: 6 }}>
-        <T v="h3">어떤 상품으로 할까요?</T>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <T v="h3">어떤 상품으로 할까요?</T>
+          {links.length ? <VaultPickerButton links={links} selectedId={value.linkId} onPick={(l) => onChange(pickFromLink(l))} /> : null}
+        </Row>
         {links.length ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {links.slice(0, 30).map((l) => (
+            {(link && links.indexOf(link) >= 30 ? [link, ...links.slice(0, 29)] : links.slice(0, 30)).map((l) => (
               <Chip key={l.id} label={l.title.length > 18 ? `${l.title.slice(0, 17)}…` : l.title} selected={l.id === value.linkId} onPress={() => onChange(pickFromLink(l))} />
             ))}
             <Chip label="직접 입력" selected={!link} onPress={() => onChange(pickFromLink())} />

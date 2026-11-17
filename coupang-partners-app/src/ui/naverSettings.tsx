@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Pressable } from 'react-native';
 
 import { TREND_CATEGORIES, trendWindow } from '../lib/naverTrend';
-import { HOSTING } from '../lib/hosting';
+import { HOSTING, IS_DESKTOP } from '../lib/hosting';
 import { errorText, useApp } from '../store/AppContext';
 import { Banner, Button, Card, Chip, Field, Icon, Row, Section, T } from './kit';
 import { useTheme } from './theme';
@@ -133,8 +133,9 @@ export function NaverKeysSection() {
       </Section>
     );
   }
-  const where =
-    HOSTING === 'web'
+  const where = IS_DESKTOP
+    ? 'PC 설치판에서는 키가 이 앱 전용 브라우저 저장소에만 저장되고, 요청은 이 PC 안의 중계 서버(127.0.0.1)를 거쳐 네이버로 가요 (중계는 아무것도 저장하지 않아요).'
+    : HOSTING === 'web'
       ? '웹사이트에서는 키가 이 브라우저에 저장되고, 요청은 이 웹사이트의 중계(/api/naver)를 거쳐 네이버로 가요 (중계는 아무것도 저장하지 않아요). 공용 PC에서는 넣지 마세요.'
       : '키는 이 휴대폰의 보안 저장소에만 저장돼요.';
   return (

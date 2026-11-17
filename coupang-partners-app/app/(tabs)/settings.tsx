@@ -5,7 +5,7 @@ import { NaverKeysSection, PostVideoSection } from '@/src/ui/naverSettings';
 import { Pressable, Switch, View } from 'react-native';
 
 import { DEFAULT_DISCLOSURE } from '@/src/lib/compose';
-import { HOSTING } from '@/src/lib/hosting';
+import { HOSTING, IS_DESKTOP } from '@/src/lib/hosting';
 import { linksToCsv, siteProblem, skippedText } from '@/src/lib/jarvis';
 import { isValidSubId } from '@/src/lib/links';
 import { clampLimit, DEFAULT_HOURLY_LIMIT } from '@/src/lib/rateGuard';
@@ -124,7 +124,9 @@ export default function Settings() {
               {settings.demoMode ? <Badge label="예시 모드 켜짐" tone="demo" /> : null}
             </Row>
             <T v="sub">
-              {HOSTING === 'web'
+              {IS_DESKTOP
+                ? '키는 파트너스 사이트의 파트너스 API 메뉴에서 받아요. PC 설치판에서는 키가 이 앱 전용 브라우저 저장소에만 저장되고, 요청 서명은 앱 화면에서 해요. 이 PC 안의 중계 서버(127.0.0.1)는 서명된 요청을 쿠팡에 전달만 하고 아무것도 저장하지 않아요.'
+                : HOSTING === 'web'
                 ? '키는 파트너스 사이트의 파트너스 API 메뉴에서 받아요. 웹사이트에서는 키가 이 브라우저에 저장돼요 (공용 PC에서는 넣지 마세요). 요청 서명은 브라우저에서 하고, 이 웹사이트의 중계(/api/coupang)는 서명된 요청을 쿠팡에 전달만 해요. Secret Key는 브라우저 밖으로 나가지 않아요.'
                 : '키는 파트너스 사이트의 파트너스 API 메뉴에서 받아요 (사이트 개편에 따라 메뉴 이름은 다를 수 있어요). 키는 이 휴대폰의 보안 저장소에만 저장되고 다른 곳으로 보내지 않아요.'}
             </T>
