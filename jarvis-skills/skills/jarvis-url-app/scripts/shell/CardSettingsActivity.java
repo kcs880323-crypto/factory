@@ -34,6 +34,7 @@ import android.widget.Toast;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -45,6 +46,8 @@ public class CardSettingsActivity extends Activity {
     private static final String SAMPLE = "[Web발신]\n현대카드 M 승인\n김*수\n12,500원 일시불\n11/17 12:30\n메가커피 강남점";
     private static final String MACRODROID = "com.arlosoft.macrodroid";
     private String testText = SAMPLE;
+    private List<String[]> shade;      // '알림창 읽어 보기'로 읽은 알림 (null = 알림 듣기가 연결 안 됨)
+    private boolean shadeAsked;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -171,6 +174,20 @@ public class CardSettingsActivity extends Activity {
         out.setTextSize(15);
         out.setPadding(0, dp(4), 0, dp(8));
         box.addView(out); // 결과는 단추 아래에
+
+        // 4-2) 알림창에 지금 남아 있는 알림으로 시험 (실제로 받을 때와 같은 방법으로 읽는다)
+        head("알림창에 남은 알림으로 시험");
+        para("지금 알림창에 남아 있는 알림(금액이 있는 것)을 앱이 실제로 받을 때와 똑같이 읽어 봐요. 같은 결제의 알림"
+                + "(예: 카톡 카드영수증 + 삼성 월렛)은 한 건으로 묶어요. '등록'을 누르면 그 결제를 가계부에 실제로 보내요.");
+        row("", "알림창 읽어 보기", v -> engine.exec.execute(() -> {
+            List<String[]> got = CardListenerService.active(getApplicationContext());
+            runOnUiThread(() -> {
+                shade = got;
+                shadeAsked = true;
+                render();
+            });
+        }));
+        if (shadeAsked) renderShade();
 
         // 5) 최근 등록
         head("최근 등록");
@@ -399,6 +416,75 @@ public class CardSettingsActivity extends Activity {
         v.setTypeface(Typeface.DEFAULT_BOLD);
         v.setPadding(0, 0, 0, dp(8));
         box.addView(v);
+    }
+
+    /** '알림창 읽어 보기' 결과: 알림마다 어떻게 읽혔는지, 그리고 등록할 결제(같은 결제는 한 건). */
+    private void renderShade() {
+        int red = Color.rgb(225, 29, 72), blue = Color.rgb(79, 70, 229), gray = Color.rgb(100, 116, 139);
+        if (shade == null) {
+            para("알림 접근이 꺼져 있거나 아직 연결되지 않았어요. 위 '필요한 설정'에서 알림 접근을 켠 뒤 다시 눌러 주세요.")
+                    .setTextColor(red);
+            return;
+        }
+        if (shade.isEmpty()) {
+            note("알림창에 금액이 있는 알림이 없어요.");
+            return;
+        }
+        List<CardParser.Txn> pay = new ArrayList<>();
+        List<Integer> merged = new ArrayList<>();
+        for (String[] r : shade) {
+            CardParser.Txn t = CardParser.parse(r[2], r[3], Long.parseLong(r[4]), r[0], r[1]);
+            boolean ok = t != null && engine.trusted(r[0], r[2]);
+            String text = (r[2] + " / " + r[3]).replace('\n', ' ');
+            if (text.length() > 70) text = text.substring(0, 70) + "…";
+            TextView src = para("• " + (r[1] == null ? r[0] : r[1]) + " | " + text);
+            src.setTextSize(13);
+            TextView res = para(t == null ? "   → 결제로 읽히지 않음 (등록 안 함)"
+                    : !ok ? "   → 결제로 읽혔지만 믿지 않는 곳이라 쓰지 않음"
+                    + ("com.kakao.talk".equals(r[0]) ? " (카카오톡은 카드영수증·카드사 채널만)" : "")
+                    : "   → " + describe(t));
+            res.setTextSize(13);
+            res.setTextColor(t == null ? gray : ok ? blue : red);
+            if (!ok) continue;
+            int at = -1;
+            for (int i = 0; i < pay.size(); i++) if (CardParser.sameTxn(pay.get(i), t)) at = i;
+            if (at < 0) {
+                pay.add(t);
+                merged.add(1);
+            } else {
+                pay.set(at, CardParser.richer(pay.get(at), t));
+                merged.set(at, merged.get(at) + 1);
+            }
+        }
+        if (pay.isEmpty()) {
+            note("등록할 카드 결제가 없어요.");
+            return;
+        }
+        TextView h = para("등록할 결제 " + pay.size() + "건");
+        h.setTypeface(Typeface.DEFAULT_BOLD);
+        for (int i = 0; i < pay.size(); i++) {
+            final CardParser.Txn t = pay.get(i);
+            boolean done = engine.store.recentlyHandled(t);
+            row(describe(t) + (merged.get(i) > 1 ? "\n(알림 " + merged.get(i) + "개를 한 건으로)" : "")
+                    + (done ? "\n✔ 이미 처리한 결제" : ""), done ? null : "등록", v -> {
+                Toast.makeText(this, "보내는 중…", Toast.LENGTH_SHORT).show();
+                engine.exec.execute(() -> {
+                    String result = engine.registerNow(t);
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, result, Toast.LENGTH_LONG).show();
+                        render();
+                    });
+                });
+            });
+        }
+    }
+
+    private String describe(CardParser.Txn t) {
+        CardCategorizer.Pick p = engine.pick(t.merchant);
+        return (t.cancel ? "승인취소 " : "승인 ") + t.label() + " " + CardEngine.won(t.amount) + " · "
+                + (t.merchant.isEmpty() ? "가맹점 없음" : t.merchant) + " · "
+                + new SimpleDateFormat("M/d HH:mm", Locale.KOREA).format(new Date(t.when)) + (t.whenFromText ? "" : "(알림 시각)")
+                + " · " + p.large + (p.medium.isEmpty() ? "" : "›" + p.medium);
     }
 
     private void head(String t) {

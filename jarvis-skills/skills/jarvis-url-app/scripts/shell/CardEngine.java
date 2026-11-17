@@ -406,6 +406,30 @@ final class CardEngine {
                 + " (" + failed.optString("error") + ")";
     }
 
+    /**
+     * 설정 화면의 '알림창에 남은 알림으로 시험'에서 고른 결제를 기다리지 않고 바로 처리한다 (실제로 가계부에 보낸다).
+     * 결과를 한 줄로 돌려준다.
+     */
+    String registerNow(CardParser.Txn t) {
+        if (store.recentlyHandled(t)) return "이미 처리한 결제예요 (최근 등록에 있어요).";
+        if (t.cancel) {
+            processCancel(t);
+            return "승인취소를 처리했어요. 결과는 알림으로 알려 드려요.";
+        }
+        String owner = store.owner();
+        if (owner == null) return "먼저 위에서 이 폰의 담당자(사용자)를 골라 주세요.";
+        ensureLink(6 * 3600 * 1000L);
+        ensureLearned();
+        CardCategorizer.Pick pick = categorizer.pick(t.merchant);
+        JSONObject e = store.newEntry(t, pick, owner);
+        if (send(e)) {
+            return "가계부에 등록했어요: " + e.optString("merchant") + " " + won(e.optLong("amount")) + " · "
+                    + e.optString("large") + (e.optString("medium").isEmpty() ? "" : "›" + e.optString("medium"))
+                    + " (" + CardStore.memo(e) + ", " + owner + ")";
+        }
+        return "보내지 못했어요: " + failHint(e.optInt("code")) + " (" + e.optString("error") + "). 최근 등록에 '전송 대기'로 남겨 두었어요.";
+    }
+
     /** 실패 코드를 사람이 할 일로. */
     static String failHint(int code) {
         if (code == 0) return "인터넷이나 사이트에 연결하지 못했어요";

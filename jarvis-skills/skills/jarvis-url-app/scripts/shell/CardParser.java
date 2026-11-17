@@ -136,7 +136,9 @@ public final class CardParser {
     private static final Pattern WALLET_NOT = Pattern.compile("충전|송금|이체|환불|적립|입금|출금|교통");
     // 광고·안내(결제 예정, 할인, 이벤트 등)는 결제가 아니다
     private static final Pattern NOT_TXN = Pattern.compile(
-            "\\(광고\\)|\\[광고\\]|이벤트|캐시백|혜택|무이자|청구\\s*예정|결제\\s*예정|결제일|명세서|청구서|한도\\s*상향|대출|리볼빙");
+            "\\(광고\\)|\\[광고\\]|이벤트|캐시백|혜택|무이자|청구\\s*예정|결제\\s*예정|결제일|명세서|청구서|한도\\s*상향|대출|리볼빙"
+                    // 카드값 빠져나감·계좌 입출금은 결제가 아니다 (예: 디지로카 "결제대금 인출 안내 … 출금되었습니다")
+                    + "|결제\\s*대금|이용\\s*대금|카드\\s*대금|청구\\s*금액|인출|출금|입금|자동\\s*이체|계좌\\s*이체|납부|연체|선결제");
     private static final Pattern CANCEL = Pattern.compile("취소");
     // 가맹점이 아닌 조각들 (지운 뒤 남는 것이 가맹점 후보)
     private static final Pattern[] NOISE = {
