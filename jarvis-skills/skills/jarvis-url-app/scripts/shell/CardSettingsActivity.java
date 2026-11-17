@@ -222,6 +222,7 @@ public class CardSettingsActivity extends Activity {
 
         // 7) 사이트 연동
         head("사이트 연동");
+        renderAppKey();
         long checked = engine.store.linkChecked();
         para((engine.fromSite() ? "✔ 사이트의 연동 파일(/urlapp.json)을 따라요." : "△ 사이트에 연동 파일(/urlapp.json)이 없어 앱 기본 설정을 써요.")
                 + (checked > 0 ? " (확인 " + new SimpleDateFormat("M/d HH:mm", Locale.KOREA).format(new Date(checked)) + ")" : ""));
@@ -291,6 +292,31 @@ public class CardSettingsActivity extends Activity {
                 + "3) 추가 데이터(Extras) 4개: token = 위 키 / title = 알림 제목 / text = 알림 내용 / app = 알림 보낸 앱 이름. "
                 + "제목·내용·앱 이름은 값 칸 옆 '…'(매직 텍스트) 단추에서 골라요.\n"
                 + "4) 저장하고 켜기. 카드로 결제하면 위 '마지막으로 받은 카드 알림'에 시각이 떠요.");
+    }
+
+    /** 가계부 앱 연동 키: 사이트에 보안을 켜면 화면 밖(카드 자동 등록) 요청에 필요. */
+    private void renderAppKey() {
+        String key = engine.store.appKey();
+        boolean needed = engine.authRequired() || engine.store.authErrors() > 0;
+        TextView t = para((key.isEmpty() ? (needed ? "✖ " : "△ ") : "✔ ") + "가계부 앱 연동 키: "
+                + (key.isEmpty() ? (needed ? "필요해요 — 사이트 설정에서 만든 키를 넣어 주세요" : "없음 (사이트에 보안을 켜기 전에는 필요 없어요)")
+                : "넣음 (" + key.substring(0, Math.min(4, key.length())) + "…)"));
+        if (key.isEmpty() && needed) t.setTextColor(Color.rgb(225, 29, 72));
+        EditText k = new EditText(this);
+        k.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        k.setHint("앱 연동 키 붙여 넣기");
+        box.addView(k);
+        row("", "저장", v -> {
+            String value = k.getText().toString().trim();
+            engine.exec.execute(() -> {
+                engine.setAppKey(value);
+                engine.flush(); // 모아 둔 결제를 새 키로 바로 보낸다
+                runOnUiThread(() -> {
+                    Toast.makeText(this, value.isEmpty() ? "키를 지웠어요" : "키를 저장했어요", Toast.LENGTH_SHORT).show();
+                    render();
+                });
+            });
+        });
     }
 
     private void copy(String label, String value) {

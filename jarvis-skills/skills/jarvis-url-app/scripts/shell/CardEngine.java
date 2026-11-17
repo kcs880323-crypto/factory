@@ -109,7 +109,7 @@ final class CardEngine {
     /** 설정을 적용한다 (앱 기본값 + 사이트 연동 파일). */
     private synchronized void apply(JSONObject c) {
         cfg = c;
-        client = new LedgerClient(base, c);
+        client = newClient(c);
         owners.clear();
         JSONArray o = c.optJSONArray("owners");
         for (int i = 0; o != null && i < o.length(); i++) owners.add(o.optString(i));
@@ -128,6 +128,23 @@ final class CardEngine {
         rebuildCategorizer();
     }
 
+    /** 앱 연동 키를 붙인 클라이언트. 키 이름은 사이트 연동 파일의 auth.header (없으면 X-App-Key). 키가 없으면 붙이지 않는다. */
+    private LedgerClient newClient(JSONObject c) {
+        JSONObject a = c.optJSONObject("auth");
+        String header = a == null ? "X-App-Key" : a.optString("header", "X-App-Key");
+        return new LedgerClient(base, c).withAuth(header, store.appKey());
+    }
+
+    /** 설정 화면에서 키를 바꾸면 바로 적용. */
+    void setAppKey(String key) {
+        store.setAppKey(key);
+        apply(cfg);
+    }
+
+    boolean authRequired() {
+        return cfg.optJSONObject("auth") != null;
+    }
+
     /** 카드 알림을 어디서 받는지: "intent" = MacroDroid 가 보내 줌, "listener" = 이 앱이 직접 읽음. */
     String via() {
         return builtin.optString("via", "listener");
@@ -144,7 +161,7 @@ final class CardEngine {
     /** 사이트의 /urlapp.json 을 다시 읽는다. 있으면 그 설정을, 없으면 앱 기본값을 쓴다. 연결 실패면 그대로. */
     boolean refreshLink() {
         try {
-            String text = new LedgerClient(base, builtin).fetchText("/urlapp.json");
+            String text = newClient(builtin).fetchText("/urlapp.json");
             if (text != null && text.contains("\"cards\"")) {
                 store.saveLink(text, true);
                 apply(LinkConfig.merge(builtin, text));
@@ -302,6 +319,20 @@ final class CardEngine {
             ok = false;
         }
         int code = c.lastCode();
+        if (!ok && (code == 401 || code == 403)) { // 사이트에 보안을 켰는데 앱 연동 키가 없거나 틀림
+            put(e, "status", CardStore.PENDING);
+            put(e, "tries", e.optInt("tries") + 1);
+            store.save(e);
+            int n = store.authErrors() + 1;
+            store.setAuthErrors(n);
+            if (System.currentTimeMillis() - store.linkAlertAt() > 6 * 3600 * 1000L) {
+                store.setLinkAlertAt(System.currentTimeMillis());
+                notify("auth-needed", "가계부 앱 연동 키를 확인해 주세요",
+                        "가계부가 등록을 거절했어요 (HTTP " + code + "). 사이트에 보안을 켰다면, 사이트 설정에서 만든 "
+                                + "'앱 연동 키'를 카드 자동 등록 설정에 넣어 주세요. 결제는 모아 두었다가 보내요.", null);
+            }
+            return; // 키를 넣으면(설정 화면) 바로 다시 보낸다
+        }
         boolean refused = !ok && code != 0 && code < 500; // 사이트가 거절 (주소·모양이 바뀜) ↔ 0·5xx = 인터넷·서버 문제
         if (refused && System.currentTimeMillis() - store.linkChecked() > 10 * 60 * 1000L) {
             refreshLink(); // 사이트가 연동 파일을 고쳤을 수 있다 → 새 설정으로 한 번 더
@@ -316,6 +347,7 @@ final class CardEngine {
         }
         if (ok) {
             if (store.linkErrors() > 0) store.setLinkErrors(0, "");
+            if (store.authErrors() > 0) store.setAuthErrors(0);
             put(e, "status", CardStore.REGISTERED);
             store.save(e);
             notify(e.optString("id"), "가계부에 등록했어요",

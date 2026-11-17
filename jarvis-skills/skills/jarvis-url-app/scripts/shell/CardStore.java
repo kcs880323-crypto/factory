@@ -271,6 +271,24 @@ final class CardStore {
         return p.getLong(which, 0);
     }
 
+    // ---------- 가계부 앱 연동 키 (사이트에 보안을 켠 뒤, 화면 밖 요청에 붙이는 키) ----------
+
+    String appKey() {
+        return p.getString("app_key", "");
+    }
+
+    void setAppKey(String key) {
+        p.edit().putString("app_key", key == null ? "" : key.trim()).putInt("auth_errors", 0).apply();
+    }
+
+    int authErrors() {
+        return p.getInt("auth_errors", 0);
+    }
+
+    void setAuthErrors(int n) {
+        p.edit().putInt("auth_errors", n).apply();
+    }
+
     // ---------- 사이트 연동 파일 (/urlapp.json) ----------
 
     synchronized void saveLink(String json, boolean found) {

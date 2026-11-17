@@ -28,6 +28,17 @@ public final class LedgerClient {
     private final String base;   // https://사이트 (끝에 / 없음)
     private final JSONObject cfg;
     private volatile int lastCode; // 마지막 응답 코드 (0 = 연결 못 함). 연동이 끊겼는지 가리는 데 쓴다
+    private String authHeader;     // 사이트에 보안을 켰을 때: 예) X-App-Key
+    private String authValue;
+
+    /** 모든 요청에 붙일 앱 연동 키 (값이 비면 붙이지 않는다). 이름은 영문·숫자·- 만. */
+    public LedgerClient withAuth(String header, String value) {
+        if (header != null && header.matches("[A-Za-z0-9-]{1,40}") && value != null && !value.trim().isEmpty()) {
+            authHeader = header;
+            authValue = value.trim();
+        }
+        return this;
+    }
 
     public LedgerClient(String baseUrl, JSONObject cfg) {
         String b = baseUrl;
@@ -213,6 +224,7 @@ public final class LedgerClient {
             c.setReadTimeout(20000);
             c.setRequestMethod(method);
             c.setRequestProperty("Accept", "application/json");
+            if (authHeader != null) c.setRequestProperty(authHeader, authValue);
             if (body != null) {
                 byte[] b = body.getBytes(StandardCharsets.UTF_8);
                 c.setDoOutput(true);

@@ -142,6 +142,9 @@ public class CardTests {
                 "{\"cards\":{\"add\":{\"path\":\"//evil.example/x\",\"body\":{}}}}") == cfg, null);
         check("http 주소도 거부", LinkConfig.merge(cfg,
                 "{\"cards\":{\"add\":{\"path\":\"/x?u=https://evil.example\",\"body\":{}}}}") == cfg, null);
+        JSONObject m2 = LinkConfig.merge(cfg, "{\"cards\":{\"auth\":{\"header\":\"X-App-Key\"}}}");
+        check("사이트 파일의 auth(앱 연동 키 이름)를 읽음", m2.getJSONObject("auth").getString("header").equals("X-App-Key"), m2);
+        check("이상한 키 이름은 거부", LinkConfig.merge(cfg, "{\"cards\":{\"auth\":{\"header\":\"X: y\"}}}") == cfg, null);
         check("모양이 이상하면 기본값", LinkConfig.merge(cfg, "<!doctype html><html>") == cfg
                 && LinkConfig.merge(cfg, "{\"cards\":{\"default_category\":[\"기타\"]}}") == cfg
                 && LinkConfig.merge(cfg, null) == cfg, null);
@@ -150,6 +153,7 @@ public class CardTests {
         final List<String[]> seen = new ArrayList<>();
         HttpServer srv = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         final boolean[] failAdd = {false};
+        final boolean[] requireKey = {false};
         srv.createContext("/", ex -> {
             String body;
             try (InputStream in = ex.getRequestBody()) {
@@ -161,6 +165,14 @@ public class CardTests {
             }
             String path = ex.getRequestURI().toString();
             seen.add(new String[] {ex.getRequestMethod(), path, body});
+            if (requireKey[0] && !"k1-secret".equals(ex.getRequestHeaders().getFirst("X-App-Key"))) {
+                byte[] no = "{\"success\":false,\"error\":\"unauthorized\"}".getBytes(StandardCharsets.UTF_8);
+                ex.sendResponseHeaders(401, no.length);
+                try (OutputStream os = ex.getResponseBody()) {
+                    os.write(no);
+                }
+                return;
+            }
             String resp;
             int code = 200;
             if (path.startsWith("/api/monthly-details/add-single")) {
@@ -217,6 +229,12 @@ public class CardTests {
                     && new JSONObject(d[2]).get("id") instanceof Integer
                     && new JSONObject(d[2]).getString("source_table").equals("variable_expenses"), Arrays.toString(d));
             check("다른 금액은 지우지 않음", !client.deleteMatching("2026-11-17", "메가커피 강남점", 12000, "창수", "현대카드"), null);
+            requireKey[0] = true; // 사이트에 보안(앱 연동 키)을 켠 뒤
+            check("보안 켠 뒤: 키 없으면 401 (앱은 '키를 확인해 주세요')", !client.add(v) && client.lastCode() == 401, client.lastCode());
+            LedgerClient keyed = new LedgerClient(base, cfg).withAuth("X-App-Key", "k1-secret");
+            check("보안 켠 뒤: 맞는 키를 붙이면 등록·기록 읽기 됨", keyed.add(v) && keyed.history("2026-11").size() == 2, keyed.lastCode());
+            check("키 이름이 이상하면 붙이지 않음", !new LedgerClient(base, cfg).withAuth("X-App-Key\r\nEvil", "k1-secret").add(v), null);
+            requireKey[0] = false;
         } finally {
             srv.stop(0);
         }
