@@ -139,7 +139,9 @@
   https://*.googleusercontent.com 으로 바꿔 줘. 다른 보안 설정은 그대로" 라고 요청한다 (2026-11-17 실제로 겪음).
 - **고친 뒤 꼭 오른쪽 위 Publish(게시)** 를 눌러야 실제 주소(csjhth.ai.studio)에 반영된다. AI Studio 의 '검증 결과'는 미리보기 서버 기준이다.
 - **보안 강화 뒤 AI Studio 가 "Enter your environment variable to continue" 로 NAS_URL·APP_PASSWORD 를 물으면**: 서버가 쓰는 비밀 값이다.
-  NAS_URL 은 원래 쓰던 집 NAS 주소(View changes 의 지워진 줄, 또는 톱니바퀴 → Secrets), APP_PASSWORD 는 사용자가 새로 정하는 가족 로그인 비밀번호.
+  NAS_URL 은 집 NAS 주소(View changes 의 지워진 줄, 또는 톱니바퀴 → Secrets). **이 가계부는 NAS 를 쓰지 않는다**(사용자 확인, /api/health 의 isNas:false 가 정상).
+  그러면 AI Studio 에 "NAS 는 안 쓴다. NAS_URL 을 필수 값에서 빼고, 없으면 NAS 동기화를 끈 채로 동작하게 해 줘. 다른 보안 설정은 그대로" 라고 요청한다.
+  APP_PASSWORD 는 사용자가 새로 정하는 가족 로그인 비밀번호.
   값은 그 칸에만 넣고 대화창·저장소에 쓰지 않는다. 이 값이 없으면 서버가 켜지지 않아 미리보기가 깨진 그림으로 보인다.
 - **점검(읽기만)**: 로그인 없이 /api/monthly-details·/api/summary·/api/backup/export → 401, /api/session → JSON,
   /urlapp.json 에 "auth": {"header": "X-App-Key"}, 공개 스크립트에 AIza 키 없음, 다른 출처 Origin → 403. (2026-11-17 모두 확인)
