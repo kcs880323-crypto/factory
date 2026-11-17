@@ -6,7 +6,9 @@ import { View } from 'react-native';
 import type { Product } from '@/src/api/types';
 import { aiMemo, coupangSearchUrl, handoffPrompt, parseHandoff, pickCheapest, type CheapestPick } from '@/src/lib/aiSearch';
 import { won } from '@/src/lib/format';
-import { API_AVAILABLE } from '@/src/lib/hosting';
+import { API_AVAILABLE, IS_DESKTOP } from '@/src/lib/hosting';
+import { claudeAgent, type ClaudeJob } from '@/src/api/claudeAgent';
+import { ClaudeJobView, useClaudeJob } from '@/src/ui/ClaudeRun';
 import { productPageUrl } from '@/src/lib/links';
 import { kstToday } from '@/src/lib/productRules';
 import { errorText, useApp, type SavedLink } from '@/src/store/AppContext';
@@ -95,11 +97,12 @@ export default function AiSearch() {
     }
   };
 
-  const saveHandoff = async () => {
+  /** Claude 결과 글 → 검사(파트너스 링크인지) → 보관함. 저장했으면 true */
+  const saveFromText = async (text: string, qq: string): Promise<boolean> => {
     setErr(null);
-    const r = parseHandoff(answer);
+    const r = parseHandoff(text);
     setProblems(r.problems);
-    if (!r.item) return;
+    if (!r.item) return false;
     const it = r.item;
     const l = await addLink({
       title: it.name,
@@ -109,13 +112,31 @@ export default function AiSearch() {
       price: it.price,
       isRocket: it.rocket,
       subId: settings.subId || undefined,
-      memo: aiMemo(query || it.name, today, 'claude', it.note, memo),
+      memo: aiMemo(qq || it.name, today, 'claude', it.note, memo),
       source: 'ai',
     });
     setSavedId(l.id);
-    setAnswer('');
     showToast('Claude가 찾은 상품을 보관함에 저장했어요');
+    return true;
   };
+
+  const saveHandoff = async () => {
+    if (await saveFromText(answer, query)) setAnswer('');
+  };
+
+  // PC판: 이 PC의 Claude가 작업 브라우저로 직접 찾는다
+  const onClaudeDone = (j: ClaudeJob) => {
+    if (j.state === 'done' && /"link"/.test(j.result)) saveFromText(j.result, j.q);
+  };
+  const cj = useClaudeJob(onClaudeDone);
+  const runClaude = () => {
+    if (!ready || cj.running) return;
+    setSavedId(null);
+    setProblems([]);
+    setPick(null);
+    cj.start(query, cond);
+  };
+  const openPartners = () => claudeAgent.openBrowser('partners').catch((e) => setErr(errorText(e)));
 
   const apiReady = !!client && (mode === 'api' || mode === 'demo');
 
@@ -127,7 +148,14 @@ export default function AiSearch() {
       </View>
 
       <Card>
-        <Field label="찾을 제품" value={q} onChangeText={setQ} placeholder="예: 캡형 물티슈 100매" returnKeyType="search" />
+        <Field
+          label="찾을 제품"
+          value={q}
+          onChangeText={setQ}
+          placeholder="예: 캡형 물티슈 100매"
+          returnKeyType="search"
+          onSubmitEditing={() => (apiReady ? runApi() : IS_DESKTOP ? runClaude() : undefined)}
+        />
         <Field label="조건 (선택)" value={cond} onChangeText={setCond} placeholder="예: 로켓배송, 10팩 이상" />
         <Field label="보관함 메모에 덧붙일 말 (선택)" value={memo} onChangeText={setMemo} placeholder="예: 겨울 육아템 글에 쓸 것" />
         <T v="caption">&lsquo;가장 싼 것&rsquo;은 검색한 그 순간 쿠팡 화면 기준이에요. 가격은 자주 바뀌고, 글·영상에 &lsquo;최저가&rsquo;라고 쓰지는 않아요.</T>
@@ -151,7 +179,35 @@ export default function AiSearch() {
         )}
       </Section>
 
-      <Section title="🤖 Claude에게 맡기기 (내 컴퓨터 브라우저)">
+      {IS_DESKTOP ? (
+        <Section title="🤖 Claude로 찾기 (이 PC)">
+          <Card>
+            <T v="sub">검색 버튼을 누르면 이 PC의 Claude가 작업 브라우저 창에서 쿠팡을 낮은가격순으로 검색하고, 같은 상품 중 가장 싼 것을 골라 파트너스 링크까지 만들어 보관함에 저장해요. 보통 2~5분 걸려요.</T>
+            <Row gap={8}>
+              <Button style={{ flex: 1 }} icon="sparkle" label={cj.running ? 'Claude가 찾는 중…' : 'Claude로 검색해서 저장'} onPress={runClaude} loading={cj.starting} disabled={!ready || cj.running} />
+              {cj.running && cj.job ? <Button kind="ghost" icon="stop" label="멈추기" onPress={cj.stop} /> : null}
+            </Row>
+            <T v="caption">처음 한 번은 설정 → Claude 연결에서 &lsquo;파트너스 로그인 창 열기&rsquo;로 작업 브라우저에 쿠팡 파트너스 로그인을 해 두세요. Claude는 장바구니·구매·결제를 누르지 않고 비밀번호를 넣지 않아요. 내 Claude 사용량을 써요.</T>
+          </Card>
+          {cj.error ? (
+            <Banner
+              tone="danger"
+              icon="warn"
+              title="시작하지 못했어요"
+              action={cj.error.code === 'NOT_INSTALLED' ? <Button small kind="ghost" label="설정 열기" onPress={() => router.push('/settings')} /> : undefined}>
+              {cj.error.text}
+            </Banner>
+          ) : null}
+          {cj.job ? <ClaudeJobView job={cj.job} onOpenPartners={openPartners} /> : null}
+          {cj.job && cj.job.state === 'done' && problems.length ? (
+            <Banner tone="danger" icon="warn" title="보관함에 저장하지 않았어요">
+              {problems.join('\n')}
+            </Banner>
+          ) : null}
+        </Section>
+      ) : null}
+
+      <Section title={IS_DESKTOP ? '다른 Claude 앱으로 하기 (복사·붙여 넣기)' : '🤖 Claude에게 맡기기 (내 컴퓨터 브라우저)'}>
         <Card>
           <T v="sub">Claude가 내 브라우저를 직접 다뤄서 쿠팡을 낮은가격순으로 검색하고, 파트너스 링크를 만들고, 결과를 한 줄로 알려 줘요. 그 줄을 아래에 붙여 넣으면 보관함에 저장돼요.</T>
           <T v="caption">1. 부탁을 복사해 브라우저를 다룰 수 있는 Claude에 붙여 넣어요 — Claude 데스크톱 앱의 새 대화(내장 브라우저) 또는 크롬의 Claude in Chrome. 쿠팡 파트너스 로그인은 그 브라우저에서 미리 직접 해 두세요.</T>

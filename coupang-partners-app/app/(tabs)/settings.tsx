@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 
+import { ClaudeSection } from '@/src/ui/claudeSettings';
 import { NaverKeysSection, PostVideoSection } from '@/src/ui/naverSettings';
 import { Pressable, Switch, View } from 'react-native';
 
@@ -163,6 +164,8 @@ export default function Settings() {
           </Card>
         </Section>
       )}
+
+      <ClaudeSection />
 
       <NaverKeysSection />
 

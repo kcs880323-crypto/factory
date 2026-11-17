@@ -48,7 +48,16 @@
 
 - 서버는 다른 사이트에서 오는 요청(다른 Host·Origin)을 거절하고, 키·요청 내용을 기록하지 않습니다.
 - 업데이트는 새 zip을 풀고 `install.bat` 다시 실행(키·보관함 유지), 지우기는 설치 폴더의 `uninstall.bat`(키·보관함은 물어본 뒤에만 지움).
-- 파일: `desktop/server.cjs`(서버), `desktop/start.bat`(실행기), `desktop/install.ps1`·`uninstall.ps1`, `scripts/build-desktop.mjs`(묶기).
+- 파일: `desktop/server.cjs`(서버), `desktop/claudeAgent.cjs`(Claude로 찾기), `desktop/start.bat`(실행기), `desktop/install.ps1`·`uninstall.ps1`, `scripts/build-desktop.mjs`(묶기).
+
+### PC판: Claude로 상품 찾기 (버튼 하나)
+
+AI 상품 찾기의 **Claude로 검색해서 저장**(또는 찾을 제품 칸에서 Enter)을 누르면, 서버가 이 PC의 Claude Code(`claude -p`, 구독 로그인)를 부르고 Claude가 **작업 브라우저**(전용 Edge 창, `127.0.0.1:9335`)를 Playwright MCP(`@playwright/mcp@0.0.83`)로 다뤄 쿠팡 낮은가격순 검색 → 같은 상품 중 가장 싼 것 → 상품 페이지 확인 → 쿠팡 파트너스 간편 링크 만들기를 합니다. 결과 줄은 앱이 검사(파트너스 링크인지)한 뒤에만 보관함에 저장합니다.
+
+- 설정 → **Claude 연결**: 로그인 상태(이메일 일부·요금제), Claude 로그인 버튼(명령 창이 열리고 브라우저에서 직접 허용), **파트너스 로그인 창 열기**(작업 브라우저에 한 번 직접 로그인).
+- Claude가 쓸 수 있는 도구는 브라우저 조작·읽기뿐입니다(`--permission-mode dontAsk` + 허용 목록; 명령 실행·파일 쓰기·웹 검색·자바스크립트 실행·파일 올리기 금지). 구매·결제·비밀번호 입력 금지는 부탁 글에 적혀 있고, 로그인 화면이 나오면 멈춥니다. API 키 환경변수는 넘기지 않습니다.
+- 한 번에 하나, 8분 제한, 멈추기 버튼. 끝나면 Claude 사용량(달러 환산)을 보여 줍니다 — 실측 1회 약 30초·$0.22 (파트너스 로그인 전에서 멈춘 경우).
+- 작업 브라우저는 이 PC의 다른 프로그램도 디버깅 포트로 다룰 수 있으니, 그 창에서는 쿠팡 파트너스 말고 다른 사이트에 로그인하지 마세요.
 
 ## 웹사이트로 쓰기
 

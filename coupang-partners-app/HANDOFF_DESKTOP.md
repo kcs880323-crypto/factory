@@ -1,5 +1,10 @@
 # 데스크톱 세션으로 이어 가기 — 다음 할 일
 
+> **2026-11-18 구현함** (`desktop/claudeAgent.cjs`, `/api/claude/*`, `src/ui/ClaudeRun.tsx`, `src/ui/claudeSettings.tsx`, 시험 `tests/claudeAgent.test.ts`).
+> 찰스님 PC에서 확인: 설치(`install.ps1`)·바로가기·서버, Claude 로그인 상태(Pro), 실제 검색 1회 — 쿠팡 낮은가격순 검색 → 같은 상품 중 최저가(950원) 상품 페이지 확인 → 파트너스 로그인 화면에서 입력 없이 멈춤(`partners_login`), 30초·약 $0.22.
+> 남은 확인: 작업 브라우저에 파트너스 로그인 뒤 실제 `link.coupang.com/a/…` 생성과 보관함 자동 저장.
+> 아래는 처음 설계 메모(대부분 그대로 구현, 바뀐 점: 허용 도구에 ToolSearch·Read·Grep 추가 — 큰 화면 스냅샷이 파일로 저장돼 그것을 읽어야 함).
+
 브랜치 `ccr-73dc9db4-uk1phh`, PR #5 (초안, 아직 안 합침). 파트너스 매니저의 PC 설치판(`desktop/`)은 찰스님 PC에서 돌아가는 것이 화면으로 확인됐다 (AI 상품 찾기 화면, 2026-11-17).
 
 ## 찰스님 요청 (아직 안 함)

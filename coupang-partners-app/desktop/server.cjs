@@ -29,8 +29,11 @@ if (major < 18 || typeof fetch !== 'function') {
   process.exit(1);
 }
 
-const coupang = require('./api/coupang.js');
-const naver = require('./api/naver.js');
+// 설치 묶음에는 ./api, 저장소(개발·시험)에서는 ../api 에 있다
+const API_DIR = fs.existsSync(path.join(ROOT, 'api', 'coupang.js')) ? path.join(ROOT, 'api') : path.join(ROOT, '..', 'api');
+const coupang = require(path.join(API_DIR, 'coupang.js'));
+const naver = require(path.join(API_DIR, 'naver.js'));
+const agent = require('./claudeAgent.cjs');
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -115,10 +118,63 @@ const server = http.createServer((req, res) => {
     touch();
     return void Promise.resolve(naver(req, res)).catch(() => send(res, 500, '{"code":"SERVER"}', 'application/json'));
   }
+  if (u.pathname.startsWith('/api/claude/')) {
+    touch();
+    return void handleClaude(req, res, u).catch((e) => sendJson(res, 500, { code: 'SERVER', message: (e && e.message) || '서버 오류' }));
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed');
   touch();
   serveFile(req, res, u.pathname);
 });
+
+function sendJson(res, status, obj) {
+  send(res, status, JSON.stringify(obj), 'application/json; charset=utf-8');
+}
+
+async function readJson(req) {
+  let text = '';
+  for await (const chunk of req) {
+    text += chunk;
+    if (text.length > 4096) throw new Error('body too large');
+  }
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Claude로 상품 찾기 (이 PC의 Claude Code). 앱 화면만 부르도록 사용자 정의 헤더(X-PM: 1)를 요구한다 —
+ * 다른 웹사이트는 이 헤더를 붙이면 사전 요청(preflight)이 필요해지는데, 여기서는 그 요청을 허락하지 않는다.
+ */
+async function handleClaude(req, res, u) {
+  if (req.headers['x-pm'] !== '1') return sendJson(res, 403, { code: 'FORBIDDEN', message: '앱 화면에서만 부를 수 있어요.' });
+  const route = u.pathname.slice('/api/claude/'.length);
+  const post = req.method === 'POST';
+  try {
+    if (route === 'status' && !post) return sendJson(res, 200, await agent.status());
+    if (route === 'login' && post) {
+      agent.login();
+      return sendJson(res, 200, { ok: true });
+    }
+    if (route === 'browser' && post) {
+      const b = await readJson(req);
+      const url = b.target === 'partners' ? 'https://partners.coupang.com/' : undefined;
+      return sendJson(res, 200, await agent.openBrowser(url));
+    }
+    if (route === 'search' && post) {
+      const b = await readJson(req);
+      return sendJson(res, 200, await agent.start(b.q, b.cond));
+    }
+    if (route === 'job' && !post) return sendJson(res, 200, agent.get(u.searchParams.get('id') || '') || { state: 'none' });
+    if (route === 'stop' && post) return sendJson(res, 200, { stopped: agent.stop() });
+  } catch (e) {
+    const code = (e && e.code) || 'ERROR';
+    return sendJson(res, code === 'BUSY' ? 409 : code === 'BAD' ? 400 : 500, { code, message: (e && e.message) || '오류' });
+  }
+  return sendJson(res, 404, { code: 'NOT_FOUND' });
+}
 
 server.on('error', async (e) => {
   if (e && e.code === 'EADDRINUSE') {
@@ -144,7 +200,10 @@ server.listen(PORT, HOST, () => {
   console.log('이 창을 닫으면 서버가 꺼져요. 앱 창을 닫고 10분이 지나면 스스로 꺼져요.');
 });
 
+process.on('exit', () => agent.shutdown());
+
 setInterval(() => {
+  if (agent.running()) touch(); // Claude가 일하는 동안은 끄지 않는다
   if (Date.now() - lastSeen > IDLE_MS) {
     console.log('앱 창이 닫혀 있어 서버를 끕니다.');
     process.exit(0);

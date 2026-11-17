@@ -48,7 +48,10 @@ try {
 writeFileSync(join(pkg, 'VERSION.txt'), `${kst}${commit ? ` (${commit})` : ''}\r\n`);
 
 const zipName = `partners-manager-pc-${kst}.zip`;
-const z = spawnSync('zip', ['-r', '-X', '-q', zipName, 'PartnersManager'], { cwd: outRoot, stdio: 'inherit' });
+const z =
+  process.platform === 'win32'
+    ? spawnSync('powershell.exe', ['-NoProfile', '-Command', `Compress-Archive -Path 'PartnersManager' -DestinationPath '${zipName}' -Force`], { cwd: outRoot, stdio: 'inherit' })
+    : spawnSync('zip', ['-r', '-X', '-q', zipName, 'PartnersManager'], { cwd: outRoot, stdio: 'inherit' });
 if (z.status !== 0) {
   console.error('zip 명령이 없어 압축은 건너뛰었어요. dist-desktop/PartnersManager 폴더를 그대로 쓰면 돼요.');
 } else {
