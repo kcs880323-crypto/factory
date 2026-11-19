@@ -648,7 +648,8 @@ def android_string(s):
 
 # ---------------------------------------------------------------- 프로젝트 파일
 
-def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False):
+def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
+                 view_hosts=()):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -667,6 +668,15 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/{info}" />
         </receiver>"""
+    # 자기 사이트 주소로 앱을 여는 길 (크롬에서 Google 로그인을 마친 사이트가 "앱으로 돌아가기"로 부를 때).
+    # autoVerify 를 쓰지 않으므로 다른 앱·브라우저의 일반 링크를 가로채지 않고, 패키지를 지정한 intent:// 링크로만 열린다.
+    view_filter = "".join(f"""
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="{h}" />
+            </intent-filter>""" for h in view_hosts if re.fullmatch(r"[a-z0-9.-]+", h or ""))
     receiver = ""
     if widget:
         receiver = widget_receiver("WidgetProvider", "@string/widget_name" if widget_label else "@string/app_name")
@@ -726,7 +736,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            </intent-filter>{view_filter}
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />{prop}
         </activity>{receiver}{card_parts}
     </application>
@@ -1279,7 +1289,8 @@ def cmd_build(args):
         (workdir / "AndroidManifest.xml").write_text(manifest_xml(app_id, cleartext, opt["orientation"], bool(widget_js),
                                                                   cards_via if cards_cfg else None,
                                                                   widget_label=bool(widget_js and widget_label),
-                                                                  widget_alt=bool(widget_js and widget_alt_label)),
+                                                                  widget_alt=bool(widget_js and widget_alt_label),
+                                                                  view_hosts=cfg["hosts"]),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1552,6 +1563,10 @@ def cmd_selftest(args):
                                             "AndroidManifest.xml"} <= names and any("ic_launcher_fg" in n for n in names))
             check("빌드 1: 설정의 주소·호스트", cfg["url"] == base + "/app/" and cfg["hosts"] == ["127.0.0.1"], str(cfg))
             check("빌드 1: 정렬", not check_alignment(apk))
+            mf1 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", str(apk)], tmp_home, "xmltree")
+            check("빌드 1: 자기 사이트 주소로 앱을 여는 길 (BROWSABLE, 자동 확인 없음 → 다른 링크를 가로채지 않음)",
+                  "android.intent.action.VIEW" in mf1 and "android.intent.category.BROWSABLE" in mf1
+                  and '"127.0.0.1"' in mf1 and "autoVerify" not in mf1, mf1[-500:])
             check("빌드 1: 서명 v2 이상 검증", "Verified using v2 scheme (APK Signature Scheme v2): true" in run(
                 [java, "-jar", tp["apksigner"], "verify", "-v", apk], tmp_home, "verify"))
 

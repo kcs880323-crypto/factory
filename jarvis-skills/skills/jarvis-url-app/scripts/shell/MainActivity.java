@@ -154,7 +154,8 @@ public class MainActivity extends Activity {
         setupWebView();
 
         if (state == null) {
-            if (!handleShortcut(getIntent()) || ACTION_CARDS.equals(getIntent().getAction())) web.loadUrl(startUrl);
+            Intent in = getIntent();
+            if (!handleViewLink(in) && (!handleShortcut(in) || ACTION_CARDS.equals(in.getAction()))) web.loadUrl(startUrl);
             maybeOfferCards();
         } else if (web.restoreState(state) == null) { // 화면 회전·다크 모드 전환 뒤에는 보던 페이지를 되살린다
             web.loadUrl(startUrl);
@@ -431,6 +432,12 @@ public class MainActivity extends Activity {
         switch (scheme) {
             case "http":
             case "https":
+                // Google 로그인 화면은 앱 안 웹 화면(WebView)에서 열면 Google 이 막는다 (403 disallowed_useragent).
+                // 크롬(Custom Tab)에서 열고, 사이트가 로그인 결과를 앱으로 돌려보내면(아래 handleViewLink) 이어 간다.
+                if (isGoogleSignIn(uri)) {
+                    openSignInTab(uri);
+                    return true;
+                }
                 // 사용자가 직접 누른 다른 사이트 링크만 브라우저로 보낸다. 로그인처럼 페이지가 스스로
                 // 넘어가는 이동(리디렉션, 스크립트 이동)은 앱 안에 둔다.
                 if (!linksToBrowser || !userTapped || isOwnHost(uri.getHost())) return false;
@@ -468,6 +475,58 @@ public class MainActivity extends Activity {
                 }
                 return true;
         }
+    }
+
+    /** Google 계정 로그인·동의 화면 (WebView 에서는 Google 이 막는 곳). */
+    static boolean isGoogleSignIn(Uri uri) {
+        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+        if (!"accounts.google.com".equals(host)) return false;
+        String path = uri.getPath() == null ? "" : uri.getPath();
+        return !path.startsWith("/gsi/client") && !path.startsWith("/gsi/style"); // 스크립트·스타일은 그대로
+    }
+
+    /** 크롬 Custom Tab(없으면 기본 브라우저)으로 연다. 앱 안 화면은 그대로 남아 로그인 뒤 돌아올 자리가 된다. */
+    private void openSignInTab(Uri uri) {
+        Intent i = new Intent(Intent.ACTION_VIEW, uri);
+        Bundle extras = new Bundle();
+        extras.putBinder("android.support.customtabs.extra.SESSION", null); // Custom Tab 으로 열어 달라는 표시
+        i.putExtras(extras);
+        i.putExtra("android.support.customtabs.extra.TOOLBAR_COLOR", themeColor);
+        toast(t("Google 로그인은 크롬에서 열어요. 끝나면 앱으로 돌아와요.", "Google sign-in opens in Chrome, then returns here."));
+        openExternal(i);
+    }
+
+    /**
+     * 이 앱의 사이트 주소로 앱이 열렸을 때 (예: 크롬에서 Google 로그인을 마친 사이트가 "앱으로 돌아가기"로 부름).
+     * ?urlapp_return=<원래 주소> 가 있으면 그 주소(해시의 로그인 결과 포함)를 연다. 자기 사이트(https) 주소만.
+     */
+    private boolean handleViewLink(Intent i) {
+        if (i == null || !Intent.ACTION_VIEW.equals(i.getAction()) || i.getData() == null) return false;
+        Uri u = i.getData();
+        if (!"https".equalsIgnoreCase(u.getScheme()) || !isOwnHost(u.getHost())) return false;
+        String back = null;
+        try {
+            back = u.getQueryParameter("urlapp_return");
+        } catch (RuntimeException e) {
+            back = null;
+        }
+        String target = back != null ? back : u.toString();
+        Uri b = Uri.parse(target);
+        if (!"https".equalsIgnoreCase(b.getScheme()) || !isOwnHost(b.getHost())) return false;
+        String cur = web.getUrl();
+        if (cur != null && noFragment(cur).equals(noFragment(target)) && !cur.equals(target)) {
+            // 같은 페이지에서 #… 만 다르면 웹 화면은 다시 읽지 않는다 → 주소를 바꾼 뒤 다시 읽어 사이트의 시작 코드가 #… 를 보게
+            web.evaluateJavascript("(function(u){try{history.replaceState(history.state,'',u);location.reload();}"
+                    + "catch(e){location.href=u;}})(" + JSONObject.quote(target) + ")", null);
+        } else {
+            web.loadUrl(target);
+        }
+        return true;
+    }
+
+    private static String noFragment(String url) {
+        int h = url.indexOf('#');
+        return h < 0 ? url : url.substring(0, h);
     }
 
     private boolean startSafely(Intent i) {
@@ -957,7 +1016,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        handleShortcut(intent);
+        if (!handleViewLink(intent)) handleShortcut(intent);
     }
 
     private boolean handleShortcut(Intent i) {
