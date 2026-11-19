@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>찰스의 추천템</title>
-<meta name="description" content="알아두면 언젠가 쓴다! 오리 박사 찰스가 생활에 쓸모 있는 물건을 모아 두는 곳. 쿠팡 파트너스 활동의 일환으로 수수료를 제공받습니다.">
+<meta name="description" content="알아두면 언젠가 쓴다! 오리 박사 찰스가 생활에 쓸모 있는 물건을 모아 두는 곳. 쿠팡 파트너스·네이버 쇼핑 커넥트 활동의 일환으로 수수료를 제공받습니다.">
 <meta name="theme-color" content="#FDE06E">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="ko_KR">
 <meta property="og:title" content="찰스의 추천템">
-<meta property="og:description" content="알아두면 언젠가 쓴다! 생활에 쓸모 있는 물건 모음 (쿠팡 파트너스 광고)">
+<meta property="og:description" content="알아두면 언젠가 쓴다! 생활에 쓸모 있는 물건 모음 (쿠팡 파트너스·네이버 쇼핑 커넥트 광고)">
 <meta property="og:url" content="https://charlesitem.vercel.app/">
 <meta property="og:image" content="https://charlesitem.vercel.app/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -93,7 +93,7 @@
 </head>
 <body>
   <div class="disclosure"><div class="wrap">
-    <p role="note"><b>광고</b>이 페이지는 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
+    <p role="note"><b>광고</b>이 페이지는 쿠팡 파트너스 활동 및 네이버 쇼핑 커넥트 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>
   </div></div>
 
   <header class="profile"><div class="wrap">
@@ -118,15 +118,15 @@
 
   <footer><div class="wrap">
     <div class="links" id="links"></div>
-    <div>가격·재고·배송 조건은 바뀔 수 있어요. 구매 전에 쿠팡 상품 페이지에서 꼭 확인해 주세요.</div>
-    <div>이 페이지의 상품 링크는 쿠팡 파트너스 링크이며, 이를 통해 구매하면 운영자가 일정액의 수수료를 받습니다. 구매자가 내는 가격은 같습니다.</div>
+    <div>가격·재고·배송 조건은 바뀔 수 있어요. 구매 전에 쿠팡·네이버 상품 페이지에서 꼭 확인해 주세요.</div>
+    <div>이 페이지의 상품 링크는 쿠팡 파트너스 링크 또는 네이버 쇼핑 커넥트 링크이며, 이를 통해 구매하면 운영자가 일정액의 수수료를 받습니다. 구매자가 내는 가격은 같습니다.</div>
     <div id="copyright">© 찰스의 추천템</div>
   </div></footer>
 
 <script>
-  // 목록은 products.json 하나로 관리한다(자비스가 올린다). 파트너스 링크(link.coupang.com, coupa.ng)만 보여 준다.
+  // 목록은 products.json 하나로 관리한다(자비스가 올린다). 제휴 링크(쿠팡 파트너스 link.coupang.com·coupa.ng, 네이버 쇼핑 커넥트 naver.me)만 보여 준다.
   (function () {
-    var PARTNER_HOSTS = ['link.coupang.com', 'coupa.ng'];
+    var PARTNER_HOSTS = ['link.coupang.com', 'coupa.ng', 'naver.me'];
     var $ = function (id) { return document.getElementById(id); };
     var state = { items: [], q: '', open: {} };
 
@@ -152,8 +152,11 @@
         var when = fmtDate(p.priceDate || p.added); if (when) pr.appendChild(el('small', null, when + ' 기준'));
         info.appendChild(pr);
       }
+      var naver = p.aff === 'naver' || /^https:\/\/naver\.me\//.test(p.url);
+      var store = el('div', null, naver ? '네이버 쇼핑' : '쿠팡'); store.style.cssText = 'font-size:12px;color:var(--muted);margin-top:2px';
+      info.appendChild(store);
       a.appendChild(info);
-      a.setAttribute('aria-label', p.no + '번 ' + p.title + ' — 쿠팡에서 보기(광고 링크)');
+      a.setAttribute('aria-label', p.no + '번 ' + p.title + ' — ' + (naver ? '네이버' : '쿠팡') + '에서 보기(광고 링크)');
       return a;
     }
 
