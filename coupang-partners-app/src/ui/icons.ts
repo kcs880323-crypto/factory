@@ -1,0 +1,38 @@
+// 아이콘 이름 → iOS(SF Symbols) / 안드로이드·웹(Material Symbols) 이름.
+// cp는 Material Symbols 글꼴의 글자 번호 (웹에서 글자로 그릴 때 씀, expo-symbols의 symbols.json에서 가져옴).
+export const ICONS = {
+  home: { ios: 'house', android: 'home', cp: 0xe88a },
+  search: { ios: 'magnifyingglass', android: 'search', cp: 0xe8b6 },
+  link: { ios: 'link', android: 'link', cp: 0xe157 },
+  chart: { ios: 'chart.bar', android: 'bar_chart', cp: 0xe26b },
+  settings: { ios: 'gearshape', android: 'settings', cp: 0xe8b8 },
+  copy: { ios: 'doc.on.doc', android: 'content_copy', cp: 0xe14d },
+  share: { ios: 'square.and.arrow.up', android: 'share', cp: 0xe80d },
+  write: { ios: 'square.and.pencil', android: 'edit_note', cp: 0xe745 },
+  save: { ios: 'bookmark', android: 'bookmark', cp: 0xe866 },
+  trash: { ios: 'trash', android: 'delete', cp: 0xe872 },
+  open: { ios: 'arrow.up.right.square', android: 'open_in_new', cp: 0xe89e },
+  help: { ios: 'questionmark.circle', android: 'help', cp: 0xe887 },
+  info: { ios: 'info.circle', android: 'info', cp: 0xe88e },
+  paste: { ios: 'doc.on.clipboard', android: 'content_paste', cp: 0xe14f },
+  checked: { ios: 'checkmark.circle.fill', android: 'check_circle', cp: 0xe86c },
+  unchecked: { ios: 'circle', android: 'radio_button_unchecked', cp: 0xe836 },
+  warn: { ios: 'exclamationmark.triangle', android: 'warning', cp: 0xe002 },
+  key: { ios: 'key', android: 'key', cp: 0xe73c },
+  bolt: { ios: 'bolt', android: 'bolt', cp: 0xea0b },
+  tag: { ios: 'tag', android: 'sell', cp: 0xf05b },
+  refresh: { ios: 'arrow.clockwise', android: 'refresh', cp: 0xe5d5 },
+  close: { ios: 'xmark', android: 'close', cp: 0xe5cd },
+  chevron: { ios: 'chevron.right', android: 'chevron_right', cp: 0xe5cc },
+  book: { ios: 'book', android: 'menu_book', cp: 0xea19 },
+  gift: { ios: 'gift', android: 'redeem', cp: 0xe8b1 },
+  box: { ios: 'shippingbox', android: 'inventory_2', cp: 0xe1a1 },
+  idea: { ios: 'lightbulb', android: 'lightbulb', cp: 0xe0f0 },
+  megaphone: { ios: 'megaphone', android: 'campaign', cp: 0xef49 },
+  truck: { ios: 'truck.box', android: 'local_shipping', cp: 0xe558 },
+  eye: { ios: 'eye', android: 'visibility', cp: 0xe8f4 },
+  eyeOff: { ios: 'eye.slash', android: 'visibility_off', cp: 0xe8f5 },
+  person: { ios: 'person', android: 'person', cp: 0xe7fd },
+} as const;
+
+export type IconName = keyof typeof ICONS;
