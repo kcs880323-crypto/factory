@@ -87,6 +87,15 @@ public final class LedgerClient {
         return r.code == 200 ? r.body : null;
     }
 
+    /** 폰 상태 알리기 (사이트 연동 파일에 "status" 가 있을 때만). 2xx 면 true. */
+    public boolean postStatus(JSONObject payload) throws IOException {
+        JSONObject st = cfg.optJSONObject("status");
+        if (st == null) return false;
+        Response r = request("POST", base + st.optString("path", ""), payload.toString());
+        if (!r.ok()) fail(r);
+        return r.ok();
+    }
+
     /** 한 건 추가. 사이트가 {"success":true} 나 2xx 로 답하면 true. */
     public boolean add(Map<String, Object> vars) throws IOException, JSONException {
         JSONObject a = cfg.getJSONObject("add");

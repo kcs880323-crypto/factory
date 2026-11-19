@@ -233,6 +233,11 @@ public class CardTests {
         JSONObject m2 = LinkConfig.merge(cfg, "{\"cards\":{\"auth\":{\"header\":\"X-App-Key\"}}}");
         check("사이트 파일의 auth(앱 연동 키 이름)를 읽음", m2.getJSONObject("auth").getString("header").equals("X-App-Key"), m2);
         check("이상한 키 이름은 거부", LinkConfig.merge(cfg, "{\"cards\":{\"auth\":{\"header\":\"X: y\"}}}") == cfg, null);
+        JSONObject ms = LinkConfig.merge(cfg, "{\"cards\":{\"status\":{\"method\":\"POST\",\"path\":\"/api/app-status\"}}}");
+        check("사이트 파일의 status(폰 상태 받는 곳)를 읽음", ms.getJSONObject("status").getString("path").equals("/api/app-status"), ms);
+        check("status 도 다른 사이트 주소·GET 은 거부", LinkConfig.merge(cfg,
+                "{\"cards\":{\"status\":{\"path\":\"//evil.example/s\"}}}") == cfg
+                && LinkConfig.merge(cfg, "{\"cards\":{\"status\":{\"method\":\"GET\",\"path\":\"/s\"}}}") == cfg, null);
         check("모양이 이상하면 기본값", LinkConfig.merge(cfg, "<!doctype html><html>") == cfg
                 && LinkConfig.merge(cfg, "{\"cards\":{\"default_category\":[\"기타\"]}}") == cfg
                 && LinkConfig.merge(cfg, null) == cfg, null);
@@ -272,6 +277,8 @@ public class CardTests {
                         + "\"fixed\":[{\"id\":5,\"source_table\":\"fixed_expenses\",\"date\":\"2026-11-01\",\"details\":\"관리비\","
                         + "\"amount\":200000,\"category_large\":\"공과금\",\"category_medium\":\"관리비\"}]}";
             } else if (path.startsWith("/api/monthly-details/delete-single")) {
+                resp = "{\"success\":true}";
+            } else if (path.startsWith("/api/app-status") && "POST".equals(ex.getRequestMethod())) {
                 resp = "{\"success\":true}";
             } else {
                 code = 500;
@@ -337,10 +344,62 @@ public class CardTests {
                             && LedgerClient.shortMessage("{\"message\":\"" + "가".repeat(80) + "\"}").length() == 61,
                     LedgerClient.shortMessage("<html><body><h1>502</h1> Bad   Gateway</body></html>"));
             check("키 이름이 이상하면 붙이지 않음", !new LedgerClient(base, cfg).withAuth("X-App-Key\r\nEvil", "k1-secret").add(v), null);
+            // 폰 상태 알리기: 사이트 연동 파일에 status 가 있을 때만, 앱 연동 키를 붙여 POST
+            check("status 주소가 없으면 보내지 않음", !keyed.postStatus(new JSONObject()) , null);
+            JSONObject withStatus = LinkConfig.merge(cfg, "{\"cards\":{\"status\":{\"method\":\"POST\",\"path\":\"/api/app-status\"}}}");
+            LedgerClient sc = new LedgerClient(base, withStatus).withAuth("X-App-Key", "k1-secret");
+            JSONObject facts = new JSONObject().put("access", true).put("owner", "창수").put("auth_required", true)
+                    .put("key_saved", true).put("pending", 0).put("now", 1000L).put("last_card_at", 900L);
+            JSONArray jn = new JSONArray().put(new JSONObject().put("t", 1L).put("k", "등록").put("m", "메가커피 1,000원"));
+            int before = seen.size();
+            boolean posted = sc.postStatus(CardStatus.report(CardStatus.judge(facts), jn));
+            String[] st = seen.get(seen.size() - 1);
+            JSONObject got = new JSONObject(st[2]);
+            check("상태 보내기: 키를 붙여 POST, 판정·기록이 담김", posted && seen.size() == before + 1 && st[0].equals("POST")
+                    && st[1].equals("/api/app-status") && got.getString("type").equals("urlapp_card_status")
+                    && got.getJSONObject("status").getBoolean("ok") && got.getJSONArray("journal").length() == 1
+                    && !st[2].contains("k1-secret"), st[2]);
+            check("상태 보내기: 키가 틀리면 실패와 이유", !new LedgerClient(base, withStatus).withAuth("X-App-Key", "wrong")
+                    .postStatus(new JSONObject()), null);
             requireKey[0] = false;
         } finally {
             srv.stop(0);
         }
+
+        System.out.println("6) 정상 작동 판정");
+        long now = 10L * 24 * 3600 * 1000;
+        JSONObject good = new JSONObject().put("access", true).put("owner", "창수").put("auth_required", true).put("key_saved", true)
+                .put("pending", 0).put("battery_ok", true).put("now", now).put("last_card_at", now - 3600_000L)
+                .put("listener_connected_at", 5L).put("listener_disconnected_at", 3L);
+        JSONObject g = CardStatus.judge(good);
+        check("다 갖추면 정상, 고칠 것 없음", g.getBoolean("ok") && g.getJSONArray("problems").length() == 0
+                && g.getJSONArray("notes").length() == 0, g);
+        java.util.function.BiFunction<String, Object, JSONObject> with = (k, val) -> {
+            try {
+                return CardStatus.judge(new JSONObject(good.toString()).put(k, val));
+            } catch (Exception ex) {
+                return null;
+            }
+        };
+        JSONObject a1 = with.apply("access", false);
+        check("알림 접근 꺼짐 → 확인 필요", !a1.getBoolean("ok") && a1.getJSONArray("problems").getString(0).contains("알림 접근"), a1);
+        JSONObject a2 = with.apply("listener_disconnected_at", 9L);
+        check("알림 듣기 끊김 → 확인 필요", !a2.getBoolean("ok") && a2.getJSONArray("problems").getString(0).contains("끊겼"), a2);
+        check("담당자 없음 → 확인 필요", !with.apply("owner", "").getBoolean("ok"), null);
+        check("키 없음 → 확인 필요", with.apply("key_saved", false).getJSONArray("problems").getString(0).contains("앱 연동 키가 없"), null);
+        check("키 거절 → 확인 필요", with.apply("auth_errors", 2).getJSONArray("problems").getString(0).contains("받지 않았"), null);
+        JSONObject a3 = CardStatus.judge(new JSONObject(good.toString()).put("pending", 2).put("pending_error", "HTTP 401 · unauthorized"));
+        check("못 보낸 결제 → 건수와 이유", !a3.getBoolean("ok") && a3.getJSONArray("problems").getString(0).contains("2건")
+                && a3.getJSONArray("problems").getString(0).contains("HTTP 401"), a3);
+        JSONObject a4 = with.apply("battery_ok", false);
+        check("배터리 최적화는 권할 것(정상은 유지)", a4.getBoolean("ok") && a4.getJSONArray("notes").length() == 1, a4);
+        JSONObject a5 = with.apply("last_card_at", now - 4L * 24 * 3600 * 1000);
+        check("3일 넘게 카드 알림 없음은 권할 것(정상은 유지)", a5.getBoolean("ok") && a5.getJSONArray("notes").getString(0).contains("3일"), a5);
+        JSONObject a6 = CardStatus.judge(new JSONObject(good.toString()).put("via", "intent").put("access", false));
+        check("MacroDroid 방식이면 알림 접근은 보지 않음", a6.getBoolean("ok"), a6);
+        JSONArray many = new JSONArray();
+        for (int i = 0; i < 80; i++) many.put(new JSONObject().put("t", i).put("k", "받음").put("m", "x"));
+        check("사이트에 보내는 기록은 최근 30개까지", CardStatus.report(g, many).getJSONArray("journal").length() == 30, null);
 
         System.out.println("카드 시험: " + ok + "개 통과, " + fail + "개 실패");
         System.exit(fail == 0 ? 0 : 1);

@@ -24,11 +24,21 @@ public class CardListenerService extends NotificationListenerService {
     @Override
     public void onListenerConnected() {
         live = this;
+        if (CardEngine.available(this)) {
+            CardStore st = CardEngine.get(this).store;
+            st.noteListener(true);
+            st.journal("듣기", "알림 듣기가 연결됐어요");
+        }
     }
 
     @Override
     public void onListenerDisconnected() {
         if (live == this) live = null;
+        if (CardEngine.available(this)) {
+            CardStore st = CardEngine.get(this).store;
+            st.noteListener(false);
+            st.journal("듣기", "알림 듣기가 끊겼어요");
+        }
     }
 
     @Override

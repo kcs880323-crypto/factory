@@ -1044,7 +1044,10 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (web != null) web.onResume();
-        if (CardEngine.available(this)) CardEngine.get(this).flushAsync(); // 못 보낸 카드 결제가 있으면 지금
+        if (CardEngine.available(this)) {
+            CardEngine.get(this).flushAsync(); // 못 보낸 카드 결제가 있으면 지금
+            CardEngine.get(this).reportStatusAsync(false); // 사이트가 상태 주소를 주면 폰 상태 알리기 (30분에 한 번)
+        }
     }
 
     /** 카드 자동 등록이 들어 있는 앱: 설정이 덜 끝났으면(담당자 없음, 알림 접근 꺼짐) 앱을 열 때 묻는다. */

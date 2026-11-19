@@ -152,6 +152,35 @@
 
 고친 뒤 오른쪽 위 **Publish**. 앞으로는 재배포해도 폰의 키를 다시 넣을 필요가 없어야 한다.
 
+## 라. 폰 상태·활동 기록 보기 (설치된 앱이 잘 도는지 한곳에서)
+
+우리집 가계부 앱(v13 이상)은 사이트가 받을 곳을 알려 주면 6시간마다(그리고 앱을 열 때 30분에 한 번) 폰 상태와
+최근 활동 기록을 보낸다. 사이트의 '앱 연동 키 · 보안' 화면에서 폰별로(창수 폰·지현 폰) 정상 작동 여부를 볼 수 있다.
+앱이 보내는 내용(JSON): {"type":"urlapp_card_status","version":1,"status":{ok, problems[], notes[], owner, access,
+pending, pending_error, last_card_at, last_registered_at, key_ok_at, app_version, android, device, now …},
+"journal":[{t, k, m} 최근 30개]} — 알림 원문·키 값은 없다 (기록에는 등록한 가맹점·금액이 있다).
+
+```
+안드로이드 앱이 폰 상태를 보내는 곳과, 그걸 보는 화면을 추가해 줘. 다른 기능·보안 설정은 그대로 둬.
+1) POST /api/app-status : X-App-Key(앱 연동 키)로만 받는다. 키가 틀리면 401. 본문 JSON 은 20KB 까지, type 이
+   "urlapp_card_status" 가 아니면 400. 받은 시각과 본문을 그 키(이름: 창수 폰 등)에 묶어 영구 DB 에 저장해 줘.
+   키마다 최신 1개 + 지난 30개(받은 시각, status.ok, problems)만 남기고 오래된 것은 지워.
+2) GET /api/app-status : 로그인한 사람만. 키마다 {키 이름, 받은 시각, status, journal, 지난 기록 요약} 목록.
+3) '앱 연동 키 · 보안' 화면의 키 목록에 키마다 표시해 줘:
+   - 상태: status.ok 면 초록 "정상", 아니면 빨강 "확인 필요" + problems 를 줄마다.
+     마지막으로 받은 시각이 24시간보다 오래되면 회색 "연락 없음 (폰이 꺼졌거나 앱이 멈췄을 수 있음)".
+   - 담당자(status.owner), 앱 버전, 안드로이드 버전·기기, 알림 접근, 마지막 카드 알림(last_card_at),
+     마지막 등록(last_registered_at), 못 보낸 결제(pending 건 + pending_error) — 시각은 숫자(밀리초)를 한국 시간으로.
+   - [활동 기록] 펼치기: journal 을 최근 것부터 "11/19 10:35 [등록] 메가커피 1,000원 …" 처럼.
+   - 지난 30번의 정상/확인 필요를 작은 점들로 (언제부터 문제였는지 보이게).
+4) /urlapp.json 의 "cards" 안에 "status": {"method": "POST", "path": "/api/app-status"} 를 추가해 줘.
+5) 앱 연동 키로 허용하는 API 에 POST /api/app-status 를 추가해 줘 (지금 3개 + 이것). GET 은 로그인만.
+6) 바꾼 뒤, 로그인 없이 GET /api/app-status 가 401 인지 확인해 줘.
+```
+
+고친 뒤 오른쪽 위 **Publish** → 자비스에게 "가계부 재배포했어" (`link-check` 가 status 주소도 확인한다).
+앱 쪽은 사이트가 받을 곳을 알려 주기 전까지 아무것도 보내지 않는다. 폰 화면의 '상태'·'활동 기록'은 사이트와 상관없이 바로 보인다.
+
 ## 참고
 
 - **AI Studio 미리보기에 "…에서 연결을 거부했습니다"가 뜨면**: 보안 헤더 frame-ancestors 가 'self' 만 허용해서 미리보기 틀이 막힌 것.

@@ -43,6 +43,7 @@ final class CardEngine {
     private static final String CHANNEL = "urlapp_cards";
     static final int RETRY_JOB = 7101;
     static final int HOLD_JOB = 7102;
+    static final int STATUS_JOB = 7103; // 사이트에 폰 상태 알리기 (6시간마다, 사이트가 status 주소를 줄 때만)
 
     // 카드사·월렛·문자 앱 (확인한 것과 흔히 알려진 것). 그 밖의 앱은 설정 화면에서 사용자가 허용한다.
     private static final String[] KNOWN = {
@@ -103,6 +104,7 @@ final class CardEngine {
             throw new IllegalStateException("카드 설정을 읽을 수 없습니다", e);
         }
         apply(LinkConfig.merge(builtin, store.link()));
+        scheduleStatus();
     }
 
     /** 설정을 적용한다 (앱 기본값 + 사이트 연동 파일). */
@@ -138,12 +140,14 @@ final class CardEngine {
     boolean setAppKey(String key) {
         if (!store.setAppKey(key)) return false;
         apply(cfg);
+        store.journal("키", "새 앱 연동 키를 저장했어요");
         return true;
     }
 
     void clearAppKey() {
         store.clearAppKey();
         apply(cfg);
+        store.journal("키", "앱 연동 키를 지웠어요");
     }
 
     /** 저장된 키로 가계부에 실제로 물어본다 (이번 달 내역 읽기). 결과 한 줄. */
@@ -154,11 +158,13 @@ final class CardEngine {
         try {
             client.history(month);
             store.noteKeyOk();
+            store.journal("키", "키 확인: 가계부가 받아 줘요");
             return "✔ 가계부가 이 키를 받아 줘요.";
         } catch (Exception e) {
             int code = client.lastCode();
             if (code == 401 || code == 403) {
                 store.setAuthErrors(store.authErrors() + 1);
+                store.journal("키", "키 확인: 가계부가 받지 않아요 (" + client.lastReason() + ")");
                 return "✖ 가계부가 이 키를 모른다고 해요 (" + client.lastReason() + "). 앱에는 키가 그대로 있어요. 사이트의 "
                         + "'앱 연동 키 · 보안' 목록에 이 폰의 키가 있는지 봐 주세요. 목록에서 없어졌다면 사이트가 키를 잃어버린 거예요.";
             }
@@ -190,10 +196,12 @@ final class CardEngine {
             if (text != null && text.contains("\"cards\"")) {
                 store.saveLink(text, true);
                 apply(LinkConfig.merge(builtin, text));
+                scheduleStatus();
                 return true;
             }
             store.saveLink(null, false);
             apply(LinkConfig.merge(builtin, null));
+            store.journal("연동", "사이트에 연동 파일(/urlapp.json)이 없어 앱 기본 설정을 써요");
             return false;
         } catch (Exception e) {
             return fromSite();
@@ -260,13 +268,23 @@ final class CardEngine {
     /** appName: 보낸 앱의 이름 (예: "롯데카드"). 문구에 카드사 이름이 없는 카드사 앱 알림의 카드사를 정하는 데 쓴다. */
     boolean handleNotification(String app, String title, String body, long when, boolean appIsPackage, String appName) {
         CardParser.Txn t = CardParser.parse(title, body, when, app, appName);
-        if (t == null) return false;
+        if (t == null) {
+            // 카드사·월렛 앱의 알림인데 결제로 읽지 못했으면 기록만 (문자 앱 등은 결제 아닌 알림이 많아 적지 않는다)
+            if (CardParser.cardFromApp(app, appName) != null || CardParser.walletSource(app)) {
+                store.journal("읽지못함", (appName != null ? appName : app) + " 알림을 결제로 읽지 않았어요 (결제 알림이 아니면 정상)");
+            }
+            return false;
+        }
         boolean ok = appIsPackage ? trusted(app, title) : trustedSource(app, title);
         if (!ok) {
             // 카카오톡은 '허용'해도 친구 대화는 쓰지 않으므로(카드영수증·카드사 채널만) 목록에 올리지 않는다
             if (!"com.kakao.talk".equals(app)) store.noteDetected(app);
+            store.journal("거름", "결제처럼 보였지만 믿지 않는 곳이라 쓰지 않았어요: " + (appName != null ? appName : app));
             return false;
         }
+        store.noteCardAt();
+        store.journal("받음", (t.cancel ? "승인취소 " : "승인 ") + t.label() + " " + won(t.amount)
+                + (t.merchant.isEmpty() ? "" : " · " + t.merchant) + " (" + (appName != null ? appName : app) + ")");
         offer(t);
         return true;
     }
@@ -314,6 +332,7 @@ final class CardEngine {
         store.noteCancel(t);
         JSONObject e = store.findForCancel(t);
         if (e == null) {
+            store.journal("취소", t.label() + " " + won(t.amount) + " — 가계부에서 같은 내역을 찾지 못했어요");
             notify("cancel-" + t.when, "카드 결제 취소 알림",
                     t.label() + " " + won(t.amount) + (t.merchant.isEmpty() ? "" : " · " + t.merchant)
                             + " — 가계부에서 같은 내역을 찾지 못했어요. 직접 확인해 주세요.", null);
@@ -323,6 +342,8 @@ final class CardEngine {
             boolean done = deleteEntry(e);
             put(e, "status", done ? CardStore.CANCELLED : e.optString("status"));
             store.save(e);
+            store.journal("취소", e.optString("merchant") + " " + won(e.optLong("amount"))
+                    + (done ? " — 가계부에서 지웠어요" : " — 가계부에서 찾지 못했어요"));
             notify(e.optString("id"), done ? "결제 취소를 반영했어요" : "결제 취소 알림",
                     e.optString("merchant") + " " + won(e.optLong("amount"))
                             + (done ? " — 가계부에서 지웠어요" : " — 가계부에서 찾지 못했어요. 직접 확인해 주세요."), null);
@@ -345,6 +366,7 @@ final class CardEngine {
         boolean ok;
         LedgerClient c = client;
         String why = "";
+        String prevError = e.optString("error", "");
         try {
             ok = c.add(v);
         } catch (Exception ex) {
@@ -389,10 +411,18 @@ final class CardEngine {
                 put(e, "code", code);
             }
         }
+        if (!ok && !e.optString("error", "").equals(prevError)) { // 같은 이유로 다시 실패하면 기록하지 않는다
+            store.journal("실패", e.optString("merchant") + " " + won(e.optLong("amount")) + " — " + failHint(e.optInt("code"))
+                    + " (" + e.optString("error") + ")");
+        }
         if (ok) {
             e.remove("error");
             e.remove("code");
             if (!store.appKey().isEmpty()) store.noteKeyOk();
+            store.noteRegisteredAt();
+            store.journal("등록", e.optString("merchant") + " " + won(e.optLong("amount")) + " · " + e.optString("large")
+                    + (e.optString("medium").isEmpty() ? "" : "›" + e.optString("medium")) + " (" + CardStore.memo(e) + ", "
+                    + e.optString("owner") + ")");
             if (store.linkErrors() > 0) store.setLinkErrors(0, "");
             if (store.authErrors() > 0) store.setAuthErrors(0);
             put(e, "status", CardStore.REGISTERED);
@@ -460,6 +490,102 @@ final class CardEngine {
         return "보내지 못했어요: " + failHint(e.optInt("code")) + " (" + e.optString("error") + "). 최근 등록에 '전송 대기'로 남겨 두었어요.";
     }
 
+    // ---------- 상태 (정상 작동 여부) ----------
+
+    /** 지금 상태: 사실을 모아 CardStatus 로 판정 (ok, problems, notes). */
+    JSONObject status() {
+        JSONObject f = new JSONObject();
+        try {
+            f.put("now", System.currentTimeMillis());
+            f.put("via", via());
+            f.put("access", listenerEnabled());
+            f.put("listener_connected_at", store.listenerOnAt());
+            f.put("listener_disconnected_at", store.listenerOffAt());
+            f.put("owner", store.owner() == null ? "" : store.owner());
+            f.put("auth_required", authRequired());
+            f.put("key_saved", !store.appKey().isEmpty());
+            f.put("key_ok_at", store.keyOkAt());
+            f.put("auth_errors", store.authErrors());
+            List<JSONObject> p = store.pending();
+            f.put("pending", p.size());
+            if (!p.isEmpty()) {
+                JSONObject first = p.get(0);
+                f.put("pending_error", first.has("error") ? failHint(first.optInt("code")) + " (" + first.optString("error") + ")"
+                        : "아직 보내 보지 않았어요");
+            }
+            f.put("link_errors", store.linkErrors());
+            f.put("link_from_site", fromSite());
+            f.put("link_checked", store.linkChecked());
+            f.put("battery_ok", batteryOk());
+            f.put("last_card_at", store.cardAt());
+            f.put("last_registered_at", store.registeredAt());
+            f.put("report_at", store.reportAt());
+            f.put("app_version", versionName());
+            f.put("android", Build.VERSION.RELEASE);
+            f.put("device", Build.MODEL);
+        } catch (JSONException ignored) {
+            // 기본형만
+        }
+        return CardStatus.judge(f);
+    }
+
+    /** 사이트가 연동 파일에 status 주소를 주면 폰 상태(판정·최근 기록)를 보낸다. force 가 아니면 30분에 한 번. */
+    void reportStatus(boolean force) {
+        if (cfg.optJSONObject("status") == null) return;
+        if (authRequired() && store.appKey().isEmpty()) return;
+        if (!force && System.currentTimeMillis() - store.reportAt() < 30 * 60 * 1000L) return;
+        boolean wasOk = store.reportAt() == 0 || store.reportOk();
+        boolean ok;
+        String why;
+        LedgerClient c = client;
+        try {
+            ok = c.postStatus(CardStatus.report(status(), store.journalAll()));
+            why = c.lastReason();
+        } catch (Exception ex) {
+            ok = false;
+            why = c.lastReason().isEmpty() ? ex.getClass().getSimpleName() : c.lastReason();
+        }
+        store.noteReport(ok, why);
+        if (!ok && wasOk) store.journal("보고", "사이트에 상태를 보내지 못했어요 (" + why + ")");
+        if (ok && !wasOk) store.journal("보고", "사이트에 상태 보내기가 다시 돼요");
+    }
+
+    void reportStatusAsync(boolean force) {
+        exec.execute(() -> reportStatus(force));
+    }
+
+    boolean statusEndpoint() {
+        return cfg.optJSONObject("status") != null;
+    }
+
+    private void scheduleStatus() {
+        JobScheduler js = (JobScheduler) app.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        if (js == null) return;
+        if (cfg.optJSONObject("status") == null) {
+            js.cancel(STATUS_JOB);
+            return;
+        }
+        if (js.getPendingJob(STATUS_JOB) != null) return;
+        js.schedule(new JobInfo.Builder(STATUS_JOB, new ComponentName(app, CardRetryJob.class))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setPeriodic(6 * 3600 * 1000L)
+                .build());
+    }
+
+    private boolean batteryOk() {
+        if (Build.VERSION.SDK_INT < 23) return true;
+        android.os.PowerManager pm = (android.os.PowerManager) app.getSystemService(Context.POWER_SERVICE);
+        return pm == null || pm.isIgnoringBatteryOptimizations(app.getPackageName());
+    }
+
+    private String versionName() {
+        try {
+            return app.getPackageManager().getPackageInfo(app.getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     /** 실패 코드를 사람이 할 일로. */
     static String failHint(int code) {
         if (code == 0) return "인터넷이나 사이트에 연결하지 못했어요";
@@ -493,6 +619,7 @@ final class CardEngine {
             put(e, "status", CardStore.UNDONE);
             store.save(e);
             cancelNotice(id);
+            store.journal("되돌림", e.optString("merchant") + " " + won(e.optLong("amount")) + " — 보내지 않도록 했어요");
             return "보내지 않도록 했어요.";
         }
         if (!CardStore.REGISTERED.equals(status)) return "이미 처리된 기록이에요.";
@@ -503,6 +630,7 @@ final class CardEngine {
                 store.save(e);
                 notify(id, "등록을 되돌렸어요", e.optString("merchant") + " " + won(e.optLong("amount"))
                         + " — 가계부에서 지웠어요", null);
+                store.journal("되돌림", e.optString("merchant") + " " + won(e.optLong("amount")) + " — 가계부에서 지웠어요");
                 return "가계부에서 지웠어요.";
             }
             return "가계부에서 같은 내역을 찾지 못했어요. 이미 지웠는지 확인해 주세요.";

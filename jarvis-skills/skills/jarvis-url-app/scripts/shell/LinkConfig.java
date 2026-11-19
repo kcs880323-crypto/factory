@@ -4,7 +4,8 @@ package app.jarvis.urlapp;
 // 사이트를 AI Studio 에서 고쳐 API 주소·칸 이름이 바뀌어도, 사이트가 이 파일을 같이 고치면 앱은 업데이트 없이 따라간다.
 //   { "version": 1, "cards": { "add": {...}, "history": {...}, "delete": {...},
 //                              "default_category": [...], "rules": [...], "owners": [...], "learn_months": 3,
-//                              "auth": {"header": "X-App-Key"} } }   ← 사이트에 보안(앱 연동 키)을 켰을 때
+//                              "auth": {"header": "X-App-Key"},   ← 사이트에 보안(앱 연동 키)을 켰을 때
+//                              "status": {"method": "POST", "path": "/api/app-status"} } }  ← 폰 상태를 사이트에 알릴 곳 (있을 때만 보냄)
 // 주소(path)는 같은 사이트 안("/" 로 시작, "//" 아님)만 받는다. 모양이 이상하면 앱 기본 설정을 그대로 쓴다.
 
 import org.json.JSONArray;
@@ -20,7 +21,7 @@ public final class LinkConfig {
             JSONObject c = r.optJSONObject("cards");
             if (c == null) return builtin;
             JSONObject out = new JSONObject(builtin.toString());
-            for (String key : new String[] {"add", "history", "delete"}) {
+            for (String key : new String[] {"add", "history", "delete", "status"}) {
                 if (!c.has(key)) continue;
                 JSONObject v = c.optJSONObject(key);
                 if (!validEndpoint(v, key)) return builtin;
@@ -62,6 +63,7 @@ public final class LinkConfig {
         if (v == null) return false;
         String path = v.optString("path", "");
         if (!path.startsWith("/") || path.startsWith("//") || path.contains("://")) return false;
+        if ("status".equals(key)) return "POST".equalsIgnoreCase(v.optString("method", "POST")); // 보낼 내용은 앱이 정한다
         return "history".equals(key) || v.optJSONObject("body") != null;
     }
 }

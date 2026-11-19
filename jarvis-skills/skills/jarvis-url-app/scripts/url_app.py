@@ -1423,6 +1423,23 @@ def cmd_link_check(args):
         for field in body:
             if field not in js_text:
                 problems.append(f"add: 칸 이름 {field} 가 사이트 코드에 없음 — 칸 이름이 바뀌었을 수 있음")
+    # 폰 상태 받는 곳 (있을 때만): 주소 모양, 그리고 GET 으로 그 주소가 서버에 있는지 (로그인 없이 401·403·405 면 있음, 404 면 없음)
+    st = cards.get("status")
+    if st is not None:
+        if not (isinstance(st, dict) and isinstance(st.get("path"), str) and st["path"].startswith("/")
+                and not st["path"].startswith("//")):
+            problems.append("cards.status.path 가 없거나 같은 사이트 주소가 아님")
+        else:
+            try:
+                http_get(urllib.parse.urljoin(origin, st["path"]), 200_000)
+                notes.append(f"status: {st['path']} 있음 (로그인 없이 열림 — 서버가 앱 연동 키를 확인하는지 봐 주세요)")
+            except urllib.error.HTTPError as e:
+                if e.code in (401, 403, 405):
+                    notes.append(f"status: {st['path']} 있음 (로그인·키 없이는 {e.code})")
+                else:
+                    problems.append(f"status: {st['path']} 가 서버에 없음 (HTTP {e.code}) — 폰 상태를 받지 못함")
+            except Exception as e:  # noqa: BLE001
+                problems.append(f"status: {st['path']} 확인 못 함 ({type(e).__name__})")
     for n in notes:
         say(f"  ✔ {n}")
     for p_ in problems:

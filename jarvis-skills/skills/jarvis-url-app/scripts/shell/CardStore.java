@@ -130,6 +130,77 @@ final class CardStore {
         return e;
     }
 
+    // ---------- 활동 기록 (최근 100개, 이 폰 안에만. 알림 원문·키 값은 적지 않는다) ----------
+
+    private static final int MAX_JOURNAL = 100;
+
+    /** kind: 받음·거름·읽지못함·등록·실패·되돌림·취소·키·연동·듣기·보고 */
+    synchronized void journal(String kind, String msg) {
+        JSONArray a = arr("journal");
+        JSONArray out = new JSONArray();
+        JSONObject e = new JSONObject();
+        try {
+            e.put("t", System.currentTimeMillis());
+            e.put("k", kind);
+            e.put("m", msg.length() > 120 ? msg.substring(0, 120) + "…" : msg);
+        } catch (JSONException ignored) {
+            return;
+        }
+        out.put(e);
+        for (int i = 0; i < a.length() && out.length() < MAX_JOURNAL; i++) out.put(a.opt(i));
+        p.edit().putString("journal", out.toString()).apply();
+    }
+
+    /** 최근 것부터. */
+    synchronized JSONArray journalAll() {
+        return arr("journal");
+    }
+
+    void noteListener(boolean connected) {
+        p.edit().putLong(connected ? "listener_on_at" : "listener_off_at", System.currentTimeMillis()).apply();
+    }
+
+    long listenerOnAt() {
+        return p.getLong("listener_on_at", 0);
+    }
+
+    long listenerOffAt() {
+        return p.getLong("listener_off_at", 0);
+    }
+
+    void noteCardAt() {
+        p.edit().putLong("card_at", System.currentTimeMillis()).apply();
+    }
+
+    long cardAt() {
+        return p.getLong("card_at", 0);
+    }
+
+    void noteRegisteredAt() {
+        p.edit().putLong("registered_at", System.currentTimeMillis()).apply();
+    }
+
+    long registeredAt() {
+        return p.getLong("registered_at", 0);
+    }
+
+    void noteReport(boolean ok, String why) {
+        p.edit().putLong("report_at", System.currentTimeMillis()).putBoolean("report_ok", ok)
+                .putString("report_why", why == null ? "" : why).apply();
+    }
+
+    long reportAt() {
+        return p.getLong("report_at", 0);
+    }
+
+    boolean reportOk() {
+        return p.getBoolean("report_ok", false);
+    }
+
+    String reportWhy() {
+        return p.getString("report_why", "");
+    }
+
     /** 가계부 메모에 쓰는 카드 이름 (카드사 + 상품명, 예: "현대카드 네이버"). 되돌리기도 같은 이름으로 찾는다. */
     static String memo(JSONObject e) {
         return CardParser.label(e.optString("card"), e.optString("product", ""));

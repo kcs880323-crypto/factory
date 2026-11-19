@@ -31,6 +31,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
@@ -48,6 +49,7 @@ public class CardSettingsActivity extends Activity {
     private String testText = SAMPLE;
     private List<String[]> shade;      // '알림창 읽어 보기'로 읽은 알림 (null = 알림 듣기가 연결 안 됨)
     private boolean shadeAsked;
+    private boolean journalAllShown;   // 활동 기록 전체(100개) 보기
 
     @Override
     protected void onCreate(Bundle state) {
@@ -87,6 +89,9 @@ public class CardSettingsActivity extends Activity {
         boolean viaIntent = "intent".equals(engine.via());
         para("카드 결제 알림(문자, 카드사 앱, 삼성 월렛, 카드사 카카오 알림톡)을 " + (viaIntent ? "MacroDroid 가 넘겨주면 " : "읽어 ")
                 + "가계부에 바로 등록해요. 결제 알림만 다루고, 날짜·금액·가맹점·카드만 가계부로 보내요. 알림 내용은 이 폰에 저장하지 않아요.");
+
+        // 0) 상태 (정상 작동 여부)
+        renderStatus();
 
         // 1) 담당자
         head("이 폰의 담당자");
@@ -279,6 +284,105 @@ public class CardSettingsActivity extends Activity {
                 render();
             });
         }));
+
+        // 9) 활동 기록
+        renderJournal();
+    }
+
+    private static String when(long t) {
+        return t <= 0 ? "아직 없음" : new SimpleDateFormat("M/d HH:mm", Locale.KOREA).format(new Date(t));
+    }
+
+    /** 맨 위: 정상 작동 여부와 고칠 것, 그리고 주요 값. */
+    private void renderStatus() {
+        JSONObject st = engine.status();
+        boolean ok = st.optBoolean("ok");
+        head("상태");
+        TextView verdict = para(ok ? "✔ 정상 작동 중" : "⚠ 확인이 필요해요");
+        verdict.setTextSize(19);
+        verdict.setTypeface(Typeface.DEFAULT_BOLD);
+        verdict.setTextColor(ok ? Color.rgb(22, 163, 74) : Color.rgb(225, 29, 72));
+        JSONArray pr = st.optJSONArray("problems");
+        for (int i = 0; pr != null && i < pr.length(); i++) para("✖ " + pr.optString(i)).setTextColor(Color.rgb(225, 29, 72));
+        JSONArray nt = st.optJSONArray("notes");
+        for (int i = 0; nt != null && i < nt.length(); i++) note("· " + nt.optString(i));
+        boolean intent = "intent".equals(st.optString("via"));
+        String report = !engine.statusEndpoint() ? "가계부 사이트가 아직 받지 않아요 (받는 곳이 생기면 자동으로 보내요)"
+                : engine.store.reportAt() == 0 ? "아직 보내지 않았어요"
+                : when(engine.store.reportAt()) + (engine.store.reportOk() ? " 보냄" : " 실패 (" + engine.store.reportWhy() + ")");
+        note("담당자: " + (st.optString("owner").isEmpty() ? "없음" : st.optString("owner"))
+                + "\n" + (intent ? "알림 받는 방법: MacroDroid" : "알림 접근: " + (st.optBoolean("access") ? "켜짐" : "꺼짐")
+                + (st.optLong("listener_connected_at") > 0 ? " · 연결 " + when(st.optLong("listener_connected_at")) : ""))
+                + "\n마지막으로 받은 카드 알림: " + when(st.optLong("last_card_at"))
+                + "\n마지막으로 가계부에 등록: " + when(st.optLong("last_registered_at"))
+                + "\n가계부로 못 보낸 결제: " + st.optInt("pending") + "건"
+                + "\n앱 연동 키: " + (st.optBoolean("key_saved") ? "저장됨 · 마지막 확인 " + when(st.optLong("key_ok_at"))
+                        : st.optBoolean("auth_required") ? "없음" : "필요 없음")
+                + "\n사이트에 상태 알림: " + report
+                + "\n앱 " + st.optString("app_version") + " · 안드로이드 " + st.optString("android") + " · " + st.optString("device"));
+        row("", "상태·기록 공유", v -> shareStatus(st));
+        if (engine.statusEndpoint()) {
+            row("", "사이트에 지금 알리기", v -> {
+                Toast.makeText(this, "보내는 중…", Toast.LENGTH_SHORT).show();
+                engine.exec.execute(() -> {
+                    engine.reportStatus(true);
+                    runOnUiThread(() -> {
+                        Toast.makeText(this, engine.store.reportOk() ? "사이트에 상태를 보냈어요"
+                                : "보내지 못했어요 (" + engine.store.reportWhy() + ")", Toast.LENGTH_LONG).show();
+                        render();
+                    });
+                });
+            });
+        }
+    }
+
+    /** 맨 아래: 최근 활동 (받음·거름·등록·실패·되돌림·키·연동·듣기·보고). */
+    private void renderJournal() {
+        head("활동 기록");
+        JSONArray j = engine.store.journalAll();
+        if (j.length() == 0) {
+            note("아직 없어요. 카드 알림을 받거나 등록하면 여기에 남아요 (이 폰에만, 최근 100개).");
+            return;
+        }
+        int n = journalAllShown ? j.length() : Math.min(20, j.length());
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            JSONObject e = j.optJSONObject(i);
+            if (e == null) continue;
+            if (b.length() > 0) b.append('\n');
+            b.append(when(e.optLong("t"))).append("  [").append(e.optString("k")).append("] ").append(e.optString("m"));
+        }
+        TextView t = para(b.toString());
+        t.setTextSize(13);
+        t.setTextIsSelectable(true);
+        if (j.length() > 20) {
+            row(journalAllShown ? "최근 20개만 보기" : "전체 " + j.length() + "개 보기", journalAllShown ? "줄이기" : "전체 보기", v -> {
+                journalAllShown = !journalAllShown;
+                render();
+            });
+        }
+    }
+
+    /** 상태와 최근 기록을 글로 공유 (카톡 등으로 보내 문제를 함께 볼 때). 키 값·알림 원문은 넣지 않는다. */
+    private void shareStatus(JSONObject st) {
+        StringBuilder b = new StringBuilder("우리집 가계부 카드 자동 등록 상태 (").append(when(System.currentTimeMillis())).append(")\n");
+        b.append(st.optBoolean("ok") ? "✔ 정상 작동 중" : "⚠ 확인이 필요해요").append('\n');
+        JSONArray pr = st.optJSONArray("problems");
+        for (int i = 0; pr != null && i < pr.length(); i++) b.append("✖ ").append(pr.optString(i)).append('\n');
+        JSONArray nt = st.optJSONArray("notes");
+        for (int i = 0; nt != null && i < nt.length(); i++) b.append("· ").append(nt.optString(i)).append('\n');
+        b.append("담당자 ").append(st.optString("owner")).append(" · 알림 접근 ").append(st.optBoolean("access") ? "켜짐" : "꺼짐")
+                .append(" · 못 보낸 결제 ").append(st.optInt("pending")).append("건 · 앱 ").append(st.optString("app_version"))
+                .append(" · 안드로이드 ").append(st.optString("android")).append('\n');
+        b.append("마지막 카드 알림 ").append(when(st.optLong("last_card_at"))).append(" · 마지막 등록 ")
+                .append(when(st.optLong("last_registered_at"))).append("\n\n최근 기록:\n");
+        JSONArray j = engine.store.journalAll();
+        for (int i = 0; i < j.length() && i < 50; i++) {
+            JSONObject e = j.optJSONObject(i);
+            if (e != null) b.append(when(e.optLong("t"))).append(" [").append(e.optString("k")).append("] ").append(e.optString("m")).append('\n');
+        }
+        Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, b.toString());
+        startActivity(Intent.createChooser(send, "상태·기록 공유"));
     }
 
     /** MacroDroid 로 받기: 상태, 키(복사), 넣을 값, 설치 단추. */
