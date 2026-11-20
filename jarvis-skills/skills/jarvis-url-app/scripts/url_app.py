@@ -711,6 +711,16 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             receiver += widget_receiver(f"WidgetProviderS{i}", "@string/widget_name" if widget_label else "@string/app_name",
                                         f"urlapp_widget_s{i}_info")
         receiver += """
+        <activity
+            android:name="app.jarvis.urlapp.WidgetSettingsActivity"
+            android:exported="true"
+            android:label="@string/widget_settings"
+            android:excludeFromRecents="true"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
         <service
             android:name="app.jarvis.urlapp.WidgetRefreshJob"
             android:exported="false"
@@ -1147,6 +1157,7 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     <string name="widget_hint">앱을 열고 로그인하면 여기에 요약이 보여요</string>
     <string name="widget_refresh">새로 고침</string>
     <string name="widget_mic">마이크 모드</string>
+    <string name="widget_settings">위젯 꾸미기</string>
 {names}</resources>
 """)
     w("values-en/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
@@ -1155,6 +1166,7 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     <string name="widget_hint">Open the app (and log in) to fill this widget</string>
     <string name="widget_refresh">Refresh</string>
     <string name="widget_mic">Voice mode</string>
+    <string name="widget_settings">Widget style</string>
 </resources>
 """)
     w("drawable/urlapp_widget_refresh.xml", """<?xml version="1.0" encoding="utf-8"?>
@@ -1232,12 +1244,22 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             android:padding="6dp"
             android:src="@drawable/urlapp_widget_mic"
             android:visibility="gone" />""" if mic else ""
+        # 바탕은 따로 그린 그림(w_bg) — 위젯 설정의 투명도를 그 그림의 알파로 (RemoteViews 는 배경 알파를 못 바꾼다)
         w(f"layout/{name}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/w_root"
     android:layout_width="match_parent"
+    android:layout_height="match_parent">
+<ImageView
+    android:id="@+id/w_bg"
+    android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/urlapp_widget_bg"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/urlapp_widget_bg" />
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
     android:orientation="vertical"
     android:paddingStart="{pad}dp"
     android:paddingTop="12dp"
@@ -1281,10 +1303,15 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
         android:textColor="@color/widget_note"
         android:textSize="10sp" />
 </LinearLayout>
+</FrameLayout>
 """)
         tall = n > 4
         cw, ch = size or (3, 3 if tall else 2)
-        min_w, min_h = 70 * cw - 30, 70 * ch - 30  # 안드로이드의 칸 계산 (n칸 = 70n - 30dp)
+        # 기본 크기. 예전 계산(n칸 = 70n-30dp)은 칸이 좁던 시절 값이라, 칸이 넓은 요즘 런처(삼성 4·5열 등)에서는
+        # 4칸 위젯이 3칸에 들어가 '3×2'로 보였다 (2026-11-20 사용자 "4X2 위젯도 만들어줘"). 4·5열 격자 모두에서
+        # 원하는 칸 수가 되도록 고른 값 (안드로이드 12+ 는 targetCell 도 함께 본다).
+        min_w = {1: 40, 2: 130, 3: 210, 4: 300, 5: 380}[cw]
+        min_h = {1: 50, 2: 150, 3: 270, 4: 400}[ch]
         w(f"xml/{info}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_desc"
@@ -1297,6 +1324,8 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="{cw}"
     android:targetCellHeight="{ch}"
+    android:configure="app.jarvis.urlapp.WidgetSettingsActivity"
+    android:widgetFeatures="reconfigurable|configuration_optional"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />
 """)
@@ -2279,6 +2308,15 @@ def cmd_selftest(args):
                   and "app.jarvis.urlapp.WidgetProviderS3" in mfm
                   and cells == {"urlapp_widget_info": ["4", "2"], "urlapp_widget_s2_info": ["3", "2"],
                                 "urlapp_widget_s3_info": ["2", "2"]}, cells)
+            dps = {k: [int(float(x)) for x in re.findall(r"min(?:Width|Height)\(0x[0-9a-f]+\)=([0-9.]+)dp", v)]
+                   for k, v in infos.items()}
+            check("크기별 위젯: 넓은 칸 런처에서도 4×2 가 3칸으로 줄지 않게 (기본 너비 300·210·130dp, 높이 150dp)",
+                  dps == {"urlapp_widget_info": [300, 150], "urlapp_widget_s2_info": [210, 150],
+                          "urlapp_widget_s3_info": [130, 150]}, dps)
+            check("위젯 꾸미기: 길게 눌러 '설정'(다시 설정 가능·놓을 때 안 물음)·투명도용 바탕 그림·설정 화면",
+                  all("app.jarvis.urlapp.WidgetSettingsActivity" in v and re.search(r"widgetFeatures\(0x[0-9a-f]+\)=(\(type 0x11\))?0x0*5\b", v)
+                      for v in infos.values())
+                  and "android.appwidget.action.APPWIDGET_CONFIGURE" in mfm and "id/w_bg" in resm, infos["urlapp_widget_info"][-600:])
             check("크기별 위젯: 줄 수 4·4·3", re.search(r"integer/urlapp_widget_rows\n\s+\(\) 4", resm) is not None
                   and re.search(r"integer/urlapp_widget_s2_rows\n\s+\(\) 4", resm) is not None
                   and re.search(r"integer/urlapp_widget_s3_rows\n\s+\(\) 3", resm) is not None)

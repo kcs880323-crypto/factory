@@ -123,6 +123,23 @@ public class WidgetProvider extends AppWidgetProvider {
         return Math.max(0, config(ctx).optInt("widget_refresh_min", 0));
     }
 
+    /** 위젯 바탕 투명도 (0 = 불투명 ~ 100 = 완전히 투명). 위젯을 길게 눌러 '설정'(WidgetSettingsActivity)에서 바꾼다.
+     *  이 앱의 위젯 모두에 같이 적용된다. */
+    static int transparency(Context ctx) {
+        return Math.max(0, Math.min(100, ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt("bg_transparency", 0)));
+    }
+
+    static void setTransparency(Context ctx, int pct) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putInt("bg_transparency", Math.max(0, Math.min(100, pct))).apply();
+        refresh(ctx);
+    }
+
+    /** 투명도(%) → 바탕 그림의 알파 (0~255). */
+    static int bgAlpha(int transparency) {
+        return Math.round(255f * (100 - Math.max(0, Math.min(100, transparency))) / 100f);
+    }
+
     /** --mic 로 만든 앱이면 위젯에 마이크 단추. */
     static boolean micEnabled(Context ctx) {
         return config(ctx).optBoolean("mic", false);
@@ -256,6 +273,8 @@ public class WidgetProvider extends AppWidgetProvider {
             layout = res.getIdentifier(name, "layout", pkg);
         }
         RemoteViews v = new RemoteViews(pkg, layout);
+        int bg = id(res, pkg, "w_bg"); // 바탕 그림 (투명도)
+        if (bg != 0) v.setInt(bg, "setImageAlpha", bgAlpha(transparency(ctx)));
         // 그 모양에 있는 줄 수 (줄 id 는 모양들이 같이 쓰므로, 모양에 없는 줄을 건드리면 위젯이 깨진다)
         int count = integer(res, pkg, name + "_rows", MAX_ROWS);
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
