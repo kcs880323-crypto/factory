@@ -1,10 +1,10 @@
 {
  "package": "app.jarvis.web.csjhth_ai_studio",
- "version_code": 16,
- "version_name": "1.16",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.csjhth_ai_studio-v16.apk",
- "sha256": "11c1d8f546122ba4c490f2affc3752b6168fa72a238c4ca1b70cce8f41c64764",
+ "version_code": 17,
+ "version_name": "1.17",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.csjhth_ai_studio-v17.apk",
+ "sha256": "1f31eceba7cdd5b9194c627995db0f98364874a83bcca6b92dfac2af3ddfe00c",
  "size": 293018,
- "notes": "업데이트 확인 화면을 줄였어요 (안드로이드 12 이상은 다음부터 바로 설치될 수 있어요)",
- "published_at": "2026-11-20 03:04"
+ "notes": "위젯이 '새로고침 중…'에서 멈추던 문제 수정. 새로 고치는 동안에도 마지막 업데이트 시간을 보여 줘요.",
+ "published_at": "2026-11-20 04:33"
 }
