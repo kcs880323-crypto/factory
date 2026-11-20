@@ -1,0 +1,22 @@
+// 카테고리 베스트(/products/bestcategories/{id})에 쓰는 카테고리 번호.
+export const BEST_CATEGORIES: { id: number; name: string }[] = [
+  { id: 1001, name: '여성패션' },
+  { id: 1002, name: '남성패션' },
+  { id: 1010, name: '뷰티' },
+  { id: 1011, name: '출산/유아동' },
+  { id: 1012, name: '식품' },
+  { id: 1013, name: '주방용품' },
+  { id: 1014, name: '생활용품' },
+  { id: 1015, name: '홈인테리어' },
+  { id: 1016, name: '가전디지털' },
+  { id: 1017, name: '스포츠/레저' },
+  { id: 1018, name: '자동차용품' },
+  { id: 1019, name: '도서/음반/DVD' },
+  { id: 1020, name: '완구/취미' },
+  { id: 1021, name: '문구/오피스' },
+  { id: 1024, name: '헬스/건강식품' },
+  { id: 1025, name: '국내여행' },
+  { id: 1026, name: '해외여행' },
+  { id: 1029, name: '반려동물용품' },
+  { id: 1030, name: '유아동패션' },
+];

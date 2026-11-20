@@ -1,0 +1,20 @@
+{
+  "chip": "꿀벌의 8자 춤",
+  "theme": {"bg": "#120d08", "bg2": "#2a1c0c", "accent": "#FFB81C", "accent2": "#7FD18B", "text": "#FFF4D6"},
+  "scenes": [
+    {"type": "question", "clauses": ["1a", "1b"], "headline": "벌집 속은\n깜깜합니다", "sub": "꿀이 어디 있는지, 어떻게 알려 줄까?", "sub_at": "1b", "symbol": "question"},
+    {"type": "flow", "clauses": ["2a", "2b", "2c"], "nodes": [
+      {"label": "정답은 춤!", "icon": "star", "at": "2a"},
+      {"label": "꿀을 찾은 벌", "note": "벌집으로 돌아온다", "icon": "bee", "at": "2b"},
+      {"label": "8자 춤", "note": "8자 모양으로 춤춘다", "icon": "text:8", "at": "2c"}]},
+    {"type": "points", "clauses": ["3a", "3b", "3c"], "items": [
+      {"text": "가운데 직선 구간에서 몸을 흔든다", "icon": "wave", "at": "3a"},
+      {"text": "그 방향 = 태양 기준 꿀의 방향", "icon": "sun", "at": "3b"},
+      {"text": "벌집 벽의 위쪽 = 태양", "icon": "arrow-up", "at": "3c"}]},
+    {"type": "compare", "clauses": ["4a", "4b"], "axis": "몸을 흔드는 시간",
+     "left": {"title": "짧게 흔들면", "value": 0.25, "label": "꿀이 가까워요", "at": "4a", "label_at": "4b"},
+     "right": {"title": "길게 흔들면", "value": 1.0, "label": "꿀이 멀어요", "at": "4a", "label_at": "4b", "label_dt": 0.6}},
+    {"type": "stat", "clauses": ["5a", "5b"], "name": "카를 폰 프리슈", "name_at": "5a", "name_dt": 0.0, "big": "1973", "big_at": "5b",
+     "label": "노벨 생리의학상 · 공동 수상", "label_at": "5b", "label_dt": 0.9, "recap": "방향은 각도로, 거리는 시간으로", "recap_at": "5b", "recap_dt": 1.7}
+  ]
+}
