@@ -107,6 +107,10 @@ python "$T" selftest   # 자체 시험: 로컬 시험 서버로 실제 APK 3개�
 
 자비스 서버의 **기존 API 만 읽는다** (서버를 고치거나 다시 시작할 필요 없음): `/api/jobs/active`(채팅·실행 작업: 진행 중·끝났는데 안 본 것) → 진행 중인 작업마다 `/api/job/<id>?after=N&wait=0` 의 마지막 `progress`(자비스가 적은 예상 진행률), **`/api/dev/requests`(요청함: PC의 Claude Code 세션이 처리하는 음악·병맛노래·개발 요청 — 작업창의 '지금 하는 일')**, `/api/reels/publish_info`(발행 대기). 위젯: "CHARLES · 진행 중 N"(작업 + 진행 중 요청), 줄 = 내 확인 필요(승인 대기·확인 필요·발행 대기) → 하는 중("62% 예상" / 요청에 진행률이 적혀 있으면 그 값 / "진행 12분") → 대기 중 요청 → 안 본 결과, 없으면 "지금 하는 일 없음". 알림(notify): 승인 대기·확인 필요·발행 대기·요청 끝·끝내지 못함·작업 끝·오류·중단. (2026-11-20: 처음엔 `/api/jobs/active` 만 읽어 작업창의 음악 요청이 위젯에 안 보였다.) GET 만 쓰고 '봤음'으로 바꾸지 않는다. 2026-11-20 사용자: "진행중인 내용이 작업내용 요약이 보였으면".
 
+### 자비스 개발 Claude 와의 연락 창구 (GitHub `app-bridge`)
+
+자비스 앱 일로 자비스 서버 쪽(찰스님 PC 의 Claude Code)과 주고받을 것이 있으면 비공개 저장소 `kcs880323-crypto/jarvis` 의 **`app-bridge` 가지**를 쓴다 (사용자 2026-11-20). 메시지는 `app-bridge/messages/<id>.md` 파일 하나씩, 처리 끝은 `app-bridge/state/<app|server>.json` — 각자 자기 파일만 써서 충돌이 없다. 도구 `app-bridge/bridge.py`(`inbox`·`read`·`send`·`done`·`log`, 파이썬 표준 + git, 키 모양 거절), 시험 `app-bridge/test_bridge.py`(12개). 연락 창구 초안 PR **jarvis#1**(합치지 않음)을 구독해 두면 서버 쪽이 올릴 때 알림이 온다. 앱 쪽은 `--me app`, 서버 쪽은 `--me server`. 앱이 기대는 자비스 API(GET 만)와 앱 안에서 자비스 화면이 쓸 수 있는 것(음성·`urlappMic`/`urlappAsk`·알림)은 그 가지의 `app-bridge/README.md` 표가 기준이다 — 위젯 스크립트를 바꾸면 그 표도 같이 고친다.
+
 ### 마이크·음성 대화 (`--mic`)
 
 앱의 웹 화면(WebView)에는 웹 음성 기능(`SpeechRecognition`·`speechSynthesis`)이 없거나 동작하지 않고 사이트의 마이크 요청(getUserMedia)도 기본으로 거절된다. `--mic` 로 만든 앱은:
