@@ -1,9 +1,13 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
+
+import { ClaudeSection } from '@/src/ui/claudeSettings';
+import { NaverKeysSection, PostVideoSection } from '@/src/ui/naverSettings';
 import { Pressable, Switch, View } from 'react-native';
 
 import { DEFAULT_DISCLOSURE } from '@/src/lib/compose';
-import { HOSTING } from '@/src/lib/hosting';
+import { HOSTING, IS_DESKTOP } from '@/src/lib/hosting';
+import { linksToCsv, siteProblem, skippedText } from '@/src/lib/jarvis';
 import { isValidSubId } from '@/src/lib/links';
 import { clampLimit, DEFAULT_HOURLY_LIMIT } from '@/src/lib/rateGuard';
 import { errorText, useApp } from '@/src/store/AppContext';
@@ -13,7 +17,7 @@ import { useTheme } from '@/src/ui/theme';
 
 export default function Settings() {
   const app = useApp();
-  const { settings, updateSettings, hasKeys, setApiKeys, clearApiKeys, client, links, share, showToast, ask } = app;
+  const { settings, updateSettings, hasKeys, setApiKeys, clearApiKeys, client, links, share, copy, showToast, ask } = app;
   const t = useTheme();
   const [accessKey, setAccessKey] = useState('');
   const [secretKey, setSecretKey] = useState('');
@@ -24,6 +28,8 @@ export default function Settings() {
   const [newChannel, setNewChannel] = useState('');
   const [disclosure, setDisclosure] = useState(settings.disclosure);
   const [limit, setLimit] = useState(String(settings.hourlyLimit));
+  const [siteLabel, setSiteLabel] = useState('');
+  const [siteUrl, setSiteUrl] = useState('');
 
   const saveKeys = async () => {
     if (accessKey.trim().length < 10 || secretKey.trim().length < 10) {
@@ -72,16 +78,25 @@ export default function Settings() {
   };
 
   const exportLinks = () => {
-    if (!links.length) return showToast('보관함이 비어 있어요');
-    const csv = [
-      '이름,링크,가격,채널,메모,저장일',
-      ...links.map((l) =>
-        [l.title, l.url, l.price ?? '', l.subId ?? '', l.memo ?? '', new Date(l.createdAt).toISOString().slice(0, 10)]
-          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-          .join(','),
-      ),
-    ].join('\n');
-    share(csv);
+    const r = linksToCsv(links);
+    if (!r.count) return showToast(`내보낼 링크가 없어요${skippedText(r.skipped)}`);
+    share(r.csv);
+  };
+
+  const sendToJarvis = () => {
+    const r = linksToCsv(links, { onlyPartner: true });
+    if (!r.count) return showToast(`자비스로 보낼 파트너스 링크가 없어요${skippedText(r.skipped)}`);
+    copy(r.csv, `${r.count}개를 복사했어요${skippedText(r.skipped)}. 자비스 🛒 내 제휴 상품 → 📥 파트너스 매니저에서 가져오기에 붙여 넣으세요`);
+  };
+
+  const addSite = async () => {
+    const problem = siteProblem(siteLabel, siteUrl);
+    if (problem) return showToast(problem);
+    const url = siteUrl.trim();
+    if (settings.sites.some((x) => x.url === url)) return showToast('이미 있는 주소예요');
+    await updateSettings({ sites: [...settings.sites, { label: siteLabel.trim(), url }] });
+    setSiteLabel('');
+    setSiteUrl('');
   };
 
   return (
@@ -110,7 +125,9 @@ export default function Settings() {
               {settings.demoMode ? <Badge label="예시 모드 켜짐" tone="demo" /> : null}
             </Row>
             <T v="sub">
-              {HOSTING === 'web'
+              {IS_DESKTOP
+                ? '키는 파트너스 사이트의 파트너스 API 메뉴에서 받아요. PC 설치판에서는 키가 이 앱 전용 브라우저 저장소에만 저장되고, 요청 서명은 앱 화면에서 해요. 이 PC 안의 중계 서버(127.0.0.1)는 서명된 요청을 쿠팡에 전달만 하고 아무것도 저장하지 않아요.'
+                : HOSTING === 'web'
                 ? '키는 파트너스 사이트의 파트너스 API 메뉴에서 받아요. 웹사이트에서는 키가 이 브라우저에 저장돼요 (공용 PC에서는 넣지 마세요). 요청 서명은 브라우저에서 하고, 이 웹사이트의 중계(/api/coupang)는 서명된 요청을 쿠팡에 전달만 해요. Secret Key는 브라우저 밖으로 나가지 않아요.'
                 : '키는 파트너스 사이트의 파트너스 API 메뉴에서 받아요 (사이트 개편에 따라 메뉴 이름은 다를 수 있어요). 키는 이 휴대폰의 보안 저장소에만 저장되고 다른 곳으로 보내지 않아요.'}
             </T>
@@ -147,6 +164,10 @@ export default function Settings() {
           </Card>
         </Section>
       )}
+
+      <ClaudeSection />
+
+      <NaverKeysSection />
 
       <Section title="호출 한도 (계정 보호)">
         <Card>
@@ -211,6 +232,59 @@ export default function Settings() {
           />
         </Card>
       </Section>
+
+      <Section title="내 채널 (쿠팡 파트너스에 등록한 곳)">
+        <Card>
+          <T v="sub">파트너스 가입 때 적은 웹사이트·블로그·SNS 주소예요. 홈에서 바로 열 수 있고, 첫 번째 채널 이름은 인스타 글의 &lsquo;프로필 링크&rsquo; 안내에 들어가요.</T>
+          {settings.sites.length === 0 ? <T v="caption">아직 없어요.</T> : null}
+          {settings.sites.map((x) => (
+            <Row key={x.url} gap={8} style={{ alignItems: 'center' }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T style={{ fontWeight: '600' }}>{x.label}</T>
+                <T v="caption" color="info" numberOfLines={1}>
+                  {x.url}
+                </T>
+              </View>
+              <Button small kind="ghost" icon="open" label="열기" href={x.url} />
+              <Button
+                small
+                kind="danger"
+                icon="trash"
+                label="빼기"
+                onPress={() =>
+                  ask({
+                    title: '채널 빼기',
+                    message: `「${x.label}」을(를) 내 채널 목록에서 뺄까요? (쿠팡 파트너스 등록은 그대로예요)`,
+                    ok: '빼기',
+                    onOk: () => updateSettings({ sites: settings.sites.filter((y) => y.url !== x.url) }),
+                  })
+                }
+              />
+            </Row>
+          ))}
+          <Field value={siteLabel} onChangeText={setSiteLabel} placeholder="이름 (예: 네이버 블로그)" />
+          <Field
+            value={siteUrl}
+            onChangeText={setSiteUrl}
+            placeholder="https://"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            right={<Button label="추가" kind="secondary" onPress={addSite} />}
+          />
+        </Card>
+      </Section>
+
+      <Section title="🤖 자비스와 함께 쓰기">
+        <Card>
+          <T v="sub">1. 아래 버튼으로 보관함의 파트너스 링크를 복사해요 (예시 링크·일반 쿠팡 주소는 빠져요).</T>
+          <T v="sub">2. 자비스 🛒 → 🔗 내 제휴 상품 → 📥 파트너스 매니저에서 가져오기에 붙여 넣어요. 같은 링크는 두 번 들어가지 않아요.</T>
+          <T v="sub">3. 자비스에서 상품마다 🌐 추천 페이지에 올리기, 제품 릴스, 상품 소개 글을 만들 수 있어요 (올리기는 자비스에서 확인한 뒤에만).</T>
+          <Button kind="secondary" icon="share" label={`자비스로 보내기 (CSV 복사)`} onPress={sendToJarvis} />
+        </Card>
+      </Section>
+
+      <PostVideoSection />
 
       <Section title="대가성 문구">
         <Card>

@@ -42,7 +42,8 @@
     "web": "expo start --web",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "build:desktop": "node scripts/build-desktop.mjs"
   },
   "private": true
 }

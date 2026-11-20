@@ -104,6 +104,10 @@ export function useSaveProduct() {
       price: p.productPrice,
       image: p.productImage,
       isRocket: p.isRocket,
+      isFreeShipping: p.isFreeShipping,
+      category: p.categoryName,
+      rank: p.rank,
+      kind: /여행/.test(p.categoryName ?? '') ? 'travel' : 'shop',
       subId: settings.subId || undefined,
       source: mode === 'demo' ? 'demo' : 'api',
     });
@@ -164,7 +168,7 @@ export function ProductCard({ p }: { p: Product }) {
 }
 
 export function LinkCard({ link }: { link: SavedLink }) {
-  const { copy, share, removeLink, ask } = useApp();
+  const { copy, removeLink, ask } = useApp();
   const t = useTheme();
   return (
     <Card style={{ gap: 8 }}>
@@ -182,6 +186,7 @@ export function LinkCard({ link }: { link: SavedLink }) {
             {link.subId ? <Badge label={`채널 ${link.subId}`} tone="accent" /> : null}
             {link.source === 'demo' ? <Badge label="예시" tone="demo" /> : null}
             {link.source === 'manual' ? <Badge label="직접 저장" tone="info" /> : null}
+            {link.source === 'ai' ? <Badge label="AI 검색" tone="accent" /> : null}
             <T v="caption" color={t.faint}>
               {dateTimeText(link.createdAt)}
             </T>
@@ -195,8 +200,9 @@ export function LinkCard({ link }: { link: SavedLink }) {
       </Row>
       <Row style={{ justifyContent: 'space-around' }}>
         <IconButton icon="copy" label="복사" onPress={() => copy(link.url, '링크를 복사했어요')} />
-        <IconButton icon="share" label="공유" onPress={() => share(link.url)} />
-        <IconButton icon="write" label="글 만들기" onPress={() => router.push({ pathname: '/compose', params: { linkId: link.id } })} />
+        <IconButton icon="write" label="짧은 글" onPress={() => router.push({ pathname: '/compose', params: { linkId: link.id } })} />
+        <IconButton icon="article" label="블로그 글" onPress={() => router.push({ pathname: '/post', params: { linkId: link.id } })} />
+        <IconButton icon="movie" label="영상" onPress={() => router.push({ pathname: '/reel', params: { linkId: link.id } })} />
         <IconButton icon="open" label="열기" href={link.url} />
         <IconButton
           icon="trash"

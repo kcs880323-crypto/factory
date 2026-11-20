@@ -108,3 +108,44 @@ export async function deleteKeys(): Promise<void> {
   await secureDelete(ACCESS);
   await secureDelete(SECRET);
 }
+
+// ── 네이버 API 키 (API HUB 쇼핑인사이트 / 개발자센터 쇼핑 검색) ──────────
+const NAVER = {
+  hubId: 'cp_naver_hub_id',
+  hubSecret: 'cp_naver_hub_secret',
+  shopId: 'cp_naver_shop_id',
+  shopSecret: 'cp_naver_shop_secret',
+} as const;
+
+export interface NaverKeySet {
+  hubId?: string;
+  hubSecret?: string;
+  shopId?: string;
+  shopSecret?: string;
+}
+
+export async function loadNaverKeys(): Promise<NaverKeySet> {
+  try {
+    const entries = await Promise.all(Object.entries(NAVER).map(async ([k, store]) => [k, (await secureGet(store)) || undefined] as const));
+    return Object.fromEntries(entries) as NaverKeySet;
+  } catch {
+    return {};
+  }
+}
+
+/** kind 하나(hub 또는 shop)의 두 값을 저장한다. */
+export async function saveNaverKeys(kind: 'hub' | 'shop', id: string, secret: string): Promise<void> {
+  await secureSet(kind === 'hub' ? NAVER.hubId : NAVER.shopId, id.trim());
+  await secureSet(kind === 'hub' ? NAVER.hubSecret : NAVER.shopSecret, secret.trim());
+}
+
+export async function deleteNaverKeys(kind: 'hub' | 'shop' | 'all'): Promise<void> {
+  if (kind !== 'shop') {
+    await secureDelete(NAVER.hubId);
+    await secureDelete(NAVER.hubSecret);
+  }
+  if (kind !== 'hub') {
+    await secureDelete(NAVER.shopId);
+    await secureDelete(NAVER.shopSecret);
+  }
+}

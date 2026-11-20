@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { BEST_CATEGORIES } from '@/src/api/categories';
@@ -63,6 +63,18 @@ export default function Products() {
     [cached, category, keyword, subId, mode],
   );
 
+  // 다른 화면(네이버 추천의 '이달의 말' 등)에서 검색어를 넘겨받으면 그 말로 검색한다.
+  const params = useLocalSearchParams<{ q?: string }>();
+  const handledQ = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const q = typeof params.q === 'string' ? params.q.trim().slice(0, 40) : '';
+    if (!q || handledQ.current === q || mode === 'manual') return;
+    handledQ.current = q;
+    setTab('search');
+    setKeyword(q);
+    load('search', { keyword: q });
+  }, [params.q, mode, load]);
+
   const pick = (next: Tab) => {
     setTab(next);
     if (next !== 'search') load(next);
@@ -76,7 +88,8 @@ export default function Products() {
             ? '쿠팡 파트너스 API 키는 가입 후 일정 활동을 거쳐 승인을 받으면 발급받을 수 있다고 안내돼 있어요. 그 전에는 파트너스 사이트에서 상품을 찾아 링크를 만든 뒤, 링크 탭에 붙여 넣어 쓰세요.'
             : 'Claude 화면은 쿠팡 서버로 요청을 보낼 수 없어요. 파트너스 사이트에서 상품을 찾아 링크를 만든 뒤 링크 탭에 붙여 넣거나, 휴대폰 앱·직접 배포한 웹사이트에서 API 키를 넣어 쓰세요.'}
         </Banner>
-        <Button label="파트너스 사이트에서 상품 찾기" icon="open" href={PARTNERS_SITE} />
+        <Button label="AI로 가장 싼 상품 찾아 저장" icon="sparkle" onPress={() => router.push('/ai-search')} />
+        <Button label="파트너스 사이트에서 상품 찾기" icon="open" kind="secondary" href={PARTNERS_SITE} />
         <Button label="만든 링크 붙여 넣기" icon="paste" kind="secondary" onPress={() => router.push('/links')} />
         {API_AVAILABLE ? <Button label="API 키 넣기" icon="key" kind="ghost" onPress={() => router.push('/settings')} /> : null}
         <Button label="예시 데이터로 화면 둘러보기" icon="eye" kind="ghost" onPress={() => updateSettings({ demoMode: true })} />
@@ -87,6 +100,7 @@ export default function Products() {
   return (
     <Screen refreshing={loading && !!result} onRefresh={() => load(tab, { force: true })}>
       <ModeBanner compact />
+      <Button small kind="secondary" icon="sparkle" label="AI로 가장 싼 상품 찾아 저장" onPress={() => router.push('/ai-search')} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         {TABS.map((x) => (
           <Chip key={x.key} label={x.label} selected={tab === x.key} onPress={() => pick(x.key)} />

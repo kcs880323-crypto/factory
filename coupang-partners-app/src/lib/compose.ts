@@ -20,6 +20,8 @@ export interface ComposeInput {
   memo?: string;
   isRocket?: boolean;
   disclosure?: string;
+  /** 인스타 프로필 링크로 쓰는 내 채널 이름 (예: 찰스의 추천템) */
+  profileLabel?: string;
 }
 
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
@@ -66,7 +68,9 @@ export function composePost(channel: Channel, input: ComposeInput): string {
         price ? `💰 ${price}${rocket ? ` · ${rocket}` : ''} (게시 시점 기준)` : '',
         memo ?? '',
         '',
-        '🔗 구매 링크는 프로필 링크에서 확인하세요',
+        input.profileLabel?.trim()
+          ? `🔗 구매 링크는 프로필 링크(${input.profileLabel.trim()})에서 확인하세요`
+          : '🔗 구매 링크는 프로필 링크에서 확인하세요',
         '',
         hashtagsFrom(title),
       ]
