@@ -6,9 +6,12 @@ package app.jarvis.urlapp;
 // 대화 창의 듣기를 계속 끊던 문제(2026-11-20 '다시 듣기·끝내기가 안 눌린다')를 피한다. 사이트의 마이크 요청도 거절한다.
 // 듣기는 창이 뜨자마자 시작하고(사이트가 뜨는 동안 말해도 된다), 질문은 사이트가 준비되면 보낸다.
 // 바깥을 누르거나 '끝내기', 두 번 조용하거나, 다른 앱으로 가면 닫힌다.
+// '하이 자비스'(HotwordService)로 떴을 때는 화면을 켜고 잠금 화면 위에 뜨되, 잠겨 있으면 잠금 풀기를 먼저 요청한다
+// (잠긴 채로는 자비스에 묻지 않는다 — 일정·메일 같은 개인 정보가 있으므로). 떠 있는 동안은 호출어 듣기가 마이크를 놓는다.
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.KeyguardManager;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
@@ -39,6 +42,8 @@ import java.security.SecureRandom;
 import java.util.Locale;
 
 public class VoiceActivity extends Activity {
+    static final String EXTRA_HOTWORD = "hotword";
+    static volatile long shownAt; // 마지막으로 뜬 때 (호출어 서비스가 창이 실제로 떴는지 확인)
     private static final int REQ_MIC = 51;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final String token = newToken();
@@ -48,13 +53,25 @@ public class VoiceActivity extends Activity {
     private WebView web;
     private Voice voice;
     private VoiceChat chat;
-    private boolean ready, failed, closing;
+    private boolean ready, failed, closing, unlocking;
     private String failWhy = "";
     private String[] pending; // {id, 질문} — 사이트가 준비되기 전에 나온 질문
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        shownAt = android.os.SystemClock.elapsedRealtime();
+        HotwordService.hold("voice", true); // 호출어 듣기가 마이크를 놓는다 (이 창의 음성 인식이 쓰게)
+        boolean fromHotword = getIntent().getBooleanExtra(EXTRA_HOTWORD, false);
+        if (fromHotword) { // 화면이 꺼져 있거나 잠겨 있어도 보이게 (잠금은 아래에서 풀기를 요청)
+            if (Build.VERSION.SDK_INT >= 27) {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+            } else {
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                        | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+            }
+        }
         cfg = NotifyJob.config(this);
         hosts = cfg.optJSONArray("hosts");
         // 상태바·내비게이션 막대까지 투명하게 덮는다 (막대 위에 흰 띠가 생기지 않게)
@@ -111,6 +128,41 @@ public class VoiceActivity extends Activity {
             }
         }, root, accent());
 
+        if (fromHotword) unlockThenStart();
+        else micThenStart();
+    }
+
+    /** 잠긴 폰: 잠금 풀기(지문·PIN)를 먼저. 풀리면 듣기 시작, 취소하면 닫는다. */
+    private void unlockThenStart() {
+        KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        if (km == null || !km.isKeyguardLocked() || Build.VERSION.SDK_INT < 26) {
+            micThenStart();
+            return;
+        }
+        unlocking = true;
+        km.requestDismissKeyguard(this, new KeyguardManager.KeyguardDismissCallback() {
+            @Override
+            public void onDismissSucceeded() {
+                unlocking = false;
+                micThenStart();
+            }
+
+            @Override
+            public void onDismissCancelled() {
+                unlocking = false;
+                close();
+            }
+
+            @Override
+            public void onDismissError() {
+                unlocking = false;
+                close();
+            }
+        });
+    }
+
+    private void micThenStart() {
+        if (closing) return;
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             chat.start();
         } else {
@@ -250,12 +302,13 @@ public class VoiceActivity extends Activity {
     @Override
     protected void onStop() {
         super.onStop();
-        if (!isChangingConfigurations()) close(); // 다른 앱으로 가면 마이크를 놓고 닫는다
+        if (!isChangingConfigurations() && !unlocking) close(); // 다른 앱으로 가면 마이크를 놓고 닫는다 (잠금 푸는 중은 제외)
     }
 
     @Override
     protected void onDestroy() {
         closing = true;
+        HotwordService.hold("voice", false);
         main.removeCallbacksAndMessages(null);
         if (voice != null) voice.destroy();
         if (web != null) {

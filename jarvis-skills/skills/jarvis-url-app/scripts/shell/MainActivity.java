@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
     static final String ACTION_CARDS = "app.jarvis.urlapp.action.CARDS"; // 카드 자동 등록 설정 (그 기능이 있는 앱만)
     static final String ACTION_UPDATE = "app.jarvis.urlapp.action.UPDATE"; // 업데이트 확인 (업데이트 주소가 있는 앱만)
     static final String ACTION_MIC = "app.jarvis.urlapp.action.MIC"; // 마이크 모드 (위젯의 마이크 단추·바로가기, --mic 앱만)
+    static final String ACTION_HOTWORD = "app.jarvis.urlapp.action.HOTWORD"; // '하이 자비스' 설정 (--hotword 앱만)
     static final String ACTION_OPEN = "app.jarvis.urlapp.action.OPEN"; // 알림을 눌렀을 때: extra "path"(같은 사이트 경로)를 연다
     private static final int REQ_FILES = 41;
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -1325,6 +1326,10 @@ public class MainActivity extends Activity {
             startActivity(new Intent(this, VoiceActivity.class));
             return false;
         }
+        if (ACTION_HOTWORD.equals(action) && HotwordService.available(this)) {
+            startActivity(new Intent(this, HotwordActivity.class));
+            return false; // 보던 화면은 그대로 (처음 열 때면 시작 주소를 연다)
+        }
         if (ACTION_UPDATE.equals(action)) {
             AppUpdater.check(this, true);
             return false; // 보던 화면은 그대로 (처음 열 때면 시작 주소를 연다)
@@ -1345,6 +1350,10 @@ public class MainActivity extends Activity {
         super.onResume();
         if (web != null) web.onResume();
         resumed = true;
+        // '하이 자비스': 앱 화면을 보는 동안은 마이크를 놓고(사이트가 스스로 듣는다), 켜 둔 것이면 듣기 서비스를 켠다
+        // (안드로이드 14+ 는 앱이 앞에 있을 때만 마이크 서비스를 켤 수 있다)
+        HotwordService.hold("app", true);
+        HotwordService.appVisible(this);
         maybeLiveReload();
         if (widgetJs != null) {
             WidgetProvider.scheduleAuto(this); // 위젯 자동 새로고침 (켠 앱·위젯이 놓여 있을 때만)
@@ -1400,6 +1409,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         pausedAt = SystemClock.elapsedRealtime();
         resumed = false;
+        HotwordService.hold("app", false);
         if (voice != null && (chat == null || !chat.active())) voice.cancelListening(true); // 위에 대화 창이 떠도 사이트가 마이크를 붙잡지 않게
         if (web != null) web.onPause();
         CookieManager.getInstance().flush(); // 로그인 상태가 바로 저장되게

@@ -40,6 +40,20 @@ SHELL_DIR = HERE / "shell"  # 안드로이드 껍데기 자바 코드 (MainActiv
 DOWNLOAD_JS = HERE / "shell" / "download.js"  # 페이지가 만든 파일(blob:) 받기 도우미. 앱마다 assets 로 들어간다
 NOTIFY_JS = HERE / "shell" / "notify.js"  # --notify: 웹 알림(Notification)을 폰 알림으로 바꾸는 도우미
 SEAL_TOOL = HERE / "UrlAppSeal.java"  # --update-encrypt: 업데이트 파일 암호화 (AES-256-GCM)
+HOTWORD_DIR = HERE / "hotword"  # --hotword: '하이 자비스' 호출어 엔진(VoskEngine)·채움말 (이 앱들에만 따로 들어간다)
+MAVEN = "https://repo1.maven.org/maven2/"
+HOTWORD_LIBS = (  # (Maven 경로, 크기, SHA-256): Vosk 안드로이드(Apache-2.0)와 그것이 쓰는 JNA(Apache-2.0/LGPL 이중)
+    ("com/alphacephei/vosk-android/0.3.75/vosk-android-0.3.75.aar", 13472638,
+     "ab2f8b91ac8051561aa325546b35fed9a68b36b8121bac5c6fb927525c4adfad"),
+    ("net/java/dev/jna/jna/5.18.1/jna-5.18.1.aar", 522677,
+     "7f053e3ec99e14dd71259c82c1c8a02738d64a13c31226b2acc170f3060951e0"),
+)
+HOTWORD_ABIS = ("arm64-v8a", "armeabi-v7a")
+# 폰이 '받기'를 누를 때 받는 음성 모델 (APK 에는 넣지 않는다). 받은 파일은 크기·SHA-256 이 맞을 때만 푼다.
+HOTWORD_MODEL = {"model_url": "https://alphacephei.com/vosk/models/vosk-model-small-ko-0.22.zip",
+                 "model_size": 86914329,
+                 "model_sha256": "eea36124087fed26c59996a4761519458e3bd185e8ea9d9865ad8760c4a1d989",
+                 "model_dir": "vosk-model-small-ko-0.22"}
 SPEECH_JS = HERE / "shell" / "speech.js"  # --mic: 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신하는 도우미
 WIDGET_RUNNER = HERE / "shell" / "widget-runner.js"  # 위젯 스크립트를 감싸 페이지에서 돌리는 실행기
 WIDGET_SLOT = "(/*__WIDGET_FN__*/ null)"
@@ -659,7 +673,7 @@ def android_string(s):
 # ---------------------------------------------------------------- 프로젝트 파일
 
 def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
-                 view_hosts=(), update=False, widget_extra_sizes=0, mic=False, notify=False):
+                 view_hosts=(), update=False, widget_extra_sizes=0, mic=False, notify=False, hotword=False):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -772,6 +786,32 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
     </queries>"""
+    # --hotword: '하이 자비스' 상시 듣기 = 마이크 전경 서비스(늘 '듣는 중' 알림), 부르면 창을 바로 띄우는 '다른 앱 위에 표시'
+    # (사용자가 설정에서 켠다), 폰을 다시 켜거나 업데이트한 뒤 '다시 켜기' 알림, 짧은 진동
+    if hotword:
+        for perm in ("FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE", "SYSTEM_ALERT_WINDOW", "POST_NOTIFICATIONS",
+                     "RECEIVE_BOOT_COMPLETED", "VIBRATE", "USE_FULL_SCREEN_INTENT"):
+            if f'"android.permission.{perm}"' not in card_perm:
+                card_perm += f'\n    <uses-permission android:name="android.permission.{perm}" />'
+        card_parts += """
+        <service
+            android:name="app.jarvis.urlapp.HotwordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+        <activity
+            android:name="app.jarvis.urlapp.HotwordActivity"
+            android:exported="false"
+            android:label="@string/sc_hotword" />
+        <receiver
+            android:name="app.jarvis.urlapp.HotwordService$Boot"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>"""
+    # 호출어 앱의 네이티브 라이브러리(Vosk·JNA)는 설치할 때 풀어 둔다 (APK 안에 압축해 넣으므로)
+    native_attr = '\n        android:extractNativeLibs="true"' if hotword else ""
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{app_id}">
@@ -784,7 +824,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
         android:theme="@style/AppTheme"
         android:allowBackup="false"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="{'true' if cleartext else 'false'}"
+        android:usesCleartextTraffic="{'true' if cleartext else 'false'}"{native_attr}
         android:enableOnBackInvokedCallback="true">
         <activity
             android:name="{SHELL_CLASS}"
@@ -803,7 +843,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
 """
 
 
-def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=False, mic=False):
+def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=False, mic=False, hotword=None):
     def w(rel, text):
         p = res / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -817,6 +857,7 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
     <string name="sc_cards">카드 자동 등록</string>
     <string name="sc_update">업데이트 확인</string>
     <string name="sc_mic">마이크 모드</string>
+    <string name="sc_hotword">{android_string(hotword or "호출어")}</string>
 </resources>
 """)
     w("values-en/strings.xml", """<?xml version="1.0" encoding="utf-8"?>
@@ -826,6 +867,7 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
     <string name="sc_cards">Card auto-entry</string>
     <string name="sc_update">Check for update</string>
     <string name="sc_mic">Voice mode</string>
+    <string name="sc_hotword">Wake word</string>
 </resources>
 """)
     w("values/colors.xml", f"""<?xml version="1.0" encoding="utf-8"?>
@@ -879,17 +921,30 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
             android:targetPackage="{pkg}" android:targetClass="{cls}" />
     </shortcut>
 """
+    # 런처는 바로가기를 4개까지 보여 준다 → 필요한 것부터 (호출어가 있으면 '브라우저에서 열기'가 빠진다)
+    picks = [("mic", "sc_mic", "MIC", mic), ("hotword", "sc_hotword", "HOTWORD", bool(hotword)),
+             ("cards", "sc_cards", "CARDS", cards), ("update", "sc_update", "UPDATE", update),
+             ("home", "sc_home", "HOME", True), ("browser", "sc_browser", "BROWSER", True)]
+    picks = [x for x in picks if x[3]][:4]
+    order = ["mic", "hotword", "home", "browser", "cards", "update"]  # 보이는 순서는 예전과 같게
+    picks.sort(key=lambda x: order.index(x[0]))
     w("xml/shortcuts.xml", '<?xml version="1.0" encoding="utf-8"?>\n'
       '<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">\n'
-      + (shortcut.format(sid="mic", label="sc_mic", action="MIC", pkg=app_id, cls=SHELL_CLASS) if mic else "")
-      + shortcut.format(sid="home", label="sc_home", action="HOME", pkg=app_id, cls=SHELL_CLASS)
-      + shortcut.format(sid="browser", label="sc_browser", action="BROWSER", pkg=app_id, cls=SHELL_CLASS)
-      + (shortcut.format(sid="cards", label="sc_cards", action="CARDS", pkg=app_id, cls=SHELL_CLASS) if cards else "")
-      + (shortcut.format(sid="update", label="sc_update", action="UPDATE", pkg=app_id, cls=SHELL_CLASS) if update else "")
+      + "".join(shortcut.format(sid=sid, label=label, action=action, pkg=app_id, cls=SHELL_CLASS)
+                for sid, label, action, _ in picks)
       + "</shortcuts>\n")
 
 
 # ---------------------------------------------------------------- 빌드
+
+HOTWORD_ICON = """<?xml version="1.0" encoding="utf-8"?>
+<!-- '하이 자비스' 듣는 중 알림의 작은 아이콘 (마이크, Material Icons "mic", Apache-2.0) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M12,14c1.66,0 2.99,-1.34 2.99,-3L15,5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17.3,11c0,3 -2.54,5.1 -5.3,5.1S6.7,14 6.7,11H5c0,3.41 2.72,6.23 6,6.72V21h2v-3.28c3.28,-0.48 6,-3.3 6,-6.72h-1.7z" />
+</vector>
+"""
 
 NOTIFY_ICON = """<?xml version="1.0" encoding="utf-8"?>
 <!-- 앱 알림의 작은 아이콘 (종 모양, Material Icons "notifications", Apache-2.0) -->
@@ -1256,6 +1311,113 @@ def shell_dex(home, tc, javac, java, workdir):
     return dex
 
 
+def fetch_verified(url, dest, size, sha256):
+    """주소에서 받아 크기·SHA-256 을 확인한다 (이미 맞는 파일이 있으면 그대로)."""
+    if dest.is_file() and dest.stat().st_size == size and file_hashes(dest)[1] == sha256:
+        return dest
+    say(f"  받는 중: {url} ({size / 1e6:.1f}MB)")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(".part")
+    req = urllib.request.Request(url, headers={"User-Agent": "JarvisUrlApp/1.0"})
+    got = 0
+    with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
+        while True:
+            chunk = resp.read(1 << 20)
+            if not chunk:
+                break
+            got += len(chunk)
+            if got > size:
+                break
+            f.write(chunk)
+    if got != size or file_hashes(tmp)[1] != sha256:
+        tmp.unlink(missing_ok=True)
+        raise Fail(f"받은 파일이 예상과 다릅니다 (크기·SHA-256): {url}")
+    tmp.replace(dest)
+    return dest
+
+
+def hotword_libs(home):
+    """--hotword: Vosk·JNA (Maven Central, 고정한 SHA-256) → 자바 묶음(jar)들과 ABI 별 네이티브 라이브러리(.so)."""
+    deps = home / "deps"
+    jars, libs = [], {abi: [] for abi in HOTWORD_ABIS}
+    for path, size, sha in HOTWORD_LIBS:
+        name = path.rsplit("/", 1)[-1]
+        aar = fetch_verified(MAVEN + path, deps / name, size, sha)
+        out = deps / (name[:-4] + "-" + sha[:12])
+        if not (out / "classes.jar").is_file():
+            tmp = deps / (out.name + ".tmp")
+            shutil.rmtree(tmp, ignore_errors=True)
+            tmp.mkdir(parents=True)
+            with zipfile.ZipFile(aar) as z:
+                for n in z.namelist():
+                    if n == "classes.jar" or re.fullmatch(r"jni/[a-z0-9_-]+/lib[a-z0-9_]+\.so", n):
+                        (tmp / n).parent.mkdir(parents=True, exist_ok=True)
+                        (tmp / n).write_bytes(z.read(n))
+            shutil.rmtree(out, ignore_errors=True)
+            tmp.replace(out)
+        jars.append(out / "classes.jar")
+        for abi in HOTWORD_ABIS:
+            libs[abi] += sorted((out / "jni" / abi).glob("*.so"))
+    for abi, files in libs.items():
+        names = {f.name for f in files}
+        if not {"libvosk.so", "libjnidispatch.so"} <= names:
+            raise Fail(f"호출어 라이브러리에 {abi} 용 파일이 없습니다: {sorted(names)}")
+    return jars, libs
+
+
+def hotword_dex(home, tc, javac, java, workdir, jars):
+    """호출어 엔진(VoskEngine) + Vosk + JNA → classes2.dex (껍데기 classes.dex 와 따로, 이 앱들에만)."""
+    p = tool_paths(tc)
+    sources = sorted(HOTWORD_DIR.glob("*.java"))
+    iface = SHELL_DIR / "HotwordEngine.java"
+    key = hashlib.sha256(b"".join(f.read_bytes() for f in sources + [iface]) + TOOLCHAIN_ID.encode()
+                         + "".join(sha for _, _, sha in HOTWORD_LIBS).encode()).hexdigest()[:16]
+    cache = home / "cache" / f"hotword-{key}"
+    dex = cache / "classes2.dex"
+    if dex.is_file():
+        return dex
+    classes = workdir / "hw-classes"
+    classes.mkdir()
+    boot = os.pathsep.join([str(p["android_jar"]), str(p["lambda_stubs"])])
+    run([javac, "-source", "8", "-target", "8", "-Xlint:-options", "-encoding", "UTF-8", "-bootclasspath", boot,
+         "-cp", os.pathsep.join(str(j) for j in jars), "-d", classes, *sources, iface],
+        workdir, "호출어 엔진 컴파일(javac)")
+    engine = sorted(f for f in classes.rglob("*.class") if f.name.startswith("VoskEngine"))
+    if not engine:
+        raise Fail("호출어 엔진 클래스가 만들어지지 않았습니다.")
+    out = workdir / "hw-dex"
+    out.mkdir()
+    run([java, "-cp", p["d8"], "com.android.tools.r8.D8", "--release", "--min-api", str(MIN_SDK),
+         "--lib", p["android_jar"], "--classpath", classes, "--output", out, *engine, *jars],
+        workdir, "호출어 dex 변환(d8)")
+    made = sorted(out.glob("*.dex"))
+    if [f.name for f in made] != ["classes.dex"]:
+        raise Fail(f"호출어 dex 가 예상과 다릅니다: {[f.name for f in made]}")
+    cache.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(made[0], dex)
+    return dex
+
+
+def hotword_phrases(name, given):
+    """호출어 문장: --hotword-phrase 로 준 것, 없으면 앱 이름이 한글 한 낱말일 때 '하이·헤이·안녕 <이름>'."""
+    out = []
+    for g in given or []:
+        for part in str(g).split(","):
+            t = re.sub(r"[\s.!?~]+", " ", part).strip()
+            if t and t not in out:
+                out.append(t)
+    if not out:
+        if not re.fullmatch(r"[가-힣]{2,6}", name or ""):
+            raise Fail("호출어 문장을 정할 수 없습니다: 앱 이름이 한글 한 낱말이 아니면 --hotword-phrase \"하이 OO\" 를 주세요.")
+        out = [f"하이 {name}", f"헤이 {name}", f"안녕 {name}"]
+    for t in out:
+        if not re.fullmatch(r"[가-힣]{1,6}( [가-힣]{1,6}){1,2}", t):
+            raise Fail(f"호출어 문장은 한글 낱말 2~3개여야 합니다 (예: '하이 자비스'): {t}")
+    if len(out) > 5:
+        raise Fail("호출어 문장은 5개까지입니다.")
+    return out
+
+
 def check_alignment(apk):
     """압축하지 않은 항목이 4바이트 경계에 있는지 (안드로이드 11+ 설치 조건). 문제 있는 이름 목록."""
     bad = []
@@ -1312,10 +1474,10 @@ def save_registry(home, reg):
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style", "mic", "widget_sizes", "notify",
-                 "update_encrypt")
+                 "update_encrypt", "hotword", "hotword_phrase")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto", "mic": False, "notify": False,
-            "update_encrypt": False}
+            "update_encrypt": False, "hotword": False, "hotword_phrase": []}
 
 
 def cmd_build(args):
@@ -1394,6 +1556,13 @@ def cmd_build(args):
 
         widget_sizes = parse_widget_sizes(opt["widget_sizes"]) if widget_js else []
 
+        # '하이 자비스' 호출어 (--hotword): 위젯 마이크와 같은 대화 창을 쓰므로 --mic 가 필요하다
+        hotword = None
+        if opt["hotword"]:
+            if not opt["mic"]:
+                raise Fail("--hotword 는 --mic 와 같이 씁니다 (부르면 마이크 대화 창이 뜬다).")
+            hotword = dict(HOTWORD_MODEL, phrases=hotword_phrases(name, opt["hotword_phrase"]))
+
         # 앱 안 업데이트: 새 버전 정보 파일 주소 (https). 'none' 이면 뺀다.
         update_url = opt["update_url"] if opt["update_url"] and opt["update_url"] != "none" else None
         if update_url and not re.fullmatch(r"https://[A-Za-z0-9.-]+/[^\s?#]+\.json", update_url):
@@ -1455,7 +1624,10 @@ def cmd_build(args):
         if icon_info["used"] == "letter":
             icon_from = "글자 아이콘" + (" (그림이 64px 보다 작거나 읽을 수 없는 형식이라)" if src else "")
         write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"], cards=bool(cards_cfg), update=bool(update_url),
-                        mic=bool(opt["mic"]))
+                        mic=bool(opt["mic"]), hotword=hotword["phrases"][0] if hotword else None)
+        if hotword:
+            (res / "drawable").mkdir(exist_ok=True)
+            (res / "drawable" / "urlapp_hotword.xml").write_text(HOTWORD_ICON, encoding="utf-8")
         if cards_cfg:
             (res / "drawable").mkdir(exist_ok=True)
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
@@ -1479,6 +1651,8 @@ def cmd_build(args):
                "desktop": bool(opt["desktop"]),
                "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"],
                "live": bool(opt["live"]), "mic": bool(opt["mic"]), "notify": bool(opt["notify"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
+        if hotword:
+            cfg["hotword"] = hotword
         if update_url:
             cfg["update_url"] = update_url
             if opt["update_encrypt"]:  # 업데이트 파일을 푸는 열쇠 (이 컴퓨터와 앱 안에만)
@@ -1495,6 +1669,8 @@ def cmd_build(args):
             shutil.copyfile(SPEECH_JS, assets / "urlapp-speech.js")
         if opt["notify"]:
             shutil.copyfile(NOTIFY_JS, assets / "urlapp-notify.js")
+        if hotword:
+            shutil.copyfile(HOTWORD_DIR / "fillers-ko.txt", assets / "hotword-fillers.txt")
         if cards_cfg:
             (assets / "urlapp-cards.json").write_text(json.dumps(cards_cfg, ensure_ascii=False, indent=1),
                                                       encoding="utf-8")
@@ -1505,7 +1681,8 @@ def cmd_build(args):
                                                                   widget_alt=bool(widget_js and widget_alt_label),
                                                                   view_hosts=cfg["hosts"], update=bool(update_url),
                                                                   widget_extra_sizes=max(0, len(widget_sizes) - 1),
-                                                                  mic=bool(opt["mic"]), notify=bool(opt["notify"])),
+                                                                  mic=bool(opt["mic"]), notify=bool(opt["notify"]),
+                                                                  hotword=bool(hotword)),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1516,8 +1693,16 @@ def cmd_build(args):
              "--version-code", str(version_code), "--version-name", version_name, workdir / "res.zip"],
             workdir, "앱 묶기(aapt2 link)")
         dex = shell_dex(home, tc, javac, java, workdir)
+        extra = []  # (APK 안 이름, 파일)
+        if hotword:
+            jars, libs = hotword_libs(home)
+            extra.append(("classes2.dex", hotword_dex(home, tc, javac, java, workdir, jars)))
+            for abi, files in libs.items():
+                extra += [(f"lib/{abi}/{f.name}", f) for f in files]
         with zipfile.ZipFile(unsigned, "a", compression=zipfile.ZIP_DEFLATED) as z:
             z.write(dex, "classes.dex")
+            for arc, f in extra:
+                z.write(f, arc)
 
         out_dir = Path(args.out).expanduser() if args.out else home / "apk"
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1571,6 +1756,9 @@ def cmd_build(args):
     if update_url:
         say(f"  앱 안 업데이트: {update_url}" + (" (암호화: 열쇠는 ~/.jarvis-url-app/update-keys/ 와 앱 안에만)"
                                               if opt["update_encrypt"] else ""))
+    if hotword:
+        say(f"  호출어: ‘{hotword['phrases'][0]}’ 등 {len(hotword['phrases'])}개 (앱 아이콘 길게 누르기 → 설정에서 켠다. "
+            f"음성 모델 약 {hotword['model_size'] // 1_000_000}MB 는 폰이 그때 받는다. 소리는 폰 안에서만, 화면이 켜져 있을 때 듣는 것이 기본)")
     if opt["mic"]:
         say("  마이크·음성 대화: 있음 (마이크 권한은 처음 쓸 때 묻는다. 웹 음성 기능 → 폰의 음성 인식·읽어 주기, "
             "마이크 모드 = 사이트의 urlappMic 또는 urlappAsk)")
@@ -2044,6 +2232,66 @@ def cmd_selftest(args):
             check("작업 예약: 네트워크 상태 권한이 늘 있고, 예약은 모두 Jobs.safe 로 (앱이 꺼지지 않게)",
                   'android.permission.ACCESS_NETWORK_STATE' in mf_nomic and "android.permission.ACCESS_NETWORK_STATE" in mfm
                   and not raw, raw)
+            # --hotword: '하이 자비스' 호출어 — 엔진은 classes2.dex 로 따로, Vosk·JNA 네이티브 라이브러리, 마이크 전경 서비스
+            check("호출어 문장: 기본은 앱 이름으로, 쉼표·여러 번, 형식이 틀리면 거부",
+                  hotword_phrases("자비스", []) == ["하이 자비스", "헤이 자비스", "안녕 자비스"]
+                  and hotword_phrases("x", ["헤이 찰스, 안녕 찰스!", "헤이 찰스"]) == ["헤이 찰스", "안녕 찰스"]
+                  and raises(lambda: hotword_phrases("Jarvis", [])) and raises(lambda: hotword_phrases("자비스", ["자비스"]))
+                  and raises(lambda: hotword_phrases("자비스", ["hey jarvis"])))
+            check("--hotword 는 --mic 없이 거부", raises(lambda: build(base + "/hw0", "--no-fetch", "--name", "자비스", "--hotword")))
+            for f in (home / "deps").glob("*.aar"):  # 이미 받아 둔 라이브러리는 다시 받지 않는다 (SHA-256 은 다시 확인)
+                (tmp_home / "deps").mkdir(exist_ok=True)
+                shutil.copyfile(f, tmp_home / "deps" / f.name)
+            build(base + "/hw", "--no-fetch", "--name", "자비스", "--mic", "--hotword",
+                  "--update-url", "https://raw.githubusercontent.com/o/r/app-releases/x.json")
+            rech = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/hw"))
+            mfh = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rech["apk"]], tmp_home, "xmltree")
+            resh = run([tp["aapt2"], "dump", "resources", rech["apk"]], tmp_home, "resources")
+            bh = badging(tp["aapt2"], rech["apk"], tmp_home)
+            bh_raw = run([tp["aapt2"], "dump", "badging", rech["apk"]], tmp_home, "badging")
+            with zipfile.ZipFile(rech["apk"]) as z:
+                names_h = z.namelist()
+                cfgh = json.loads(z.read("assets/urlapp.json"))
+                dex1, dex2 = z.read("classes.dex"), z.read("classes2.dex") if "classes2.dex" in names_h else b""
+                fill_h = z.read("assets/hotword-fillers.txt").decode("utf-8") if "assets/hotword-fillers.txt" in names_h else ""
+            sch = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/shortcuts.xml", rech["apk"]], tmp_home, "xmltree")
+            check("호출어: 엔진·Vosk·JNA 는 classes2.dex 에만, 껍데기(classes.dex)에는 서비스만",
+                  b"Lorg/vosk/Model;" in dex2 and b"Lapp/jarvis/urlapp/VoskEngine;" in dex2 and b"Lcom/sun/jna/Native;" in dex2
+                  and b"Lorg/vosk/Model;" not in dex1 and b"Lapp/jarvis/urlapp/HotwordService;" in dex1
+                  and b"Lapp/jarvis/urlapp/HotwordService;" not in dex2.replace(b"Lapp/jarvis/urlapp/HotwordEngine;", b""))
+            libs_h = sorted(n for n in names_h if n.startswith("lib/"))
+            check("호출어: 64·32비트 ARM 의 libvosk·libjnidispatch 만 (x86 은 뺌), 설치 때 풀기",
+                  libs_h == ["lib/arm64-v8a/libjnidispatch.so", "lib/arm64-v8a/libvosk.so",
+                             "lib/armeabi-v7a/libjnidispatch.so", "lib/armeabi-v7a/libvosk.so"]
+                  and re.search(r"extractNativeLibs\(0x[0-9a-f]+\)=(true|\(type 0x12\)0xffffffff)", mfh) is not None
+                  and "native-code: 'arm64-v8a' 'armeabi-v7a'" in bh_raw, libs_h)
+            hs = mfh[mfh.rfind("E: service", 0, mfh.find("app.jarvis.urlapp.HotwordService\"")):]
+            hs = hs[:hs.find("E: ", 5) if hs.find("E: ", 5) > 0 else len(hs)]  # 그 서비스 요소의 속성들만
+            check("호출어: 마이크 전경 서비스(앱 안에서만)·설정 화면·재부팅/업데이트 알림 받기",
+                  re.search(r"foregroundServiceType\(0x[0-9a-f]+\)=(\(type 0x11\))?0x0*80\b", hs) is not None
+                  and re.search(r"exported\(0x[0-9a-f]+\)=(false|\(type 0x12\)0x0)", hs) is not None
+                  and "app.jarvis.urlapp.HotwordActivity" in mfh and "app.jarvis.urlapp.HotwordService$Boot" in mfh
+                  and "android.intent.action.BOOT_COMPLETED" in mfh and "android.intent.action.MY_PACKAGE_REPLACED" in mfh, hs[:600])
+            perms_h = bh["permissions"]
+            check("호출어: 권한 (전경 서비스·마이크 유형·다른 앱 위에 표시·알림 한 번·진동·재부팅)",
+                  all(f"android.permission.{x}" in perms_h for x in ("FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE",
+                      "SYSTEM_ALERT_WINDOW", "POST_NOTIFICATIONS", "VIBRATE", "RECEIVE_BOOT_COMPLETED", "RECORD_AUDIO"))
+                  and perms_h.count("android.permission.POST_NOTIFICATIONS") == 1, perms_h)
+            hw_cfg = cfgh.get("hotword") or {}
+            check("호출어: 설정(모델 주소·크기·SHA-256·문장)·채움말·알림 아이콘·바로가기 이름",
+                  hw_cfg.get("phrases") == ["하이 자비스", "헤이 자비스", "안녕 자비스"]
+                  and hw_cfg.get("model_sha256") == HOTWORD_MODEL["model_sha256"] and hw_cfg.get("model_url", "").startswith("https://")
+                  and len([l for l in fill_h.splitlines() if l and not l.startswith("#")]) > 4000
+                  and "drawable/urlapp_hotword" in resh and re.search(r"string/sc_hotword\n\s+\(\) \"?하이 자비스", resh) is not None,
+                  hw_cfg)
+            acts = re.findall(r"action\.([A-Z]+)\" \(Raw", sch)
+            check("호출어: 바로가기 4개 (마이크·호출어·처음 화면·업데이트 — 브라우저는 빠짐)",
+                  acts == ["MIC", "HOTWORD", "HOME", "UPDATE"], acts)
+            with zipfile.ZipFile(recm["apk"]) as z:
+                names_nh = z.namelist()
+            check("--hotword 없는 앱에는 엔진·라이브러리·서비스·권한 없음", "classes2.dex" not in names_nh
+                  and not any(n.startswith("lib/") for n in names_nh) and "HotwordService" not in mfm
+                  and "FOREGROUND_SERVICE" not in mfm and "SYSTEM_ALERT_WINDOW" not in mfm)
             # --notify + --update-encrypt: 앱 알림, 암호화한 앱 안 업데이트
             check("--update-encrypt 는 --update-url 없이 거부",
                   raises(lambda: build(base + "/enc0", "--no-fetch", "--update-encrypt")))
@@ -2228,6 +2476,11 @@ def build_parser():
                    help="업데이트 파일을 암호화해서 올린다 (주소를 숨겨야 하는 앱. 열쇠는 이 컴퓨터와 앱 안에만)")
     b.add_argument("--mic", action=argparse.BooleanOptionalAction, default=None,
                    help="마이크·음성 대화: 마이크 권한, 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신, 위젯·바로가기의 '마이크 모드'")
+    b.add_argument("--hotword", action=argparse.BooleanOptionalAction, default=None,
+                   help="'하이 자비스'처럼 부르면 대화 창이 뜨는 호출어 (--mic 필요). 폰 안에서만 듣는 오프라인 모델(Vosk 한국어, "
+                        "약 87MB)은 폰이 설정 화면에서 받는다. 늘 '듣는 중' 알림이 보인다")
+    b.add_argument("--hotword-phrase", dest="hotword_phrase", action="append", default=[],
+                   help="호출어 문장 (여러 번 또는 쉼표로, 한글 낱말 2~3개. 기본: 앱 이름으로 '하이·헤이·안녕 <이름>')")
     b.add_argument("--widget-sizes", dest="widget_sizes",
                    help="위젯을 크기별로 따로 (예: 4x2,3x2,2x2 — 최대 3개, 첫 크기가 기본 위젯) | none")
     b.add_argument("--live", action=argparse.BooleanOptionalAction, default=None,

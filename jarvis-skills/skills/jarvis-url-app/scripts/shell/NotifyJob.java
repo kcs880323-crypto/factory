@@ -78,6 +78,7 @@ public class NotifyJob extends JobService {
         Context app = getApplicationContext();
         new Thread(() -> {
             check(app);
+            HotwordService.remind(app, false); // 켜 둔 '하이 자비스'가 꺼져 있으면 '다시 켜기' 알림 (6시간에 한 번)
             // 위젯 스크립트가 있는 앱은 그 스크립트도 돌린다 (보이지 않는 웹 화면, 45초 안에 끝남): 위젯을 새로 고치고,
             // 스크립트가 돌려준 notify 도 알림으로 띄운다 — 화면이 꺼져 있어도 15분마다.
             android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
