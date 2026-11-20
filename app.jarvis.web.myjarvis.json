@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 16,
- "version_name": "1.16",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v16.bin",
- "sha256": "34200894b4c1237074a6332fcd9c54d376887a563d164f19347bdf6ee8612afe",
- "size": 588565,
- "notes": "위젯 투명도 조절(위젯을 길게 눌러 '설정'), 4×2 위젯이 3×2로 보이던 것 고침",
- "published_at": "2026-11-20 09:05",
+ "version_code": 17,
+ "version_name": "1.17",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v17.bin",
+ "sha256": "5b14b3a2224b93ec62e2822c309debd0d3eb475156f8b83e3ae815d0facb2476",
+ "size": 592817,
+ "notes": "4×1 위젯(가로 한 줄) 추가",
+ "published_at": "2026-11-20 09:10",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "1a6d3c72ddf39bce47374253a057e82c47803e5d9e87d0a85abe084046dad362"
+ "apk_sha256": "25efc16c5ddc06abc965ed7cbc6626f856d23097f9440709ab41f85f27bb8f0e"
 }
