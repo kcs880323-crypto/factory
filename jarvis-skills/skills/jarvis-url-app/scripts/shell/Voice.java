@@ -33,6 +33,17 @@ final class Voice {
     private final Context ctx;
     private final Handler main = new Handler(Looper.getMainLooper());
 
+    /** 듣는 동안의 소리 크기(dB) — 대화 창의 구슬이 목소리에 맞춰 움직이게. 사이트 쪽(speech.js)으로는 보내지 않는다. */
+    interface Level {
+        void on(float rmsDb);
+    }
+
+    private Level level;
+
+    void setLevelListener(Level l) {
+        level = l;
+    }
+
     // 듣기: 한 번에 하나
     private SpeechRecognizer sr;
     private Object session; // 지금 듣는 회차 (끝난 회차의 늦은 알림은 버린다)
@@ -101,6 +112,8 @@ final class Voice {
 
             @Override
             public void onRmsChanged(float v) {
+                Level l = level;
+                if (l != null && mine()) l.on(v);
             }
 
             @Override

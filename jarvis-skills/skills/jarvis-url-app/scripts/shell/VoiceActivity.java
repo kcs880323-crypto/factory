@@ -57,6 +57,14 @@ public class VoiceActivity extends Activity {
         super.onCreate(state);
         cfg = NotifyJob.config(this);
         hosts = cfg.optJSONArray("hosts");
+        // 상태바·내비게이션 막대까지 투명하게 덮는다 (막대 위에 흰 띠가 생기지 않게)
+        if (Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
+        if (Build.VERSION.SDK_INT >= 29) {
+            getWindow().setNavigationBarContrastEnforced(false);
+            getWindow().setStatusBarContrastEnforced(false);
+        }
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
         root = new FrameLayout(this);
         root.setBackgroundColor(Color.argb(120, 0, 0, 0));
         // 화면 끝까지 그리는 기기(안드로이드 15+)에서 대화 판이 내비게이션 막대 밑에 깔리지 않게
