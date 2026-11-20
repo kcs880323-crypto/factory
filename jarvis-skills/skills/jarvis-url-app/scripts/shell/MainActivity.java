@@ -4,6 +4,7 @@ package app.jarvis.urlapp;
 // 안드로이드 기본 API 만 쓴다 (androidx 등 외부 라이브러리 없음). 앱마다 다른 값은 모두
 // assets/urlapp.json 에서 읽으므로 이 코드는 한 번만 컴파일해 모든 앱이 같이 쓴다.
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
@@ -12,6 +13,7 @@ import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
@@ -34,6 +36,7 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.MimeTypeMap;
+import android.webkit.PermissionRequest;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
@@ -76,6 +79,7 @@ public class MainActivity extends Activity {
     static final String ACTION_BROWSER = "app.jarvis.urlapp.action.BROWSER";
     static final String ACTION_CARDS = "app.jarvis.urlapp.action.CARDS"; // 카드 자동 등록 설정 (그 기능이 있는 앱만)
     static final String ACTION_UPDATE = "app.jarvis.urlapp.action.UPDATE"; // 업데이트 확인 (업데이트 주소가 있는 앱만)
+    static final String ACTION_MIC = "app.jarvis.urlapp.action.MIC"; // 마이크 모드 (위젯의 마이크 단추·바로가기, --mic 앱만)
     private static final int REQ_FILES = 41;
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT;
 
@@ -107,6 +111,17 @@ public class MainActivity extends Activity {
     private final String dlToken = newToken();
     private String downloadJs;
     private String widgetJs; // 위젯이 있는 앱만 (assets/urlapp-widget.js)
+
+    // 음성 (--mic 로 만든 앱만): 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신하는 도우미(assets/urlapp-speech.js),
+    // 사이트의 getUserMedia 마이크 허락, 마이크 모드(사이트의 urlappMic 또는 앱이 직접 하는 대화 VoiceChat + urlappAsk).
+    private static final int REQ_MIC = 41;
+    private String speechJs;
+    private Voice voice;
+    private VoiceChat chat;
+    private boolean pageReady;  // 자기 사이트 페이지를 다 읽었다
+    private boolean micPending; // 마이크 단추로 열렸다: 페이지가 뜨면 음성 대화를 시작한다
+    private boolean micAsking;
+    private final ArrayList<Runnable[]> micWaiters = new ArrayList<>(); // {허락되면, 거절되면}
     private final HashMap<String, PendingFile> pendingFiles = new HashMap<>();
 
     @Override
@@ -345,6 +360,8 @@ public class MainActivity extends Activity {
         downloadJs = readAssetOrNull("urlapp-download.js");
         widgetJs = readAssetOrNull("urlapp-widget.js");
         if (downloadJs != null || widgetJs != null) web.addJavascriptInterface(new Bridge(), "UrlAppBridge");
+        speechJs = readAssetOrNull("urlapp-speech.js");
+        if (speechJs != null) web.addJavascriptInterface(new SpeechBridge(), "UrlAppSpeech");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -355,6 +372,12 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView v, String url, Bitmap favicon) {
                 mainFrameError = false;
+                pageReady = false;
+            }
+
+            @Override
+            public void onPageCommitVisible(WebView v, String url) {
+                injectSpeech(url); // 음성 도우미는 되도록 일찍 (사이트가 음성 기능을 찾기 전에)
             }
 
             @Override
@@ -362,6 +385,8 @@ public class MainActivity extends Activity {
                 if (!mainFrameError && errorView != null) errorView.setVisibility(View.GONE);
                 injectHelpers(url);
                 updateBackHandling();
+                pageReady = !mainFrameError && url != null && isOwnHost(Uri.parse(url).getHost());
+                if (pageReady && micPending) startMicMode();
             }
 
             @Override
@@ -411,6 +436,11 @@ public class MainActivity extends Activity {
             @Override
             public void onHideCustomView() {
                 exitCustomView();
+            }
+
+            @Override
+            public void onPermissionRequest(PermissionRequest r) {
+                runOnUiThread(() -> webPermission(r));
             }
         });
 
@@ -706,6 +736,162 @@ public class MainActivity extends Activity {
         String token = JSONObject.quote(dlToken);
         if (downloadJs != null) web.evaluateJavascript(downloadJs.replace("\"__URLAPP_TOKEN__\"", token), null);
         if (widgetJs != null) web.evaluateJavascript(widgetJs.replace("\"__URLAPP_TOKEN__\"", token), null);
+        injectSpeech(url);
+    }
+
+    private void injectSpeech(String url) {
+        if (speechJs == null || url == null || web == null || !isOwnHost(Uri.parse(url).getHost())) return;
+        web.evaluateJavascript(speechJs.replace("\"__URLAPP_TOKEN__\"", JSONObject.quote(dlToken)), null);
+    }
+
+    // ---------- 음성 (--mic) ----------
+
+    private Voice voice() {
+        if (voice == null) voice = new Voice(getApplicationContext());
+        return voice;
+    }
+
+    private VoiceChat chat() {
+        if (chat == null) {
+            chat = new VoiceChat(this, voice(), new VoiceChat.Host() {
+                @Override
+                public void ask(String id, String question) {
+                    askSite(id, question);
+                }
+
+                @Override
+                public void keepAwake(boolean on) {
+                    if (cfg.optBoolean("keep_awake", false)) return;
+                    if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                }
+            }, content, accentColor());
+        }
+        return chat;
+    }
+
+    /** 마이크 권한이 있으면 바로, 없으면 한 번 묻고 결과에 따라. */
+    private void withMic(Runnable granted, Runnable denied) {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            granted.run();
+            return;
+        }
+        micWaiters.add(new Runnable[] {granted, denied});
+        if (!micAsking) {
+            micAsking = true;
+            requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
+        super.onRequestPermissionsResult(code, perms, results);
+        if (code != REQ_MIC) return;
+        micAsking = false;
+        boolean ok = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+        ArrayList<Runnable[]> w = new ArrayList<>(micWaiters);
+        micWaiters.clear();
+        for (Runnable[] r : w) (ok ? r[0] : r[1]).run();
+    }
+
+    /** 사이트의 getUserMedia 마이크 요청: 이 앱이 --mic 이고 자기 사이트(https)일 때만 소리만 허락한다. */
+    private void webPermission(PermissionRequest r) {
+        boolean audio = false;
+        for (String res : r.getResources()) audio |= PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(res);
+        Uri o = r.getOrigin();
+        if (speechJs == null || !audio || o == null || !"https".equalsIgnoreCase(o.getScheme()) || !isOwnHost(o.getHost())) {
+            r.deny();
+            return;
+        }
+        withMic(() -> r.grant(new String[] {PermissionRequest.RESOURCE_AUDIO_CAPTURE}), r::deny);
+    }
+
+    /** 마이크 모드: 사이트의 urlappMic(사이트가 직접 하는 음성 모드)이 먼저, 없으면 urlappAsk 로 앱이 직접 대화. */
+    private void startMicMode() {
+        micPending = false;
+        withMic(() -> probeVoice(0), () -> toast(t(
+                "마이크 권한이 없어 음성 대화를 할 수 없어요. 설정 → 앱 → 이 앱 → 권한에서 마이크를 켜 주세요.",
+                "Microphone permission is needed for voice mode.")));
+    }
+
+    private void probeVoice(int attempt) {
+        if (web == null) return;
+        String u = web.getUrl();
+        if (u == null || !isOwnHost(Uri.parse(u).getHost())) return;
+        web.evaluateJavascript("(function(){return typeof window.urlappMic==='function'?'mic':"
+                + "(typeof window.urlappAsk==='function'?'ask':'none');})()", v -> {
+            String kind = v == null ? "" : v.replace("\"", "");
+            if ("mic".equals(kind)) {
+                web.evaluateJavascript("try{window.urlappMic();}catch(e){}", null);
+            } else if ("ask".equals(kind)) {
+                chat().start();
+            } else if (attempt < 16) { // 사이트가 아직 준비 중일 수 있다 (약 5초 기다림)
+                web.postDelayed(() -> probeVoice(attempt + 1), 300);
+            } else {
+                toast(t("이 사이트에는 아직 음성 대화 기능이 없어요 (urlappMic 또는 urlappAsk).",
+                        "This site has no voice mode yet (urlappMic or urlappAsk)."));
+            }
+        });
+    }
+
+    /** VoiceChat 의 질문을 사이트의 urlappAsk 에 넘긴다. 답(글, 또는 {text})은 통로의 answer 로 돌아온다. */
+    private void askSite(String id, String question) {
+        if (web == null) return;
+        String js = "(function(q,id,tok){Promise.resolve().then(function(){return window.urlappAsk(q);})"
+                + ".then(function(r){var s=r&&typeof r==='object'?(r.text||r.reply||r.answer||''):(r==null?'':r);"
+                + "UrlAppSpeech.answer(tok,id,String(s).slice(0,20000),true);},"
+                + "function(){UrlAppSpeech.answer(tok,id,'',false);});})("
+                + JSONObject.quote(question) + "," + JSONObject.quote(id) + "," + JSONObject.quote(dlToken) + ")";
+        web.evaluateJavascript(js, null);
+    }
+
+    /** 안드로이드 음성 결과를 음성 도우미(speech.js)에 넘긴다 (자기 사이트 페이지일 때만). */
+    private void sendSpeech(JSONObject ev) {
+        if (web == null) return;
+        String u = web.getUrl();
+        if (u == null || !isOwnHost(Uri.parse(u).getHost())) return;
+        web.evaluateJavascript("window.__urlappSpeechEvent&&window.__urlappSpeechEvent(" + ev + ")", null);
+    }
+
+    /** 음성 도우미(speech.js)만 부르는 통로. 모든 호출에 토큰이 맞아야 한다. */
+    private final class SpeechBridge {
+        @JavascriptInterface
+        public void listen(String token, String lang, boolean partial) {
+            if (!dlToken.equals(token)) return;
+            runOnUiThread(() -> withMic(() -> voice().listen(lang, partial, MainActivity.this::sendSpeech), () -> {
+                sendSpeech(Voice.ev("error").put2("error", "not-allowed"));
+                sendSpeech(Voice.ev("end"));
+            }));
+        }
+
+        @JavascriptInterface
+        public void stop(String token) {
+            if (dlToken.equals(token)) runOnUiThread(() -> voice().stopListening());
+        }
+
+        @JavascriptInterface
+        public void abort(String token) {
+            if (dlToken.equals(token)) runOnUiThread(() -> voice().cancelListening(true));
+        }
+
+        @JavascriptInterface
+        public void speak(String token, String id, String text, String lang, double rate, double pitch) {
+            if (!dlToken.equals(token) || id == null || id.length() > 40) return;
+            runOnUiThread(() -> voice().speak(id, text, lang, (float) rate, (float) pitch, MainActivity.this::sendSpeech));
+        }
+
+        @JavascriptInterface
+        public void cancelSpeak(String token) {
+            if (dlToken.equals(token)) runOnUiThread(() -> voice().stopSpeaking());
+        }
+
+        @JavascriptInterface
+        public void answer(String token, String id, String text, boolean ok) {
+            if (!dlToken.equals(token)) return;
+            runOnUiThread(() -> {
+                if (chat != null) chat.answer(id, text == null ? "" : text, ok);
+            });
+        }
     }
 
     private static final Pattern DISPOSITION_NAME = Pattern.compile(
@@ -1033,6 +1219,11 @@ public class MainActivity extends Activity {
             startActivity(new Intent(this, CardSettingsActivity.class));
             return true;
         }
+        if (ACTION_MIC.equals(action) && speechJs != null) {
+            micPending = true;
+            if (pageReady) startMicMode(); // 이미 열려 있던 앱이면 바로 (처음 열 때는 페이지가 뜬 뒤)
+            return false;
+        }
         if (ACTION_UPDATE.equals(action)) {
             AppUpdater.check(this, true);
             return false; // 보던 화면은 그대로 (처음 열 때면 시작 주소를 연다)
@@ -1114,7 +1305,19 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        // 앱을 떠나면 마이크·읽어 주기를 놓는다 (권한 묻는 창은 onPause 만 부르므로 여기서)
+        if (chat != null) chat.stop();
+        if (voice != null) {
+            voice.cancelListening(true);
+            voice.stopSpeaking();
+        }
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
+        if (voice != null) voice.destroy();
         if (fileCallback != null) {
             fileCallback.onReceiveValue(null);
             fileCallback = null;

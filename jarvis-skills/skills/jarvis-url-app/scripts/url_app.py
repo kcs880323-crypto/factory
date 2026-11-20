@@ -37,6 +37,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SHELL_DIR = HERE / "shell"  # 안드로이드 껍데기 자바 코드 (MainActivity, WidgetProvider)
 DOWNLOAD_JS = HERE / "shell" / "download.js"  # 페이지가 만든 파일(blob:) 받기 도우미. 앱마다 assets 로 들어간다
+SPEECH_JS = HERE / "shell" / "speech.js"  # --mic: 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신하는 도우미
 WIDGET_RUNNER = HERE / "shell" / "widget-runner.js"  # 위젯 스크립트를 감싸 페이지에서 돌리는 실행기
 WIDGET_SLOT = "(/*__WIDGET_FN__*/ null)"
 WIDGET_ROWS_SLOT = "/*__WIDGET_ROWS__*/4"
@@ -655,7 +656,7 @@ def android_string(s):
 # ---------------------------------------------------------------- 프로젝트 파일
 
 def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
-                 view_hosts=(), update=False):
+                 view_hosts=(), update=False, widget_extra_sizes=0, mic=False):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -688,6 +689,9 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
         receiver = widget_receiver("WidgetProvider", "@string/widget_name" if widget_label else "@string/app_name")
         if widget_alt:
             receiver += widget_receiver("WidgetProviderAlt", "@string/widget_alt_name", "urlapp_widget_alt_info")
+        for i in range(2, 2 + min(widget_extra_sizes, 2)):  # 같은 내용의 다른 크기 (위젯 목록에 크기별로)
+            receiver += widget_receiver(f"WidgetProviderS{i}", "@string/widget_name" if widget_label else "@string/app_name",
+                                        f"urlapp_widget_s{i}_info")
         receiver += """
         <service
             android:name="app.jarvis.urlapp.WidgetRefreshJob"
@@ -732,10 +736,23 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
         <receiver
             android:name="app.jarvis.urlapp.UpdateReceiver"
             android:exported="false" />"""
+    # --mic: 마이크 권한(앱이 처음 쓸 때 묻는다)과 폰의 음성 인식·읽어 주기 서비스를 찾는 허락 (안드로이드 11+)
+    queries = ""
+    if mic:
+        card_perm += '\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
+        queries = """
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>"""
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{app_id}">
-    <uses-permission android:name="android.permission.INTERNET" />{card_perm}
+    <uses-permission android:name="android.permission.INTERNET" />{card_perm}{queries}
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
@@ -762,7 +779,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
 """
 
 
-def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=False):
+def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=False, mic=False):
     def w(rel, text):
         p = res / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -775,6 +792,7 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
     <string name="sc_browser">브라우저에서 열기</string>
     <string name="sc_cards">카드 자동 등록</string>
     <string name="sc_update">업데이트 확인</string>
+    <string name="sc_mic">마이크 모드</string>
 </resources>
 """)
     w("values-en/strings.xml", """<?xml version="1.0" encoding="utf-8"?>
@@ -783,6 +801,7 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
     <string name="sc_browser">Open in browser</string>
     <string name="sc_cards">Card auto-entry</string>
     <string name="sc_update">Check for update</string>
+    <string name="sc_mic">Voice mode</string>
 </resources>
 """)
     w("values/colors.xml", f"""<?xml version="1.0" encoding="utf-8"?>
@@ -831,6 +850,7 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
 """
     w("xml/shortcuts.xml", '<?xml version="1.0" encoding="utf-8"?>\n'
       '<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">\n'
+      + (shortcut.format(sid="mic", label="sc_mic", action="MIC", pkg=app_id, cls=SHELL_CLASS) if mic else "")
       + shortcut.format(sid="home", label="sc_home", action="HOME", pkg=app_id, cls=SHELL_CLASS)
       + shortcut.format(sid="browser", label="sc_browser", action="BROWSER", pkg=app_id, cls=SHELL_CLASS)
       + (shortcut.format(sid="cards", label="sc_cards", action="CARDS", pkg=app_id, cls=SHELL_CLASS) if cards else "")
@@ -879,6 +899,33 @@ def mix(hex_color, other, t):
     return "#%02X%02X%02X" % tuple(round(x + (y - x) * t) for x, y in zip(a, b))
 
 
+def parse_widget_sizes(text):
+    """--widget-sizes "4x2,3x2,2x2" → [(4, 2), (3, 2), (2, 2)] (가로 2~5칸, 세로 1~4칸, 1~3개, 겹치지 않게)."""
+    if not text or text == "none":
+        return []
+    out = []
+    for part in re.split(r"[,\s]+", str(text).strip().lower()):
+        if not part:
+            continue
+        m = re.fullmatch(r"([2-5])[x×*]([1-4])", part)
+        if not m:
+            raise Fail(f"--widget-sizes 는 4x2,3x2,2x2 처럼 가로x세로 칸 수입니다 (가로 2~5, 세로 1~4): {part}")
+        size = (int(m.group(1)), int(m.group(2)))
+        if size in out:
+            raise Fail(f"--widget-sizes 에 같은 크기가 두 번 있습니다: {part}")
+        out.append(size)
+    if not 1 <= len(out) <= 3:
+        raise Fail("--widget-sizes 는 1~3개입니다.")
+    return out
+
+
+def size_rows(size, rows):
+    """그 크기에 들어가는 줄 수: 세로 한 칸에 약 2줄, 가로 2칸이면 1줄 덜 (제목·아래 줄 자리)."""
+    w, h = size
+    fit = max(1, h * 2 - (1 if w <= 2 else 0))
+    return max(1, min(rows, fit))
+
+
 def widget_rows(script_text, alt=False):
     """위젯 스크립트가 "// urlapp:rows N" 으로 정한 줄 수 (기본 4, 1~8).
     alt=True: 두 번째 위젯의 줄 수 "// urlapp:alt-rows N" (없으면 첫 위젯과 같다)."""
@@ -913,11 +960,14 @@ def widget_labels(script_text):
     return out["label"], out["alt-label"]
 
 
-def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_rows=None, dark_bg=None):
+def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_rows=None, dark_bg=None,
+                           sizes=(), mic=False):
     """홈 화면 위젯의 모양 (RemoteViews 로 그릴 수 있는 LinearLayout·TextView·ImageView 만 쓴다).
     dark_bg 가 있으면(--widget-style dark) 기기의 밝은/어두운 모드와 상관없이 그 바탕색의 어두운 위젯으로 만든다.
     rows: 줄 수. 4줄이 넘으면 처음 크기를 세 칸 높이로 한다 (이미 놓인 위젯은 사용자가 늘린다).
-    alt_label 이 있으면 두 번째 위젯의 모양(urlapp_widget_alt, 줄 수 alt_rows)과 크기 정보도 따로 만든다."""
+    alt_label 이 있으면 두 번째 위젯의 모양(urlapp_widget_alt, 줄 수 alt_rows)과 크기 정보도 따로 만든다.
+    sizes 가 있으면 첫 크기는 첫 위젯, 두·세 번째 크기는 같은 내용의 위젯(urlapp_widget_s2·_s3)으로 크기별로 만든다.
+    mic 이면 제목 줄에 마이크 단추(w_mic: 앱을 열고 음성 대화)를 둔다."""
     def w(rel, text):
         f = res / rel
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -945,6 +995,7 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     <string name="widget_desc">앱의 요약을 홈 화면에 보여 줍니다</string>
     <string name="widget_hint">앱을 열고 로그인하면 여기에 요약이 보여요</string>
     <string name="widget_refresh">새로 고침</string>
+    <string name="widget_mic">마이크 모드</string>
 {names}</resources>
 """)
     w("values-en/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
@@ -952,6 +1003,7 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     <string name="widget_desc">Shows the app\\'s summary on the home screen</string>
     <string name="widget_hint">Open the app (and log in) to fill this widget</string>
     <string name="widget_refresh">Refresh</string>
+    <string name="widget_mic">Voice mode</string>
 </resources>
 """)
     w("drawable/urlapp_widget_refresh.xml", """<?xml version="1.0" encoding="utf-8"?>
@@ -961,13 +1013,29 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
         android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z" />
 </vector>
 """)
+    if mic:
+        # 마이크 단추: 강조색 동그라미 + 마이크 (Material Icons "mic", Apache-2.0)
+        w("drawable/urlapp_widget_mic_bg.xml", """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <solid android:color="@color/widget_accent" />
+</shape>
+""")
+        w("drawable/urlapp_widget_mic.xml", """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp" android:height="20dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@color/widget_bg"
+        android:pathData="M12,14c1.66,0 2.99,-1.34 2.99,-3L15,5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17.3,11c0,3 -2.54,5.1 -5.3,5.1S6.7,14 6.7,11L5,11c0,3.41 2.72,6.23 6,6.72L11,21h2v-3.28c3.28,-0.48 6,-3.3 6,-6.72h-1.7z" />
+</vector>
+""")
     w("drawable/urlapp_widget_bg.xml", """<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="@color/widget_bg" />
     <corners android:radius="22dp" />
 </shape>
 """)
-    def layout(n, name, info):
+    def layout(n, name, info, size=None):
+        compact = bool(size and size[0] <= 2)  # 가로 2칸: 글자를 줄이고 앱 아이콘을 뺀다
+        label_sp, value_sp, pad = (12, 14, 12) if compact else (13, 16, 16)
         rows_xml = "".join(f"""
     <LinearLayout
         android:id="@+id/w_row{i}"
@@ -985,16 +1053,34 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             android:ellipsize="end"
             android:maxLines="1"
             android:textColor="@color/widget_label"
-            android:textSize="13sp" />
+            android:textSize="{label_sp}sp" />
         <TextView
             android:id="@+id/w_value{i}"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
             android:maxLines="1"
             android:textColor="@color/widget_value"
-            android:textSize="16sp"
+            android:textSize="{value_sp}sp"
             android:textStyle="bold" />
     </LinearLayout>""" for i in range(1, n + 1))
+        icon_xml = "" if compact else """
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:importantForAccessibility="no"
+            android:src="@mipmap/ic_launcher" />"""
+        mic_xml = """
+        <ImageView
+            android:id="@+id/w_mic"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="4dp"
+            android:background="@drawable/urlapp_widget_mic_bg"
+            android:contentDescription="@string/widget_mic"
+            android:padding="6dp"
+            android:src="@drawable/urlapp_widget_mic"
+            android:visibility="gone" />""" if mic else ""
         w(f"layout/{name}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/w_root"
@@ -1002,9 +1088,9 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     android:layout_height="match_parent"
     android:background="@drawable/urlapp_widget_bg"
     android:orientation="vertical"
-    android:paddingStart="16dp"
+    android:paddingStart="{pad}dp"
     android:paddingTop="12dp"
-    android:paddingEnd="16dp"
+    android:paddingEnd="{pad - 4 if mic else pad}dp"
     android:paddingBottom="10dp">
     <LinearLayout
         android:layout_width="match_parent"
@@ -1012,22 +1098,18 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
         android:layout_marginBottom="4dp"
         android:gravity="center_vertical"
         android:orientation="horizontal">
-        <ImageView
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:importantForAccessibility="no"
-            android:src="@mipmap/ic_launcher" />
+{icon_xml}
         <TextView
             android:id="@+id/w_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="{0 if compact else 8}dp"
             android:layout_weight="1"
             android:ellipsize="end"
             android:maxLines="1"
             android:text="@string/app_name"
             android:textColor="@color/widget_title"
-            android:textSize="14sp"
+            android:textSize="{13 if compact else 14}sp"
             android:textStyle="bold" />
         <ImageView
             android:id="@+id/w_refresh"
@@ -1036,7 +1118,7 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             android:padding="5dp"
             android:contentDescription="@string/widget_refresh"
             android:src="@drawable/urlapp_widget_refresh"
-            android:visibility="gone" />
+            android:visibility="gone" />{mic_xml}
     </LinearLayout>{rows_xml}
     <TextView
         android:id="@+id/w_note"
@@ -1050,24 +1132,31 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
 </LinearLayout>
 """)
         tall = n > 4
+        cw, ch = size or (3, 3 if tall else 2)
+        min_w, min_h = 70 * cw - 30, 70 * ch - 30  # 안드로이드의 칸 계산 (n칸 = 70n - 30dp)
         w(f"xml/{info}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_desc"
     android:initialLayout="@layout/{name}"
-    android:minWidth="180dp"
-    android:minHeight="{170 if tall else 110}dp"
-    android:minResizeWidth="140dp"
-    android:minResizeHeight="{130 if tall else 90}dp"
+    android:minWidth="{min_w}dp"
+    android:minHeight="{min_h}dp"
+    android:minResizeWidth="{min(110, min_w)}dp"
+    android:minResizeHeight="{min(130 if tall else 90, min_h)}dp"
     android:previewLayout="@layout/{name}"
     android:resizeMode="horizontal|vertical"
-    android:targetCellWidth="3"
-    android:targetCellHeight="{3 if tall else 2}"
+    android:targetCellWidth="{cw}"
+    android:targetCellHeight="{ch}"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />
 """)
 
-    layout(rows, "urlapp_widget", "urlapp_widget_info")
-    counts = f'    <integer name="urlapp_widget_rows">{rows}</integer>\n'
+    main_rows = size_rows(sizes[0], rows) if sizes else rows
+    layout(main_rows, "urlapp_widget", "urlapp_widget_info", sizes[0] if sizes else None)
+    counts = f'    <integer name="urlapp_widget_rows">{main_rows}</integer>\n'
+    for i, size in enumerate(sizes[1:3], start=2):  # 같은 내용, 다른 크기
+        n_i = size_rows(size, rows)
+        layout(n_i, f"urlapp_widget_s{i}", f"urlapp_widget_s{i}_info", size)
+        counts += f'    <integer name="urlapp_widget_s{i}_rows">{n_i}</integer>\n'
     if alt_label:
         alt_n = alt_rows or rows
         layout(alt_n, "urlapp_widget_alt", "urlapp_widget_alt_info")
@@ -1182,9 +1271,9 @@ def save_registry(home, reg):
 
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
-                 "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style")
+                 "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style", "mic", "widget_sizes")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
-            "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto"}
+            "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto", "mic": False}
 
 
 def cmd_build(args):
@@ -1261,6 +1350,8 @@ def cmd_build(args):
             widget_refresh = widget_refresh_min(widget_text)
             widget_label, widget_alt_label = widget_labels(widget_text)
 
+        widget_sizes = parse_widget_sizes(opt["widget_sizes"]) if widget_js else []
+
         # 앱 안 업데이트: 새 버전 정보 파일 주소 (https). 'none' 이면 뺀다.
         update_url = opt["update_url"] if opt["update_url"] and opt["update_url"] != "none" else None
         if update_url and not re.fullmatch(r"https://[A-Za-z0-9.-]+/[^\s?#]+\.json", update_url):
@@ -1321,7 +1412,8 @@ def cmd_build(args):
         icon_info = json.loads(icon_out.strip().splitlines()[-1])
         if icon_info["used"] == "letter":
             icon_from = "글자 아이콘" + (" (그림이 64px 보다 작거나 읽을 수 없는 형식이라)" if src else "")
-        write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"], cards=bool(cards_cfg), update=bool(update_url))
+        write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"], cards=bool(cards_cfg), update=bool(update_url),
+                        mic=bool(opt["mic"]))
         if cards_cfg:
             (res / "drawable").mkdir(exist_ok=True)
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
@@ -1331,7 +1423,7 @@ def cmd_build(args):
             if opt["widget_style"] == "dark":  # 바탕색이 어두우면 그 색, 밝으면 기본 어두운 색
                 dark_bg = bg if is_dark(bg) else "#0F172A"
             write_widget_resources(res, widget_accent, widget_n, widget_label, widget_alt_label,
-                                   widget_rows(widget_text, alt=True), dark_bg)
+                                   widget_rows(widget_text, alt=True), dark_bg, widget_sizes, bool(opt["mic"]))
 
         # 설정과 매니페스트
         version_code = int(prev.get("version_code", 0)) + 1
@@ -1341,7 +1433,7 @@ def cmd_build(args):
                "theme_color_dark": None if opt["color"] else site["theme_dark"],
                "desktop": bool(opt["desktop"]),
                "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"],
-               "live": bool(opt["live"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
+               "live": bool(opt["live"]), "mic": bool(opt["mic"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
         if update_url:
             cfg["update_url"] = update_url
         assets = workdir / "assets"
@@ -1350,6 +1442,8 @@ def cmd_build(args):
         shutil.copyfile(DOWNLOAD_JS, assets / "urlapp-download.js")
         if widget_js:
             (assets / "urlapp-widget.js").write_text(widget_js, encoding="utf-8")
+        if opt["mic"]:
+            shutil.copyfile(SPEECH_JS, assets / "urlapp-speech.js")
         if cards_cfg:
             (assets / "urlapp-cards.json").write_text(json.dumps(cards_cfg, ensure_ascii=False, indent=1),
                                                       encoding="utf-8")
@@ -1358,7 +1452,9 @@ def cmd_build(args):
                                                                   cards_via if cards_cfg else None,
                                                                   widget_label=bool(widget_js and widget_label),
                                                                   widget_alt=bool(widget_js and widget_alt_label),
-                                                                  view_hosts=cfg["hosts"], update=bool(update_url)),
+                                                                  view_hosts=cfg["hosts"], update=bool(update_url),
+                                                                  widget_extra_sizes=max(0, len(widget_sizes) - 1),
+                                                                  mic=bool(opt["mic"])),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1412,9 +1508,16 @@ def cmd_build(args):
         say(f"  카드 결제 자동 등록: 있음 (담당자 {', '.join(cards_cfg['owners'])}; {how}). 앱이 처음 열릴 때 설정을 묻는다")
     if widget_js:
         kinds = (f" 2종: '{widget_label or name}', '{widget_alt_label}'" if widget_alt_label else "")
+        if widget_sizes:
+            kinds += " 크기별: " + ", ".join(f"{w}×{h}" for w, h in widget_sizes)
         if widget_refresh:
             kinds += f", 새로고침 단추 + 화면이 켜져 있을 때 {widget_refresh}분마다 자동 새로고침"
+        if opt["mic"]:
+            kinds += ", 마이크 단추(음성 대화)"
         say(f"  홈 화면 위젯: 있음{kinds} (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
+    if opt["mic"]:
+        say("  마이크·음성 대화: 있음 (마이크 권한은 처음 쓸 때 묻는다. 웹 음성 기능 → 폰의 음성 인식·읽어 주기, "
+            "마이크 모드 = 사이트의 urlappMic 또는 urlappAsk)")
     say(f"  다른 사이트 링크: {'브라우저로' if opt['external'] == 'browser' else '앱 안에서'} | 앱 안에서 여는 사이트: "
         + ", ".join(cfg["hosts"]))
     say("설치: 이 APK 를 태블릿·폰으로 옮겨 파일을 누르고 '출처를 알 수 없는 앱 설치'를 그 앱(파일 관리자 등)에만 허용한다."
@@ -1797,6 +1900,43 @@ def cmd_selftest(args):
             bgs = re.findall(r"color/widget_bg\n((?:\s+\(.*\) #[0-9a-f]+\n)+)", resd)
             vals = re.findall(r"#[0-9a-f]+", bgs[0]) if bgs else []  # 같은 값이면 aapt2 가 하나로 합친다
             check("--widget-style dark: 밝은/어두운 모드 모두 앱 바탕색 위젯", vals and set(vals) == {"#ff021a20"}, bgs[:1])
+            # --mic + --widget-sizes: 크기별 위젯 3종(같은 내용)·마이크 단추·마이크 권한·음성 도우미·'마이크 모드' 바로가기
+            check("위젯 크기 형식이 틀리면 거부", raises(lambda: parse_widget_sizes("4x2,9x9"))
+                  and raises(lambda: parse_widget_sizes("4x2,4x2")) and raises(lambda: parse_widget_sizes("4x2,3x2,2x2,2x1"))
+                  and parse_widget_sizes("4x2, 3×2 2x2") == [(4, 2), (3, 2), (2, 2)])
+            check("크기별 줄 수 (2칸 높이: 4줄, 가로 2칸이면 3줄)", size_rows((4, 2), 4) == 4 and size_rows((2, 2), 4) == 3
+                  and size_rows((3, 1), 4) == 2 and size_rows((4, 4), 6) == 6)
+            build(base + "/micw", "--no-fetch", "--widget", str(wjs), "--mic", "--widget-sizes", "4x2,3x2,2x2")
+            recm = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/micw"))
+            mfm = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", recm["apk"]], tmp_home, "xmltree")
+            resm = run([tp["aapt2"], "dump", "resources", recm["apk"]], tmp_home, "resources")
+            with zipfile.ZipFile(recm["apk"]) as z:
+                names_m = z.namelist()
+                cfgm = json.loads(z.read("assets/urlapp.json"))
+                scm = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/shortcuts.xml", recm["apk"]], tmp_home, "xmltree")
+                infos = {}
+                for k in ("urlapp_widget_info", "urlapp_widget_s2_info", "urlapp_widget_s3_info"):
+                    f = next((n for n in names_m if n.startswith("res/") and n.endswith(".xml")
+                              and re.search(r"/" + k + r"\.xml$", n)), None)
+                    infos[k] = run([tp["aapt2"], "dump", "xmltree", "--file", f, recm["apk"]], tmp_home, "xmltree") if f else ""
+            cells = {k: re.findall(r"targetCell(?:Width|Height)\(0x[0-9a-f]+\)=(\d+)", v) for k, v in infos.items()}
+            check("크기별 위젯: 4×2·3×2·2×2 세 가지가 위젯 목록에 따로", "app.jarvis.urlapp.WidgetProviderS2" in mfm
+                  and "app.jarvis.urlapp.WidgetProviderS3" in mfm
+                  and cells == {"urlapp_widget_info": ["4", "2"], "urlapp_widget_s2_info": ["3", "2"],
+                                "urlapp_widget_s3_info": ["2", "2"]}, cells)
+            check("크기별 위젯: 줄 수 4·4·3", re.search(r"integer/urlapp_widget_rows\n\s+\(\) 4", resm) is not None
+                  and re.search(r"integer/urlapp_widget_s2_rows\n\s+\(\) 4", resm) is not None
+                  and re.search(r"integer/urlapp_widget_s3_rows\n\s+\(\) 3", resm) is not None)
+            check("마이크: 권한·음성 서비스 찾기·도우미·설정·위젯 단추·바로가기", "android.permission.RECORD_AUDIO" in mfm
+                  and "android.speech.RecognitionService" in mfm and "android.intent.action.TTS_SERVICE" in mfm
+                  and "assets/urlapp-speech.js" in names_m and cfgm.get("mic") is True and "id/w_mic" in resm
+                  and "drawable/urlapp_widget_mic" in resm and "action.MIC" in scm)
+            sp_js = zipfile.ZipFile(recm["apk"]).read("assets/urlapp-speech.js").decode("utf-8")
+            check("마이크: 음성 도우미에 토큰 자리", sp_js.count('"__URLAPP_TOKEN__"') == 1 and "UrlAppSpeech" in sp_js)
+            mf_nomic = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", recd["apk"]], tmp_home, "xmltree")
+            check("--mic 없는 앱에는 마이크 권한·도우미·크기별 위젯 없음", "RECORD_AUDIO" not in mf_nomic
+                  and "urlapp-speech.js" not in str(zipfile.ZipFile(recd["apk"]).namelist())
+                  and "WidgetProviderS2" not in mf_nomic and json.loads(zipfile.ZipFile(recd["apk"]).read("assets/urlapp.json")).get("mic") is False)
             # --live: 캐시 없이 늘 새로 받기 (기억되고, --no-live 로 끈다)
             build(base + "/live", "--no-fetch", "--live")
             build(base + "/live", "--no-fetch")
@@ -1942,6 +2082,10 @@ def build_parser():
                    help="앱을 보는 동안 화면 꺼짐 방지")
     b.add_argument("--widget-style", dest="widget_style", choices=["auto", "dark"],
                    help="위젯 색: auto(기본, 기기의 밝은/어두운 모드를 따름) | dark(늘 어둡게, 앱 바탕색이 어두우면 그 색)")
+    b.add_argument("--mic", action=argparse.BooleanOptionalAction, default=None,
+                   help="마이크·음성 대화: 마이크 권한, 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신, 위젯·바로가기의 '마이크 모드'")
+    b.add_argument("--widget-sizes", dest="widget_sizes",
+                   help="위젯을 크기별로 따로 (예: 4x2,3x2,2x2 — 최대 3개, 첫 크기가 기본 위젯) | none")
     b.add_argument("--live", action=argparse.BooleanOptionalAction, default=None,
                    help="사이트를 자주 고치는 앱: 저장(캐시) 없이 늘 서버에서 새로 받고, 30분 넘게 나가 있다 돌아오면 새로 고침")
     b.add_argument("--dark", choices=["auto", "darken"],

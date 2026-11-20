@@ -4,7 +4,7 @@ package app.jarvis.urlapp;
 // 위젯 스크립트에 "// urlapp:alt-label 이름" 이 있을 때만 매니페스트에 들어가고, 위젯 목록에서 그 이름으로 따로 고른다.
 public class WidgetProviderAlt extends WidgetProvider {
     @Override
-    boolean alt() {
-        return true;
+    String kind() {
+        return "alt";
     }
 }

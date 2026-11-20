@@ -42,16 +42,22 @@ public class WidgetProvider extends AppWidgetProvider {
     static final String ACTION_REDRAW = "app.jarvis.urlapp.action.WIDGET_REDRAW";   // 새로고침 시작 70초 뒤 다시 그리기
     static final long REFRESH_TIMEOUT_MS = 45_000;   // 이 안에 반드시 끝낸다 (방송 수신 제한 60초보다 짧게)
     static final long REFRESHING_SHOW_MS = 70_000;   // "새로고침 중…"을 보이는 최대 시간
-    private static int refreshMin = -1; // 설정의 widget_refresh_min (0 = 단추·자동 새로고침 없음)
+    private static JSONObject cfg; // assets/urlapp.json (widget_refresh_min: 0 = 단추·자동 새로고침 없음, mic)
 
-    /** 두 번째 위젯(WidgetProviderAlt)이면 true: 저장한 값의 "alt" 를 그린다. */
-    boolean alt() {
-        return false;
+    /** 위젯 종류: "" 첫 위젯, "alt" 두 번째 위젯(저장한 값의 "alt" 를 그린다),
+     *  "s2"·"s3" 첫 위젯과 같은 값을 다른 크기로 (--widget-sizes 의 두·세 번째 크기). 모양 이름은 urlapp_widget[_종류]. */
+    String kind() {
+        return "";
     }
+
+    /** 이 앱에 들어 있을 수 있는 위젯 종류 (매니페스트에 없는 것은 놓인 것이 없다). */
+    private static final Class<?>[] KINDS = {WidgetProvider.class, WidgetProviderAlt.class, WidgetProviderS2.class,
+            WidgetProviderS3.class};
+    private static final String[] KIND_NAMES = {"", "alt", "s2", "s3"};
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
-        mgr.updateAppWidget(ids, build(ctx, alt()));
+        mgr.updateAppWidget(ids, build(ctx, kind()));
         scheduleAuto(ctx); // 폰을 다시 켠 뒤에도 (시스템이 위젯마다 onUpdate 를 부른다)
     }
 
@@ -98,21 +104,28 @@ public class WidgetProvider extends AppWidgetProvider {
         }
     }
 
-    /** 설정의 widget_refresh_min (분). 없으면 0. */
-    static int refreshMinutes(Context ctx) {
-        if (refreshMin >= 0) return refreshMin;
-        int m = 0;
+    private static JSONObject config(Context ctx) {
+        if (cfg != null) return cfg;
         try (InputStream in = ctx.getAssets().open("urlapp.json")) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buf = new byte[8192];
             int n;
             while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            m = new JSONObject(new String(out.toByteArray(), StandardCharsets.UTF_8)).optInt("widget_refresh_min", 0);
+            cfg = new JSONObject(new String(out.toByteArray(), StandardCharsets.UTF_8));
         } catch (Exception e) {
-            m = 0;
+            cfg = new JSONObject();
         }
-        refreshMin = Math.max(0, m);
-        return refreshMin;
+        return cfg;
+    }
+
+    /** 설정의 widget_refresh_min (분). 없으면 0. */
+    static int refreshMinutes(Context ctx) {
+        return Math.max(0, config(ctx).optInt("widget_refresh_min", 0));
+    }
+
+    /** --mic 로 만든 앱이면 위젯에 마이크 단추. */
+    static boolean micEnabled(Context ctx) {
+        return config(ctx).optBoolean("mic", false);
     }
 
     private static PendingIntent autoIntent(Context ctx) {
@@ -141,7 +154,7 @@ public class WidgetProvider extends AppWidgetProvider {
     private static boolean anyPlaced(Context ctx) {
         AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
         if (mgr == null) return false;
-        for (Class<?> c : new Class<?>[] {WidgetProvider.class, WidgetProviderAlt.class}) {
+        for (Class<?> c : KINDS) {
             try {
                 int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, c));
                 if (ids != null && ids.length > 0) return true;
@@ -183,14 +196,13 @@ public class WidgetProvider extends AppWidgetProvider {
     static void refresh(Context ctx) {
         AppWidgetManager mgr = AppWidgetManager.getInstance(ctx);
         if (mgr == null) return;
-        update(ctx, mgr, WidgetProvider.class, false);
-        update(ctx, mgr, WidgetProviderAlt.class, true); // 두 번째 위젯이 없는 앱이면 놓인 것이 없다
+        for (int i = 0; i < KINDS.length; i++) update(ctx, mgr, KINDS[i], KIND_NAMES[i]); // 이 앱에 없는 종류는 놓인 것이 없다
     }
 
-    private static void update(Context ctx, AppWidgetManager mgr, Class<?> cls, boolean alt) {
+    private static void update(Context ctx, AppWidgetManager mgr, Class<?> cls, String kind) {
         try {
             int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, cls));
-            if (ids != null && ids.length > 0) mgr.updateAppWidget(ids, build(ctx, alt));
+            if (ids != null && ids.length > 0) mgr.updateAppWidget(ids, build(ctx, kind));
         } catch (RuntimeException e) {
             // 매니페스트에 없는 위젯
         }
@@ -220,16 +232,20 @@ public class WidgetProvider extends AppWidgetProvider {
         }
     }
 
-    static RemoteViews build(Context ctx, boolean alt) {
+    static RemoteViews build(Context ctx, String kind) {
         Resources res = ctx.getResources();
         String pkg = ctx.getPackageName();
-        // 두 번째 위젯은 자기 모양(urlapp_widget_alt, 줄 수가 다를 수 있음)으로. 없으면 첫 위젯 모양.
-        int layout = alt ? res.getIdentifier("urlapp_widget_alt", "layout", pkg) : 0;
-        boolean ownLayout = layout != 0;
-        if (layout == 0) layout = res.getIdentifier("urlapp_widget", "layout", pkg);
+        boolean alt = "alt".equals(kind);
+        // 종류마다 자기 모양(urlapp_widget_alt·_s2·_s3, 줄 수가 다를 수 있음)으로. 없으면 첫 위젯 모양.
+        String name = kind == null || kind.isEmpty() ? "urlapp_widget" : "urlapp_widget_" + kind;
+        int layout = res.getIdentifier(name, "layout", pkg);
+        if (layout == 0) {
+            name = "urlapp_widget";
+            layout = res.getIdentifier(name, "layout", pkg);
+        }
         RemoteViews v = new RemoteViews(pkg, layout);
-        // 그 모양에 있는 줄 수 (줄 id 는 두 모양이 같이 쓰므로, 모양에 없는 줄을 건드리면 위젯이 깨진다)
-        int count = integer(res, pkg, ownLayout ? "urlapp_widget_alt_rows" : "urlapp_widget_rows", MAX_ROWS);
+        // 그 모양에 있는 줄 수 (줄 id 는 모양들이 같이 쓰므로, 모양에 없는 줄을 건드리면 위젯이 깨진다)
+        int count = integer(res, pkg, name + "_rows", MAX_ROWS);
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         boolean ko = "ko".equals(Locale.getDefault().getLanguage());
 
@@ -285,6 +301,20 @@ public class WidgetProvider extends AppWidgetProvider {
                     + (failed > at ? (ko ? " · 새로고침 실패 " : " · refresh failed ") + hm.format(new Date(failed)) : "");
         }
         v.setTextViewText(id(res, pkg, "w_note"), note);
+
+        // 마이크 단추 (--mic 앱만): 앱을 열고 음성 대화를 시작한다
+        int micBtn = id(res, pkg, "w_mic");
+        if (micBtn != 0) {
+            if (micEnabled(ctx)) {
+                v.setViewVisibility(micBtn, View.VISIBLE);
+                Intent mic = new Intent(ctx, MainActivity.class).setAction(MainActivity.ACTION_MIC)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                v.setOnClickPendingIntent(micBtn, PendingIntent.getActivity(ctx, 5, mic,
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
+            } else {
+                v.setViewVisibility(micBtn, View.GONE);
+            }
+        }
 
         // 새로고침 단추 (자동 새로고침을 켠 앱만)
         int refreshBtn = id(res, pkg, "w_refresh");
