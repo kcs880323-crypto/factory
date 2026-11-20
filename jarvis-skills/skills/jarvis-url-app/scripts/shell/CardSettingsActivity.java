@@ -321,6 +321,7 @@ public class CardSettingsActivity extends Activity {
                 + "\n사이트에 상태 알림: " + report
                 + "\n앱 " + st.optString("app_version") + " · 안드로이드 " + st.optString("android") + " · " + st.optString("device"));
         row("", "상태·기록 공유", v -> shareStatus(st));
+        if (AppUpdater.enabled(this)) row("앱 버전 " + AppUpdater.installedName(this), "업데이트 확인", v -> AppUpdater.check(this, true));
         if (engine.statusEndpoint()) {
             row("", "사이트에 지금 알리기", v -> {
                 Toast.makeText(this, "보내는 중…", Toast.LENGTH_SHORT).show();

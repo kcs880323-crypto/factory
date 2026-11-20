@@ -401,6 +401,34 @@ public class CardTests {
         for (int i = 0; i < 80; i++) many.put(new JSONObject().put("t", i).put("k", "받음").put("m", "x"));
         check("사이트에 보내는 기록은 최근 30개까지", CardStatus.report(g, many).getJSONArray("journal").length() == 30, null);
 
+        System.out.println("7) 앱 안 업데이트 정보");
+        String mu = "https://raw.githubusercontent.com/o/r/app-releases/app.jarvis.web.x.json";
+        String sha = "a".repeat(64);
+        java.util.function.Function<String, String> info = extra -> "{\"package\":\"app.jarvis.web.x\",\"version_code\":15,"
+                + "\"version_name\":\"1.15\",\"apk\":\"https://raw.githubusercontent.com/o/r/app-releases/app.jarvis.web.x-v15.apk\","
+                + "\"sha256\":\"" + sha + "\",\"size\":1234,\"notes\":\"위젯 새로고침\"" + extra + "}";
+        UpdateInfo ui = UpdateInfo.parse(info.apply(""), "app.jarvis.web.x", mu);
+        check("정보 파일 읽기: 버전·주소·해시·바뀐 점", ui.versionCode == 15 && ui.versionName.equals("1.15") && ui.size == 1234
+                && ui.sha256.equals(sha) && ui.notes.equals("위젯 새로고침"), null);
+        check("더 높은 버전만 새 버전", ui.newerThan(14) && !ui.newerThan(15) && !ui.newerThan(16), null);
+        java.util.function.Function<String, Boolean> rejects = json -> {
+            try {
+                UpdateInfo.parse(json, "app.jarvis.web.x", mu);
+                return false;
+            } catch (IllegalArgumentException e) {
+                return true;
+            }
+        };
+        check("다른 앱의 정보는 거부", rejects.apply(info.apply("").replace("app.jarvis.web.x\",\"version", "app.evil\",\"version")), null);
+        check("다른 곳(호스트)·http 의 APK 주소는 거부", rejects.apply(info.apply("").replace(
+                "https://raw.githubusercontent.com/o/r/app-releases/app.jarvis.web.x-v15", "https://evil.example/x"))
+                && rejects.apply(info.apply("").replace("https://raw.githubusercontent.com/o/r/app-releases/app.jarvis.web.x-v15",
+                "http://raw.githubusercontent.com/x")), null);
+        check("해시·크기·버전이 이상하면 거부", rejects.apply(info.apply("").replace(sha, "abc"))
+                && rejects.apply(info.apply("").replace("\"size\":1234", "\"size\":0"))
+                && rejects.apply(info.apply("").replace("\"version_code\":15", "\"version_code\":0"))
+                && rejects.apply("<html>"), null);
+
         System.out.println("카드 시험: " + ok + "개 통과, " + fail + "개 실패");
         System.exit(fail == 0 ? 0 : 1);
     }

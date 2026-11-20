@@ -74,6 +74,7 @@ public class MainActivity extends Activity {
     static final String ACTION_HOME = "app.jarvis.urlapp.action.HOME";
     static final String ACTION_BROWSER = "app.jarvis.urlapp.action.BROWSER";
     static final String ACTION_CARDS = "app.jarvis.urlapp.action.CARDS"; // 카드 자동 등록 설정 (그 기능이 있는 앱만)
+    static final String ACTION_UPDATE = "app.jarvis.urlapp.action.UPDATE"; // 업데이트 확인 (업데이트 주소가 있는 앱만)
     private static final int REQ_FILES = 41;
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT;
 
@@ -1029,6 +1030,10 @@ public class MainActivity extends Activity {
             startActivity(new Intent(this, CardSettingsActivity.class));
             return true;
         }
+        if (ACTION_UPDATE.equals(action)) {
+            AppUpdater.check(this, true);
+            return false; // 보던 화면은 그대로 (처음 열 때면 시작 주소를 연다)
+        }
         if (ACTION_BROWSER.equals(action)) {
             String current = web.getUrl();
             openExternal(new Intent(Intent.ACTION_VIEW, Uri.parse(current != null ? current : startUrl)));
@@ -1045,6 +1050,7 @@ public class MainActivity extends Activity {
         super.onResume();
         if (web != null) web.onResume();
         if (widgetJs != null) WidgetProvider.scheduleAuto(this); // 위젯 자동 새로고침 (켠 앱·위젯이 놓여 있을 때만)
+        if (AppUpdater.enabled(this)) AppUpdater.check(this, false); // 새 버전 확인 (6시간에 한 번, 새 버전이면 묻는다)
         if (CardEngine.available(this)) {
             CardEngine.get(this).flushAsync(); // 못 보낸 카드 결제가 있으면 지금
             CardEngine.get(this).reportStatusAsync(false); // 사이트가 상태 주소를 주면 폰 상태 알리기 (30분에 한 번)

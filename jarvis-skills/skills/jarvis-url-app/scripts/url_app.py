@@ -650,7 +650,7 @@ def android_string(s):
 # ---------------------------------------------------------------- 프로젝트 파일
 
 def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
-                 view_hosts=()):
+                 view_hosts=(), update=False):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -720,6 +720,13 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             android:exported="false"
             android:label="@string/sc_cards" />""") if cards else ""
     card_perm = '\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' if cards else ""
+    # 앱 안 업데이트 (--update-url): 설치 요청 권한(사용자가 '이 출처 허용'을 한 번 켠다)과 설치 결과 받는 곳 (이 앱 안에서만)
+    if update:
+        card_perm += '\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />'
+        card_parts += """
+        <receiver
+            android:name="app.jarvis.urlapp.UpdateReceiver"
+            android:exported="false" />"""
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{app_id}">
@@ -750,7 +757,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
 """
 
 
-def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False):
+def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=False):
     def w(rel, text):
         p = res / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -762,6 +769,7 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False):
     <string name="sc_home">처음 화면</string>
     <string name="sc_browser">브라우저에서 열기</string>
     <string name="sc_cards">카드 자동 등록</string>
+    <string name="sc_update">업데이트 확인</string>
 </resources>
 """)
     w("values-en/strings.xml", """<?xml version="1.0" encoding="utf-8"?>
@@ -769,6 +777,7 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False):
     <string name="sc_home">Home</string>
     <string name="sc_browser">Open in browser</string>
     <string name="sc_cards">Card auto-entry</string>
+    <string name="sc_update">Check for update</string>
 </resources>
 """)
     w("values/colors.xml", f"""<?xml version="1.0" encoding="utf-8"?>
@@ -820,6 +829,7 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False):
       + shortcut.format(sid="home", label="sc_home", action="HOME", pkg=app_id, cls=SHELL_CLASS)
       + shortcut.format(sid="browser", label="sc_browser", action="BROWSER", pkg=app_id, cls=SHELL_CLASS)
       + (shortcut.format(sid="cards", label="sc_cards", action="CARDS", pkg=app_id, cls=SHELL_CLASS) if cards else "")
+      + (shortcut.format(sid="update", label="sc_update", action="UPDATE", pkg=app_id, cls=SHELL_CLASS) if update else "")
       + "</shortcuts>\n")
 
 
@@ -1161,7 +1171,7 @@ def save_registry(home, reg):
 
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
-                 "fullscreen", "keep_awake", "dark", "id")
+                 "fullscreen", "keep_awake", "dark", "id", "update_url")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto"}
 
@@ -1240,6 +1250,11 @@ def cmd_build(args):
             widget_refresh = widget_refresh_min(widget_text)
             widget_label, widget_alt_label = widget_labels(widget_text)
 
+        # 앱 안 업데이트: 새 버전 정보 파일 주소 (https). 'none' 이면 뺀다.
+        update_url = opt["update_url"] if opt["update_url"] and opt["update_url"] != "none" else None
+        if update_url and not re.fullmatch(r"https://[A-Za-z0-9.-]+/[^\s?#]+\.json", update_url):
+            raise Fail("--update-url 은 https://…/<파일>.json 모양이어야 합니다 (url_app.py publish 가 만드는 정보 파일).")
+
         # 카드 결제 자동 등록 (사이트별 설정이 있을 때만)
         cards_cfg = None
         cards_via = opt["cards_via"] or "listener"  # 사용자가 고른 기본: 앱이 직접 알림을 읽는다
@@ -1295,7 +1310,7 @@ def cmd_build(args):
         icon_info = json.loads(icon_out.strip().splitlines()[-1])
         if icon_info["used"] == "letter":
             icon_from = "글자 아이콘" + (" (그림이 64px 보다 작거나 읽을 수 없는 형식이라)" if src else "")
-        write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"], cards=bool(cards_cfg))
+        write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"], cards=bool(cards_cfg), update=bool(update_url))
         if cards_cfg:
             (res / "drawable").mkdir(exist_ok=True)
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
@@ -1313,6 +1328,8 @@ def cmd_build(args):
                "desktop": bool(opt["desktop"]),
                "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"],
                "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
+        if update_url:
+            cfg["update_url"] = update_url
         assets = workdir / "assets"
         assets.mkdir()
         (assets / "urlapp.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -1327,7 +1344,7 @@ def cmd_build(args):
                                                                   cards_via if cards_cfg else None,
                                                                   widget_label=bool(widget_js and widget_label),
                                                                   widget_alt=bool(widget_js and widget_alt_label),
-                                                                  view_hosts=cfg["hosts"]),
+                                                                  view_hosts=cfg["hosts"], update=bool(update_url)),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1400,6 +1417,43 @@ def link_file_json(cards_cfg):
         "version": 1,
         "cards": keep,
     }
+
+
+def cmd_publish(args):
+    """최신 APK 를 out_dir/<앱 id>-v<버전>.apk 로 두고(그 앱의 옛 APK 는 지움) out_dir/<앱 id>.json 을 쓴다.
+    정보 파일의 apk 주소는 앱에 넣은 update_url 과 같은 곳(폴더)이다. 올리기(git push 등)는 사람이·자비스가 한다."""
+    reg = load_registry(home_dir())
+    t = args.target.strip()
+    found = [(k, v) for k, v in reg["apps"].items() if k == t or v.get("url", "").rstrip("/") == t.rstrip("/")]
+    if not found:
+        raise Fail(f"만든 앱 중에 없습니다: {t} (url_app.py list 로 확인)")
+    app_id, rec = found[0]
+    update_url = (rec.get("explicit") or {}).get("update_url")
+    if not update_url or update_url == "none":
+        raise Fail("이 앱은 --update-url 없이 만들었습니다. --update-url 을 주고 다시 build 한 뒤 publish 하세요.")
+    if not update_url.rsplit("/", 1)[1] == app_id + ".json":
+        raise Fail(f"--update-url 의 파일 이름은 {app_id}.json 이어야 합니다: {update_url}")
+    apk = Path(rec["apk"])
+    if not apk.is_file():
+        raise Fail(f"APK 가 없습니다: {apk} (다시 build 하세요)")
+    out = Path(args.out_dir).expanduser()
+    out.mkdir(parents=True, exist_ok=True)
+    name = f"{app_id}-v{rec['version_code']}.apk"
+    for old in out.glob(f"{app_id}-v*.apk"):
+        if old.name != name:
+            old.unlink()
+    shutil.copyfile(apk, out / name)
+    notes = args.notes.strip()
+    if len(notes) > 300:
+        raise Fail("--notes 는 300자까지입니다.")
+    info = {"package": app_id, "version_code": rec["version_code"], "version_name": rec["version_name"],
+            "apk": update_url.rsplit("/", 1)[0] + "/" + name, "sha256": file_hashes(out / name)[1],
+            "size": (out / name).stat().st_size, "notes": notes,
+            "published_at": time.strftime("%Y-%m-%d %H:%M")}
+    (out / (app_id + ".json")).write_text(json.dumps(info, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    say(f"올릴 파일: {out / name} , {out / (app_id + '.json')}")
+    say(f"  {rec['name']} {rec['version_name']} (코드 {rec['version_code']}) — 이 두 파일을 올리면 앱이 6시간 안에(또는 '업데이트 확인') 묻는다")
+    return 0
 
 
 def cmd_link_file(args):
@@ -1722,6 +1776,35 @@ def cmd_selftest(args):
             wl = site / "wl.js"
             wl.write_text("// urlapp:alt-label " + "가" * 31 + "\nasync function () { return null; }", encoding="utf-8")
             check("위젯 이름이 30자를 넘으면 거부", raises(lambda: build(base + "/widgetl", "--no-fetch", "--widget", str(wl))))
+            # 앱 안 업데이트 (--update-url, publish)
+            check("업데이트 주소가 https://…/x.json 이 아니면 거부",
+                  raises(lambda: build(base + "/upd", "--no-fetch", "--update-url", "http://example.com/a.json")))
+            check("--update-url 없이 만든 앱은 publish 거부", raises(lambda: cmd_publish(
+                argparse.Namespace(target=base + "/app/", out_dir=str(tmp_home / "rel0"), notes=""))))
+            build(base + "/upd", "--no-fetch")
+            idu = next(k for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/upd"))
+            uurl = "https://raw.githubusercontent.com/o/r/app-releases/" + idu + ".json"
+            build(base + "/upd", "--no-fetch", "--update-url", uurl)
+            recu = load_registry(tmp_home)["apps"][idu]
+            mfu = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", recu["apk"]], tmp_home, "xmltree")
+            with zipfile.ZipFile(recu["apk"]) as z:
+                cfgu = json.loads(z.read("assets/urlapp.json"))
+                scu = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/shortcuts.xml", recu["apk"]], tmp_home, "xmltree")
+            check("업데이트: 설치 요청 권한·결과 receiver·'업데이트 확인' 바로가기·주소", "REQUEST_INSTALL_PACKAGES" in mfu
+                  and "app.jarvis.urlapp.UpdateReceiver" in mfu and "action.UPDATE" in scu and cfgu.get("update_url") == uurl,
+                  cfgu.get("update_url"))
+            mf0 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", str(apk)], tmp_home, "xmltree")
+            check("업데이트 주소가 없는 앱에는 설치 권한 없음", "REQUEST_INSTALL_PACKAGES" not in mf0 and "UpdateReceiver" not in mf0)
+            rel = tmp_home / "rel"
+            (rel).mkdir()
+            (rel / (idu + "-v1.apk")).write_bytes(b"old")
+            cmd_publish(argparse.Namespace(target=base + "/upd", out_dir=str(rel), notes="새 기능"))
+            info = json.loads((rel / (idu + ".json")).read_text(encoding="utf-8"))
+            pub = rel / (idu + "-v" + str(recu["version_code"]) + ".apk")
+            check("publish: 같은 폴더 주소·크기·SHA-256·바뀐 점, 옛 APK 정리", pub.is_file()
+                  and info["apk"] == uurl.rsplit("/", 1)[0] + "/" + pub.name and info["sha256"] == file_hashes(pub)[1]
+                  and info["size"] == pub.stat().st_size and info["version_code"] == recu["version_code"]
+                  and info["notes"] == "새 기능" and info["package"] == idu and not (rel / (idu + "-v1.apk")).exists(), info)
             w9 = site / "w9.js"
             w9.write_text("// urlapp:rows 9\nasync function () { return null; }", encoding="utf-8")
             check("위젯 줄 수가 1~8 밖이면 거부", raises(lambda: build(base + "/widget9", "--no-fetch", "--widget", str(w9))))
@@ -1809,6 +1892,9 @@ def build_parser():
                    help="카드 알림을 받는 방법: listener(기본, 앱이 직접 알림 읽기 — 직접 설치를 Play 프로텍트가 막을 수 있어 "
                         "설치할 때 앱 검사를 잠깐 끈다) | intent(MacroDroid 가 넘겨줌 — 설치가 막히지 않음)")
     b.add_argument("--widget", help="홈 화면 위젯을 넣는다: 위젯 스크립트(.js) 경로. 'none' 이면 뺀다 (widgets/ 의 예시 참고)")
+    b.add_argument("--update-url", dest="update_url",
+                   help="앱 안 업데이트: 새 버전 정보 파일 주소 (https://…/<앱 id>.json, url_app.py publish 로 만든다). "
+                        "앱이 열릴 때 6시간에 한 번 확인하고 새 버전이면 묻는다. 'none' 이면 뺀다")
     b.add_argument("--widget-param", dest="widget_param", action="append", default=[],
                    help="위젯 스크립트의 __PARAM_이름__ 자리에 넣을 값: 이름=값 (여러 번). 값은 출력하지 않고 이 컴퓨터에만 기억")
     b.add_argument("--icon-color", dest="icon_color",
@@ -1835,6 +1921,10 @@ def build_parser():
     lc = sub.add_parser("link-check", help="재배포 뒤 연동 점검 (사이트의 /urlapp.json 과 코드만 본다)")
     lc.add_argument("url")
     lc.add_argument("--cards", help="앱에 넣은 카드 설정(.json) — 사이트에 연동 파일이 없을 때 이것으로 점검")
+    pb = sub.add_parser("publish", help="앱 안 업데이트용으로 최신 APK 와 정보 파일(<앱 id>.json)을 폴더에 만든다")
+    pb.add_argument("target", help="앱의 URL 또는 id")
+    pb.add_argument("out_dir", help="올릴 폴더 (예: app-releases 브랜치를 꺼낸 곳)")
+    pb.add_argument("--notes", default="", help="바뀐 점 (앱의 업데이트 창에 보인다, 300자까지)")
     sub.add_parser("selftest", help="자체 시험")
     return ap
 
@@ -1848,7 +1938,7 @@ def main(argv=None):
             pass
     args = build_parser().parse_args(argv)
     handler = {"doctor": cmd_doctor, "setup": cmd_setup, "build": cmd_build, "list": cmd_list,
-               "link-file": cmd_link_file, "link-check": cmd_link_check,
+               "link-file": cmd_link_file, "link-check": cmd_link_check, "publish": cmd_publish,
                "selftest": cmd_selftest}[args.cmd]
     try:
         return handler(args)
