@@ -6,14 +6,25 @@
 // 아래 2줄: 이번 달 상세 변동지출 중 메모에 "카드"가 있는 것(카드 자동 등록이 카드사 이름을 메모에 넣고, 사이트의
 //         엑셀 양식도 메모에 "현대카드"·"현금"을 적는다)을 담당자(창수·지현)별로 더한 값. 주소와 칸 이름은 사이트의
 //         /urlapp.json(카드 연동 약속)을 따르고, 없으면 지금 사이트의 이름을 쓴다.
-// 사이트에서 비밀번호를 입력한 뒤에만 읽는다 (사이트가 sessionStorage 의 isAuthenticated 로 로그인을 표시).
+// 로그인한 뒤에만 읽는다: 사이트가 sessionStorage 의 isAuthenticated 로 표시하거나, 서버(/api/session)가 로그인이라고 할 때.
+// (위젯의 새로고침 단추·10분 자동 새로고침은 보이지 않는 웹 화면에서 돌아서, 처음엔 sessionStorage 가 비어 있다)
 // url_app.py build … --widget widgets/smart-ledger.js
 // urlapp:rows 6
 // urlapp:label 가계부 전체
 // urlapp:alt-label 카드 사용
 // urlapp:alt-rows 4
+// urlapp:refresh-min 10
 async function (site) {
-  if (sessionStorage.getItem("isAuthenticated") !== "true") return null;
+  async function loggedIn() {
+    if (sessionStorage.getItem("isAuthenticated") === "true") return true;
+    try {
+      const r = await fetch("/api/session", { cache: "no-store" });
+      return r.ok && !!(await r.json()).authenticated;
+    } catch (e) {
+      return false;
+    }
+  }
+  if (!(await loggedIn())) return null;
   const OWNERS = ["창수", "지현"];
   const now = new Date();
   const y = now.getFullYear();

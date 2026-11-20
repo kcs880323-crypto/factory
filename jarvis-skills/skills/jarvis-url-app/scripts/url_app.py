@@ -43,6 +43,7 @@ WIDGET_ROWS_SLOT = "/*__WIDGET_ROWS__*/4"
 WIDGET_ROWS_RE = re.compile(r"^\s*//\s*urlapp:rows\s+(\d+)\s*$", re.M)
 WIDGET_ALT_ROWS_RE = re.compile(r"^\s*//\s*urlapp:alt-rows\s+(\d+)\s*$", re.M)
 WIDGET_ALT_ROWS_SLOT = "/*__WIDGET_ALT_ROWS__*/0"
+WIDGET_REFRESH_RE = re.compile(r"^\s*//\s*urlapp:refresh-min\s+(\d+)\s*$", re.M)
 WIDGET_LABEL_RE = re.compile(r"^\s*//\s*urlapp:(label|alt-label)[ \t]+(\S[^\n]*?)\s*$", re.M)
 ICON_TOOL = HERE / "UrlAppIcon.java"
 SHELL_CLASS = "app.jarvis.urlapp.MainActivity"
@@ -682,6 +683,11 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
         receiver = widget_receiver("WidgetProvider", "@string/widget_name" if widget_label else "@string/app_name")
         if widget_alt:
             receiver += widget_receiver("WidgetProviderAlt", "@string/widget_alt_name", "urlapp_widget_alt_info")
+        receiver += """
+        <service
+            android:name="app.jarvis.urlapp.WidgetRefreshJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />"""
     # 카드 자동 등록: 알림 듣기(사용자가 '알림 접근'을 켜야 동작), 설정 화면, 되돌리기 단추, 다시 보내기 작업
     listener = """
         <service
@@ -870,6 +876,18 @@ def widget_rows(script_text, alt=False):
     return n
 
 
+def widget_refresh_min(script_text):
+    """위젯 스크립트가 "// urlapp:refresh-min N" 으로 정한 자동 새로고침 간격(분). 없으면 0 (단추·자동 새로고침 없음).
+    5~1440 분. 앱을 열지 않고 보이지 않는 웹 화면으로 사이트를 열어 새로 고치므로, 앱의 로그인 쿠키가 살아 있어야 한다."""
+    m = WIDGET_REFRESH_RE.search(script_text or "")
+    if not m:
+        return 0
+    n = int(m.group(1))
+    if not 5 <= n <= 1440:
+        raise Fail(f"위젯 스크립트의 urlapp:refresh-min 은 5~1440 분이어야 합니다: {n}")
+    return n
+
+
 def widget_labels(script_text):
     """위젯 목록에 보일 이름: "// urlapp:label 이름"(첫 위젯), "// urlapp:alt-label 이름"(두 번째 위젯, 있으면 생김)."""
     out = {"label": None, "alt-label": None}
@@ -905,13 +923,22 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
 <resources>
     <string name="widget_desc">앱의 요약을 홈 화면에 보여 줍니다</string>
     <string name="widget_hint">앱을 열고 로그인하면 여기에 요약이 보여요</string>
+    <string name="widget_refresh">새로 고침</string>
 {names}</resources>
 """)
     w("values-en/widget_strings.xml", """<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_desc">Shows the app\\'s summary on the home screen</string>
     <string name="widget_hint">Open the app (and log in) to fill this widget</string>
+    <string name="widget_refresh">Refresh</string>
 </resources>
+""")
+    w("drawable/urlapp_widget_refresh.xml", """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp" android:height="20dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@color/widget_label"
+        android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z" />
+</vector>
 """)
     w("drawable/urlapp_widget_bg.xml", """<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
@@ -981,6 +1008,14 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             android:textColor="@color/widget_title"
             android:textSize="14sp"
             android:textStyle="bold" />
+        <ImageView
+            android:id="@+id/w_refresh"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:padding="5dp"
+            android:contentDescription="@string/widget_refresh"
+            android:src="@drawable/urlapp_widget_refresh"
+            android:visibility="gone" />
     </LinearLayout>{rows_xml}
     <TextView
         android:id="@+id/w_note"
@@ -1189,6 +1224,7 @@ def cmd_build(args):
         widget_n = 4
         widget_label = widget_alt_label = None
         widget_text = ""
+        widget_refresh = 0
         if opt["widget"] and opt["widget"] != "none":
             ws = Path(opt["widget"]).expanduser()
             if not ws.is_file():
@@ -1201,6 +1237,7 @@ def cmd_build(args):
             widget_text = keep_w.read_text(encoding="utf-8")
             widget_js = widget_asset(widget_text, opt["widget_param"] or [])
             widget_n = widget_rows(widget_text)
+            widget_refresh = widget_refresh_min(widget_text)
             widget_label, widget_alt_label = widget_labels(widget_text)
 
         # 카드 결제 자동 등록 (사이트별 설정이 있을 때만)
@@ -1275,7 +1312,7 @@ def cmd_build(args):
                "theme_color_dark": None if opt["color"] else site["theme_dark"],
                "desktop": bool(opt["desktop"]),
                "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"],
-               "accent": accent}
+               "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
         assets = workdir / "assets"
         assets.mkdir()
         (assets / "urlapp.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -1344,6 +1381,8 @@ def cmd_build(args):
         say(f"  카드 결제 자동 등록: 있음 (담당자 {', '.join(cards_cfg['owners'])}; {how}). 앱이 처음 열릴 때 설정을 묻는다")
     if widget_js:
         kinds = (f" 2종: '{widget_label or name}', '{widget_alt_label}'" if widget_alt_label else "")
+        if widget_refresh:
+            kinds += f", 새로고침 단추 + 화면이 켜져 있을 때 {widget_refresh}분마다 자동 새로고침"
         say(f"  홈 화면 위젯: 있음{kinds} (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
     say(f"  다른 사이트 링크: {'브라우저로' if opt['external'] == 'browser' else '앱 안에서'} | 앱 안에서 여는 사이트: "
         + ", ".join(cfg["hosts"]))
@@ -1644,6 +1683,7 @@ def cmd_selftest(args):
                   and "layout/urlapp_widget_alt" not in res5)
             w6 = site / "w6.js"
             w6.write_text("// urlapp:rows 6\n// urlapp:label 전체 & '요약'\n// urlapp:alt-label 카드 사용\n// urlapp:alt-rows 4\n"
+                          "// urlapp:refresh-min 10\n"
                           "async function (site) { return null; }", encoding="utf-8")
             build(base + "/widget6", "--no-fetch", "--widget", str(w6))
             rec56 = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/widget6"))
@@ -1670,6 +1710,15 @@ def cmd_selftest(args):
                   and re.search(r"integer/urlapp_widget_alt_rows\n\s+\(\) 4", res56) is not None
                   and re.search(r"integer/urlapp_widget_rows\n\s+\(\) 6", res56) is not None
                   and "var ALT_ROWS = 4 ||" in a56, alt_info[-300:])
+            cfg56 = json.loads(zipfile.ZipFile(rec56["apk"]).read("assets/urlapp.json"))
+            cfg5 = json.loads(zipfile.ZipFile(rec5["apk"]).read("assets/urlapp.json"))
+            check("빌드 5-6: urlapp:refresh-min 10 → 새로고침 단추·10분 자동 (기본 위젯은 0)",
+                  cfg56.get("widget_refresh_min") == 10 and cfg5.get("widget_refresh_min") == 0
+                  and "app.jarvis.urlapp.WidgetRefreshJob" in mf56 and "id/w_refresh" in res56
+                  and "drawable/urlapp_widget_refresh" in res56, (cfg56.get("widget_refresh_min"), cfg5.get("widget_refresh_min")))
+            wr = site / "wr.js"
+            wr.write_text("// urlapp:refresh-min 2\nasync function () { return null; }", encoding="utf-8")
+            check("새로고침 간격이 5~1440 분 밖이면 거부", raises(lambda: build(base + "/widgetr", "--no-fetch", "--widget", str(wr))))
             wl = site / "wl.js"
             wl.write_text("// urlapp:alt-label " + "가" * 31 + "\nasync function () { return null; }", encoding="utf-8")
             check("위젯 이름이 30자를 넘으면 거부", raises(lambda: build(base + "/widgetl", "--no-fetch", "--widget", str(wl))))

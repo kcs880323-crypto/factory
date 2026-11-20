@@ -48,7 +48,12 @@ function check(label, cond, detail) {
     { id: 6, source_table: "monthly_details", date: "2026-11-08", details: "GS25", amount: "1,000", earner_name: "창수 ", memo: "현대카드 M" },
     { id: 1, source_table: "monthly_details", date: "2026-11-03", details: "메가커피", amount: 12500, earner_name: "창수", memo: "현대카드" },
   ];
+  let serverSession = false; // 서버(/api/session)가 로그인이라고 하는지 (보이지 않는 웹 화면에서 새로 고칠 때)
   const server = http.createServer((req, res) => {
+    if (req.url === "/api/session") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ authenticated: serverSession, needsPasswordSetup: false }));
+    }
     if (req.url === "/urlapp.json") {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ version: 1, cards: { history: { path: "/api/monthly-details?month={month}",
@@ -199,6 +204,25 @@ function check(label, cond, detail) {
   await page5.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
   const a5 = await page5.evaluate(() => __w[0].alt);
   check("두 번째 위젯 값도 같은 규칙으로 자름 (30자·줄 수)", a5 && a5.title.length === 30 && a5.rows.length === 4, a5);
+
+  // 위젯 새로고침(보이지 않는 웹 화면): sessionStorage 는 비어 있지만 서버 세션(쿠키)은 살아 있을 때
+  const bg = await browser.newPage();
+  await bg.goto(base);
+  await bg.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  serverSession = false;
+  await bg.evaluate(ASSET.replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await bg.waitForTimeout(700);
+  check("새로고침: 서버도 로그인 아님이면 읽지 않음", (await bg.evaluate(() => __w.length)) === 0);
+  serverSession = true;
+  await bg.evaluate(() => window.__urlappWidgetRun());
+  await bg.waitForFunction(() => __w.length >= 1, null, { timeout: 5000 });
+  const wb = await bg.evaluate(() => __w[__w.length - 1]);
+  check("새로고침: sessionStorage 가 비어도 서버 세션이 있으면 채움 (6줄 + 카드 위젯)", wb.rows.length === 6 && wb.alt
+    && wb.alt.title.includes("카드 사용"), wb);
+  serverSession = false;
   const page6 = await browser.newPage();
   await page6.goto(base);
   await page6.evaluate((tok) => {
