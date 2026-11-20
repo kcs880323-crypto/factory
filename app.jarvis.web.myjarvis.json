@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 7,
- "version_name": "1.7",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v7.bin",
- "sha256": "17069d44aac7defb529781c12fd0f6ceea874f8008b14d443fb5532cd717ef52",
+ "version_code": 8,
+ "version_name": "1.8",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v8.bin",
+ "sha256": "2c1b83215510df8f160371349af22a794edc478a775aa32ebc929501183bf236",
  "size": 555570,
- "notes": "앱이 열리자마자 꺼지던 문제 수정",
- "published_at": "2026-11-20 06:06",
+ "notes": "위젯에 진행 중인 작업 요약, 작업 끝·승인 대기 알림",
+ "published_at": "2026-11-20 06:53",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "b0ccf963790fe85000fdbd0f34d5cd6baf45f8108bdce49bcf2c474e1308da76"
+ "apk_sha256": "600856a505da70f8aa949cf6fce7d08550149a2c6171495cb1fc9fa39e8fe29c"
 }
