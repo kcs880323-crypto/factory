@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 10,
- "version_name": "1.10",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v10.bin",
- "sha256": "c1429ebd360c58803e66a9bce8e494bec765c37828eed346d0f0cec9edd14b74",
- "size": 555570,
- "notes": "위젯이 작업창과 같은 진행률을 보이게 (자비스 서버 재시작 뒤)",
- "published_at": "2026-11-20 07:33",
+ "version_code": 11,
+ "version_name": "1.11",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v11.bin",
+ "sha256": "3bb1083a058c1ba8f602daa8da91ef94ebbe68e95b50a1ffea7ab7fc71331f69",
+ "size": 559666,
+ "notes": "위젯 마이크: 앱을 열지 않고 홈 화면 위 작은 창에서 바로 대화",
+ "published_at": "2026-11-20 08:02",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "a8e616c20497faa8c77a97875651f73cb00c069f321bc48f1d1e9b966e392a21"
+ "apk_sha256": "d16ffe2ac54f264a1d45f550e35d40791b6ccf6476d94ff4af8dc37d120678ce"
 }
