@@ -103,7 +103,14 @@ public class WatchAskActivity extends Activity {
         if (state == null) {
             String last = prefs(this).getString("last", null);
             long lastAt = prefs(this).getLong("last_at", 0);
-            if (last != null && System.currentTimeMillis() - lastAt < KEEP_ANSWER_MS) { // 화면을 닫은 뒤 온 답
+            String crash = CrashLog.take(this); // 지난번에 워치 앱(타일 포함)이 갑자기 꺼졌으면 그 이유를 한 번 보여 준다
+            if (crash != null) {
+                answer.setTextColor(0xFFFF8A80);
+                answer.setTextSize(11);
+                answer.setGravity(Gravity.START);
+                answer.setText(crash);
+                status.setText("지난번에 앱이 꺼진 이유예요 — 화면을 찍어 전해 주세요. 마이크를 누르면 물어요");
+            } else if (last != null && System.currentTimeMillis() - lastAt < KEEP_ANSWER_MS) { // 화면을 닫은 뒤 온 답
                 prefs(this).edit().remove("last").apply();
                 showAnswer(last, true, false);
                 status.setText("지난 질문의 답이에요");

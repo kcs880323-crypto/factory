@@ -98,7 +98,8 @@ public class WatchTile extends TileService {
             col.addContent(line.build());
         }
         col.addContent(space(8)).addContent(askChip(accent));
-        if (!s.note.isEmpty()) col.addContent(space(4)).addContent(text(s.note, 11, GRAY, false, 1));
+        String note = CrashLog.has(this) ? "⚠ 앱을 열면 지난 오류가 보여요" : s.note; // CrashLog: 꺼진 이유가 남아 있음
+        if (!note.isEmpty()) col.addContent(space(4)).addContent(text(note, 11, CrashLog.has(this) ? NEG : GRAY, false, 1));
 
         LayoutElementBuilders.Box root = new LayoutElementBuilders.Box.Builder()
                 .setWidth(DimensionBuilders.expand())

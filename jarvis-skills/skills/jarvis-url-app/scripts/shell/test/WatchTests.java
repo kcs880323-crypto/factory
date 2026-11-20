@@ -48,6 +48,21 @@ public class WatchTests {
                 WatchAskActivity.spoken("**날씨**는 | 맑음\n자세히 https://x.y/z 끝"));
         check("너무 길면 1500자까지", WatchAskActivity.spoken("가".repeat(3000)).length() == 1500, "");
 
+        System.out.println("꺼진 이유 기록 (CrashLog)");
+        Throwable cause = new NoSuchMethodError("No static method isAtLeastV()Z in class Landroidx/core/os/BuildCompat;");
+        RuntimeException top = new RuntimeException("연결 실패", cause);
+        String d = CrashLog.describe("GoogleApiHandler", top, now, "1.20");
+        check("오류 이름·메시지·스레드·버전·원인이 보임", d.startsWith("앱이 갑자기 꺼졌어요 (")
+                && d.contains("버전 1.20") && d.contains("GoogleApiHandler") && d.contains("java.lang.RuntimeException: 연결 실패")
+                && d.contains("원인: java.lang.NoSuchMethodError: No static method isAtLeastV") && d.contains("  at "), d);
+        StringBuilder huge = new StringBuilder();
+        for (int i = 0; i < 2000; i++) huge.append("긴 글 ");
+        Throwable loop = new IllegalStateException(huge.toString());
+        String d2 = CrashLog.describe("", loop, now, "");
+        check("길어도 정한 길이 안 (메시지 400자, 전체 3000자)", d2.length() <= CrashLog.MAX_CHARS + 1 && d2.contains("…")
+                && !d2.contains("버전"), d2.length());
+        check("오류 없이도(빈 값) 꺼지지 않음", CrashLog.describe(null, null, now, null).startsWith("앱이 갑자기 꺼졌어요"), "");
+
         System.out.println("\n결과: 통과 " + ok + " / 실패 " + fail);
         if (fail > 0) System.exit(1);
     }

@@ -260,6 +260,28 @@ public class MainActivity extends Activity {
         return "ko".equals(Locale.getDefault().getLanguage()) ? ko : en;
     }
 
+    /** 지난번에 앱이 꺼진 이유 (CrashLog — 이 폰 앱 안에만 있던 기록). '복사'로 그대로 전할 수 있다. */
+    private void showCrash(String text) {
+        try {
+            new AlertDialog.Builder(this)
+                    .setTitle(t("지난번에 앱이 꺼진 이유", "Why the app closed last time"))
+                    .setMessage(text + "\n" + t("같은 일이 되풀이되면 '복사'를 눌러 앱을 만든 사람에게 전해 주세요.",
+                            "If it keeps happening, tap Copy and send it to whoever made the app."))
+                    .setPositiveButton(t("복사", "Copy"), (d, w) -> {
+                        android.content.ClipboardManager cm =
+                                (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                        if (cm != null) {
+                            cm.setPrimaryClip(ClipData.newPlainText("crash", text));
+                            Toast.makeText(this, t("복사했어요", "Copied"), Toast.LENGTH_SHORT).show();
+                        }
+                    })
+                    .setNegativeButton(t("닫기", "Close"), null)
+                    .show();
+        } catch (RuntimeException ignored) {
+            // 창을 못 띄우면 그냥 넘어간다
+        }
+    }
+
     // ---------- 상태 표시줄·내비게이션 바 ----------
 
     @SuppressWarnings("deprecation")
@@ -1353,6 +1375,8 @@ public class MainActivity extends Activity {
         super.onResume();
         if (web != null) web.onResume();
         resumed = true;
+        String crash = CrashLog.take(this); // 지난번에 앱이 갑자기 꺼졌으면 그 이유를 한 번 보여 준다
+        if (crash != null) showCrash(crash);
         // '하이 자비스': 앱 화면을 보는 동안은 마이크를 놓고(사이트가 스스로 듣는다), 켜 둔 것이면 듣기 서비스를 켠다
         // (안드로이드 14+ 는 앱이 앞에 있을 때만 마이크 서비스를 켤 수 있다)
         HotwordService.hold("app", true);

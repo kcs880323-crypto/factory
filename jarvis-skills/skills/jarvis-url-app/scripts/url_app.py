@@ -64,14 +64,20 @@ GMS_LIBS = (  # (저장소, 경로, 크기, SHA-256) — Google Play 서비스 W
      "41976c694586ef58b3e50fb858248fa7e39aa7dde70eaaa132fe75082eca39d4"),
     (GMAVEN, "com/google/android/gms/play-services-base/18.5.0/play-services-base-18.5.0.aar", 439602,
      "59a5c0c2da12311d75d965ce1f419498536b1a167fb28ff7dfc2dfd9cefa4157"),
-    (GMAVEN, "com/google/android/gms/play-services-basement/18.4.0/play-services-basement-18.4.0.aar", 286283,
-     "ce5c936fd66814b3602f5c6a5e929911ff973d4b05f6de9996da596bef97cad2"),
+    # basement 는 Wearable 20.0.1 의 POM 이 정한 18.9.0 (1.19 까지 18.4.0 이라 Feature(String,long,boolean) 이 없어 꺼졌다)
+    (GMAVEN, "com/google/android/gms/play-services-basement/18.9.0/play-services-basement-18.9.0.aar", 439122,
+     "c6ed7236b1b3ce0296b508a5c0a09108fd52d83559d35cad2639505cd04ab255"),
     (GMAVEN, "com/google/android/gms/play-services-tasks/18.2.0/play-services-tasks-18.2.0.aar", 80343,
      "7f2aaa8f502068eaf54356ca92aec04271d6e7c416c52c45c0d23440fcbd1654"),
-    # Play 서비스가 실행 중에 쓰는 androidx 기본 부품 (POM 의 판). 처음(1.18)에 빠뜨려 연결하는 순간 앱이 꺼졌다
-    # (GoogleApiManager 가 androidx.collection.ArraySet, Wearable 이 androidx.core.util.Preconditions) — 2026-11-20 사용자 신고
-    (GMAVEN, "androidx/core/core/1.0.0/core-1.0.0.aar", 633278,
-     "d7672358fc0d46de678968bcddfd3bdfe1618574299a753477b16116cfec74f5"),
+    # Play 서비스가 실행 중에 쓰는 androidx 기본 부품. 처음(1.18)에 빠뜨려 연결하는 순간 앱이 꺼졌고
+    # (GoogleApiManager 가 androidx.collection.ArraySet, Wearable 이 androidx.core.util.Preconditions — 2026-11-20 사용자 신고),
+    # 1.19 는 core 1.0.0 이라 Play 서비스가 부르는 BuildCompat.isAtLeastU·V 가 없어 또 꺼졌다 (같은 날 사용자 신고: 폰 앱이 열자마자
+    # 꺼지고 워치 타일이 검게만 보임). isAtLeastV 가 있는 첫 판 1.13.1 — 이 판은 Kotlin 으로 쓰여 kotlin-stdlib 도 같이 넣는다
+    # (안드로이드 14 이상에서 isAtLeastV 가 kotlin.jvm.internal.Intrinsics 를 부른다)
+    (GMAVEN, "androidx/core/core/1.13.1/core-1.13.1.aar", 1270406,
+     "2c27de199535675005553066597a4b20fa1eea7c228ab4ef6b32b5fe39ca1f59"),
+    (MAVEN, "org/jetbrains/kotlin/kotlin-stdlib/1.8.22/kotlin-stdlib-1.8.22.jar", 1670469,
+     "03a5c3965cc37051128e64e46748e394b6bd4c97fa81c6de6fc72bfd44e3421b"),
     (GMAVEN, "androidx/collection/collection/1.0.0/collection-1.0.0.jar", 41692,
      "9c8d117b5c2bc120a1cdfeb857e05b495b16c36013570372a708f7827e3ac9f9"),
     (GMAVEN, "androidx/lifecycle/lifecycle-runtime/2.0.0/lifecycle-runtime-2.0.0.aar", 9164,
@@ -80,8 +86,8 @@ GMS_LIBS = (  # (저장소, 경로, 크기, SHA-256) — Google Play 서비스 W
      "7bad7a188804adea6fa1f35d5ef99b705f20bd93ecadde484760ff86b535fefc"),
     (GMAVEN, "androidx/arch/core/core-common/2.0.0/core-common-2.0.0.jar", 11249,
      "4b80b337779b526e64b0ee0ca9e0df43b808344d145f8e9b1c42a134dac57ad8"),
-    (GMAVEN, "androidx/versionedparcelable/versionedparcelable/1.0.0/versionedparcelable-1.0.0.aar", 27250,
-     "f6438a93ed8016ccddca0e140a70be0b0110e0424edaa1472f84f98fed2e1ce3"),
+    (GMAVEN, "androidx/versionedparcelable/versionedparcelable/1.1.1/versionedparcelable-1.1.1.aar", 31061,
+     "57e8d93260d18d5b9007c9eed3c64ad159de90c8609ebfc74a347cbd514535a4"),
 )
 # 실행 중에 없어도 되는 클래스 (빠진 클래스 검사에서 봐준다): 활동(Activity)을 넘길 때만 쓰는 오류 대화상자(fragment·activity),
 # 안드로이드 런타임 안에 있지만 SDK(android.jar)에는 없는 내부 클래스
@@ -918,6 +924,11 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
         android:supportsRtl="true"
         android:usesCleartextTraffic="{'true' if cleartext else 'false'}"{native_attr}
         android:enableOnBackInvokedCallback="true">
+        <provider
+            android:name="app.jarvis.urlapp.CrashLog$Init"
+            android:authorities="{app_id}.urlapp_crashlog"
+            android:exported="false"
+            android:initOrder="1000" />
         <activity
             android:name="{SHELL_CLASS}"
             android:exported="true"
@@ -1052,6 +1063,11 @@ def watch_manifest_xml(app_id):
         android:allowBackup="false"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+        <provider
+            android:name="app.jarvis.urlapp.CrashLog$Init"
+            android:authorities="{app_id}.urlapp_crashlog"
+            android:exported="false"
+            android:initOrder="1000" />
         <meta-data
             android:name="com.google.android.wearable.standalone"
             android:value="false" />
@@ -1164,7 +1180,8 @@ def build_watch_apk(home, tc, java, javac, ks, pw, app_id, name, icon_bg, accent
          "--min-sdk-version", str(WATCH_MIN_SDK), "--target-sdk-version", str(TARGET_SDK),
          "--version-code", str(version_code), "--version-name", version_name, "--auto-add-overlay",
          "--java", gen, "--extra-packages", ":".join(pkgs), wd / "res.zip", *lib_zips], wd, "워치 앱 묶기(aapt2 link)")
-    app = app_dex(tc, javac, java, wd, "워치 앱", sorted(WATCH_DIR.glob("*.java")), ["app/jarvis/urlapp/"], jars, gen, pkgs,
+    app = app_dex(tc, javac, java, wd, "워치 앱", sorted(WATCH_DIR.glob("*.java")) + [SHELL_DIR / "CrashLog.java"],
+                  ["app/jarvis/urlapp/"], jars, gen, pkgs,
                   WATCH_MIN_SDK)
     lib_dex = dex_jars(home, tc, java, jars, WATCH_MIN_SDK, wd)
     with zipfile.ZipFile(unsigned, "a", compression=zipfile.ZIP_DEFLATED) as z:
@@ -1860,26 +1877,32 @@ def dex_jars(home, tc, java, jars, min_api, workdir):
     return sorted(cache.glob("classes*.dex"), key=lambda f: int(re.sub(r"\D", "", f.stem) or 1))
 
 
-def class_refs(data):
-    """클래스 파일이 가리키는 다른 클래스들 (상수 풀의 Class·이름과 형식 설명에서)."""
+def parse_class(data):
+    """클래스 파일 → {super, interfaces, members(선언한 메서드·필드 (이름, 형식)), refs(가리키는 클래스), calls((주인, 이름, 형식))}."""
     n = struct.unpack_from(">H", data, 8)[0]
-    i, k, utf, classes, descs = 10, 1, {}, [], []
+    i, k, utf, cls, nat, mref, descs = 10, 1, {}, {}, {}, [], []
     while k < n:
         tag = data[i]
         if tag == 1:
             ln = struct.unpack_from(">H", data, i + 1)[0]
             utf[k] = data[i + 3:i + 3 + ln].decode("utf-8", "replace")
             i += 3 + ln
-        elif tag in (3, 4, 9, 10, 11, 17, 18):
+        elif tag in (3, 4):
             i += 5
         elif tag in (5, 6):
             i += 9
             k += 1
         elif tag == 7:
-            classes.append(struct.unpack_from(">H", data, i + 1)[0])
+            cls[k] = struct.unpack_from(">H", data, i + 1)[0]
             i += 3
+        elif tag in (9, 10, 11):
+            mref.append(struct.unpack_from(">HH", data, i + 1))
+            i += 5
         elif tag == 12:
-            descs.append(struct.unpack_from(">H", data, i + 3)[0])
+            nat[k] = struct.unpack_from(">HH", data, i + 1)
+            descs.append(nat[k][1])
+            i += 5
+        elif tag in (17, 18):
             i += 5
         elif tag == 16:
             descs.append(struct.unpack_from(">H", data, i + 1)[0])
@@ -1891,21 +1914,47 @@ def class_refs(data):
         else:
             raise ValueError(f"알 수 없는 상수 {tag}")
         k += 1
-    out = set()
-    for c in classes:
-        name = utf.get(c, "")
-        out.update(re.findall(r"L([^;]+);", name) if name.startswith("[") else [name])
+
+    def cname(idx):
+        return utf.get(cls.get(idx, 0), "")
+
+    _, this, sup, nif = struct.unpack_from(">HHHH", data, i)
+    i += 8
+    interfaces = [cname(struct.unpack_from(">H", data, i + 2 * j)[0]) for j in range(nif)]
+    i += 2 * nif
+    members = set()
+    for _part in range(2):  # 필드, 메서드
+        cnt = struct.unpack_from(">H", data, i)[0]
+        i += 2
+        for _ in range(cnt):
+            _, ni, di, ac = struct.unpack_from(">HHHH", data, i)
+            i += 8
+            members.add((utf.get(ni, ""), utf.get(di, "")))
+            for _a in range(ac):
+                ln = struct.unpack_from(">I", data, i + 2)[0]
+                i += 6 + ln
+    refs = set()
+    for idx in cls:
+        name = cname(idx)
+        refs.update(re.findall(r"L([^;]+);", name) if name.startswith("[") else [name])
     for d in descs:
-        out.update(re.findall(r"L([^;<>]+);", utf.get(d, "")))
-    return out
+        refs.update(re.findall(r"L([^;<>]+);", utf.get(d, "")))
+    calls = set()
+    for ci, ni in mref:
+        owner = cname(ci)
+        if owner and not owner.startswith("[") and ni in nat:
+            calls.add((owner, utf.get(nat[ni][0], ""), utf.get(nat[ni][1], "")))
+    return {"super": cname(sup) if sup else "", "interfaces": interfaces, "members": members, "refs": refs, "calls": calls}
 
 
 def missing_classes(android_jar, roots, sources):
-    """roots(클래스 이름 앞부분들)에서 닿는 클래스 중 sources(jar·폴더)와 SDK 어디에도 없는 것 (봐주는 것 제외).
-    APK 를 실제로 돌리지 않고 '실행 중에 클래스를 못 찾아 앱이 꺼지는' 실수를 빌드에서 잡는다 (1.18 의 실수)."""
+    """roots(클래스 이름 앞부분들)에서 닿는 클래스들이 쓰는 클래스·메서드·필드 중, sources(jar·폴더)와 SDK 어디에도 없는 것
+    (봐주는 것 제외). APK 를 실제로 돌리지 않고 '실행 중에 클래스·메서드를 못 찾아 앱이 꺼지는' 실수를 빌드에서 잡는다
+    (1.18: 클래스가 빠짐, 1.19: androidx.core 판이 낮아 BuildCompat.isAtLeastU 가 없음)."""
     with zipfile.ZipFile(android_jar) as z:
         sdk = {n[:-6] for n in z.namelist() if n.endswith(".class")}
     where = {}
+    sdk_where = {c: ("jar", Path(android_jar), c + ".class") for c in sdk}
     for src in sources:
         src = Path(src)
         if src.is_dir():
@@ -1916,27 +1965,50 @@ def missing_classes(android_jar, roots, sources):
                 for nm in z.namelist():
                     if nm.endswith(".class") and not nm.startswith("META-INF/"):
                         where.setdefault(nm[:-6], ("jar", src, nm))
+    opened, parsed = {}, {}
+
+    def info(c):
+        if c not in parsed:
+            w = where.get(c) or sdk_where[c]
+            if w[0] == "dir":
+                data = w[1].read_bytes()
+            else:
+                if w[1] not in opened:
+                    opened[w[1]] = zipfile.ZipFile(w[1])
+                data = opened[w[1]].read(w[2])
+            parsed[c] = parse_class(data)
+        return parsed[c]
+
+    def has_member(owner, name, desc, seen_h=None):
+        seen_h = seen_h if seen_h is not None else set()
+        if owner in seen_h:
+            return False
+        seen_h.add(owner)
+        if owner not in where and owner not in sdk:  # 봐주는 클래스(목록 밖): 여기서는 확인하지 않는다
+            return True
+        ci = info(owner)  # 라이브러리 클래스와 그 위(SDK 의 Object 등까지)를 따라 올라간다
+        if (name, desc) in ci["members"]:
+            return True
+        return any(has_member(x, name, desc, seen_h) for x in [ci["super"], *ci["interfaces"]] if x)
+
     todo = [c for c in where if any(c.startswith(r) for r in roots)]
-    seen, missing, opened = set(), set(), {}
+    seen, missing = set(), set()
     while todo:
         c = todo.pop()
         if c in seen:
             continue
         seen.add(c)
-        w = where[c]
-        if w[0] == "dir":
-            data = w[1].read_bytes()
-        else:
-            if w[1] not in opened:
-                opened[w[1]] = zipfile.ZipFile(w[1])
-            data = opened[w[1]].read(w[2])
-        for r in class_refs(data):
+        ci = info(c)
+        for r in ci["refs"]:
             if r in sdk or r.startswith(("java/", "javax/")):
                 continue
             if r in where:
                 todo.append(r)
             elif not r.startswith(ALLOWED_MISSING):
                 missing.add(r)
+        for owner, name, desc in ci["calls"]:
+            if owner in where and not has_member(owner, name, desc):
+                missing.add(f"{owner}.{name}{desc}" if desc.startswith("(") else f"{owner}.{name}:{desc}")
     for z in opened.values():
         z.close()
     return sorted(missing)
@@ -2674,7 +2746,7 @@ def cmd_selftest(args):
         old_env = {k: os.environ.get(k) for k in ("JARVIS_URL_APP_HOME", "JARVIS_URL_APP_TOOLCHAIN")}
         os.environ["JARVIS_URL_APP_HOME"] = str(tmp_home)
         os.environ["JARVIS_URL_APP_TOOLCHAIN"] = str(tc)
-        java, _, _ = find_java()
+        java, javac, _ = find_java()
         tp = tool_paths(tc)
         parser = build_parser()
         try:
@@ -3016,6 +3088,12 @@ def cmd_selftest(args):
                       and "launchable-activity: name='app.jarvis.urlapp.WatchAskActivity'" in bw_raw and '"urlapp_watch"' in resww
                       and b"Lapp/jarvis/urlapp/WatchTile;" in dexww and b"Landroidx/wear/tiles/TileService;" in dexww, tl[:600])
                 host_w = urllib.parse.urlsplit(recw["url"]).hostname.encode()
+                ci = mfww.find("app.jarvis.urlapp.CrashLog$Init")
+                crash_entry = mfww[ci:mfww.find("E: ", ci)] if ci >= 0 else ""
+                check("꺼진 이유 기록(CrashLog): 폰·워치 모두 프로세스 시작 때 거는 곳(밖에 안 내줌)·워치 코드에 포함 (1.19 의 교훈)",
+                      "app.jarvis.urlapp.CrashLog$Init" in mfw and "app.jarvis.urlapp.CrashLog$Init" in mfww
+                      and re.search(r"android:exported\(0x01010010\)=(false|\(type 0x12\)0x0\b)", crash_entry)
+                      and b"Lapp/jarvis/urlapp/CrashLog;" in dexww and b"Lapp/jarvis/urlapp/CrashLog;" in dexw, crash_entry)
                 check("워치 앱에는 사이트 주소·웹 화면 코드가 없음 (폰을 거쳐서만)", host_w not in allw
                       and b"Landroid/webkit/WebView;" not in own_dex and b"assets/urlapp.json" not in allw, "")
             gms_only = [lib["jar"] for lib in maven_libs(tmp_home, GMS_LIBS[:4])]
@@ -3026,6 +3104,26 @@ def cmd_selftest(args):
                   "androidx/core/util/Preconditions" in lost_before and "androidx/collection/ArraySet" in lost_before
                   and all(r.split("/")[-1].startswith("R") or r.split("/")[-1].startswith("R$") for r in lost_after),
                   (lost_before[:5], lost_after[:5]))
+            # 함수(메서드·필드)까지: 1.19 는 클래스는 있었지만 판이 낮아 BuildCompat.isAtLeastV 가 없어 꺼졌다
+            mt = tmp_home / "member-test"
+            for v, body in (("old", "public static boolean bar() { return true; }"),
+                            ("new", "public static boolean bar() { return true; } public static boolean foo() { return false; }"
+                                    " public int x;")):
+                (mt / v / "src" / "t").mkdir(parents=True, exist_ok=True)
+                (mt / v / "src" / "t" / "B.java").write_text("package t; public class B { " + body + " }", encoding="utf-8")
+                run([javac, "-source", "8", "-target", "8", "-nowarn", "-Xlint:-options", "-d", mt / v / "out",
+                     mt / v / "src" / "t" / "B.java"], tmp_home, "함수 검사 시험 컴파일")
+            (mt / "c" / "t").mkdir(parents=True, exist_ok=True)
+            (mt / "c" / "t" / "D.java").write_text("package t; public class D extends B { }", encoding="utf-8")
+            (mt / "c" / "t" / "C.java").write_text(
+                "package t; public class C { static boolean go() { return B.foo() || D.bar() || new D().x > 0"
+                " || new D().toString() != null; } }", encoding="utf-8")
+            run([javac, "-source", "8", "-target", "8", "-nowarn", "-Xlint:-options", "-cp", mt / "new" / "out",
+                 "-d", mt / "c" / "out", mt / "c" / "t" / "C.java", mt / "c" / "t" / "D.java"], tmp_home, "함수 검사 시험 컴파일")
+            m_old = missing_classes(tp["android_jar"], ["t/C"], [mt / "c" / "out", mt / "old" / "out"])
+            m_new = missing_classes(tp["android_jar"], ["t/C"], [mt / "c" / "out", mt / "new" / "out"])
+            check("빠진 함수 검사: 낮은 판의 라이브러리(함수·필드 없음)는 잡고, 위 클래스·Object 에서 물려받은 것은 통과 (1.19 의 실수)",
+                  m_old == ["t/B.foo()Z", "t/D.x:I"] and not m_new, (m_old, m_new))
             check("--watch 없는 앱에는 Play 서비스·워치 연결 없음", "PhoneWatchService" not in mfm
                   and "com.google.android.gms" not in mfm)
             # --notify + --update-encrypt: 앱 알림, 암호화한 앱 안 업데이트
