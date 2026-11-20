@@ -34,7 +34,10 @@ async function () {
       soft("/urlapp-notify.json")]);
     if (w === "login") return null; // 로그인 전: 위젯을 바꾸지 않는다
     siteNotify = !!(n && Array.isArray(n.items));
-    if (w && typeof w === "object" && Array.isArray(w.rows) && w.rows.length) siteWidget = w;
+    // 할 일이 없으면 자비스가 rows 를 비워 준다 (제목은 '자비스 · 쉬는 중') — 그때도 자비스 값을 쓴다
+    if (w && typeof w === "object" && Array.isArray(w.rows) && typeof w.title === "string") {
+      siteWidget = w.rows.length ? w : Object.assign({}, w, { rows: [{ label: "지금 하는 일", value: "없음" }] });
+    }
   } catch (e) { /* 아래 대체 길 */ }
   if (siteWidget && siteNotify) {
     return { title: siteWidget.title, rows: siteWidget.rows, note: siteWidget.note || "", notify: [] };

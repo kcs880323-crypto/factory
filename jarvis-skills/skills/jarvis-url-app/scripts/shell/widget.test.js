@@ -111,6 +111,11 @@ function check(label, cond, detail) {
         + '<div class="card"><span>코드 리뷰</span><div role="progressbar" aria-valuenow="40"></div><span>40%</span></div>\';},800);'
         + '</script></body></html>');
     }
+    if ((req.url === "/urlapp-widget.json" || req.url === "/urlapp-notify.json") && cjMode === "siteIdle") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify(req.url === "/urlapp-widget.json"
+        ? { title: "자비스 · 쉬는 중", rows: [], note: "16:40 기준" } : { items: [] }));
+    }
     if ((req.url === "/urlapp-widget.json" || req.url === "/urlapp-notify.json") && cjMode === "site") {
       cjReqs.push(req.method + " " + req.url);
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -542,6 +547,12 @@ function check(label, cond, detail) {
   check("CHARLES: 자비스가 /urlapp-widget.json 을 주면 그 값(작업창과 같은 83%)을 그대로, 알림은 자비스 목록에 맡김",
     cs.title === "자비스 · 진행 중 1" && cs.rows.length === 1 && cs.rows[0].value === "83%" && cs.notify.length === 0
       && !cjReqs.some((r) => r.includes("/api/")), { cs, cjReqs });
+  cjMode = "siteIdle";
+  await cj.evaluate(() => { __w.length = 2; window.__urlappWidgetRun(); });
+  await cj.waitForFunction(() => __w.length === 3, null, { timeout: 5000 });
+  const ci = await cj.evaluate(() => __w[2]);
+  check("CHARLES: 자비스가 할 일 없음(rows 비움)을 주면 자비스 제목 그대로 + '지금 하는 일 없음'",
+    ci.title === "자비스 · 쉬는 중" && ci.rows.length === 1 && ci.rows[0].value === "없음" && ci.notify.length === 0, ci);
   await cj.evaluate(() => { __w.length = 2; });
   cjMode = "login";
   await cj.evaluate(() => window.__urlappWidgetRun());
