@@ -111,6 +111,13 @@ function check(label, cond, detail) {
         + '<div class="card"><span>코드 리뷰</span><div role="progressbar" aria-valuenow="40"></div><span>40%</span></div>\';},800);'
         + '</script></body></html>');
     }
+    if ((req.url === "/urlapp-widget.json" || req.url === "/urlapp-notify.json") && cjMode === "site") {
+      cjReqs.push(req.method + " " + req.url);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify(req.url === "/urlapp-widget.json"
+        ? { title: "자비스 · 진행 중 1", rows: [{ label: "음악 요청 #30 · 발행 묶음", value: "83%", tone: "pos" }], note: "작업창과 같은 값" }
+        : { items: [{ id: "n1", title: "작업 끝", body: "x", open: "/" }] }));
+    }
     if (req.url === "/urlapp-widget.json" && spMode !== "none" && spMode !== "tasks") {
       if (spMode === "401") { res.writeHead(401, { "Content-Type": "application/json" }); return res.end("{}"); }
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
@@ -527,6 +534,15 @@ function check(label, cond, detail) {
   const c2 = await cj.evaluate(() => __w[1]);
   check("CHARLES: 할 일이 없으면 '지금 하는 일 없음'", c2.title === "CHARLES · 쉬는 중" && c2.rows.length === 1
     && c2.rows[0].value === "없음" && c2.notify.length === 0, c2);
+  cjMode = "site";
+  cjReqs.length = 0;
+  await cj.evaluate(() => window.__urlappWidgetRun());
+  await cj.waitForFunction(() => __w.length === 3, null, { timeout: 5000 });
+  const cs = await cj.evaluate(() => __w[2]);
+  check("CHARLES: 자비스가 /urlapp-widget.json 을 주면 그 값(작업창과 같은 83%)을 그대로, 알림은 자비스 목록에 맡김",
+    cs.title === "자비스 · 진행 중 1" && cs.rows.length === 1 && cs.rows[0].value === "83%" && cs.notify.length === 0
+      && !cjReqs.some((r) => r.includes("/api/")), { cs, cjReqs });
+  await cj.evaluate(() => { __w.length = 2; });
   cjMode = "login";
   await cj.evaluate(() => window.__urlappWidgetRun());
   await cj.waitForTimeout(600);

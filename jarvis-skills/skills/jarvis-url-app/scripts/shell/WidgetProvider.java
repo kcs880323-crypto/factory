@@ -195,7 +195,7 @@ public class WidgetProvider extends AppWidgetProvider {
             if (notify != null) {
                 o.remove("notify");
                 json = o.toString();
-                if (NotifyJob.enabled(ctx)) NotifyJob.apply(ctx, new JSONObject().put("items", notify).toString());
+                if (NotifyJob.enabled(ctx)) NotifyJob.apply(ctx, new JSONObject().put("items", notify).toString(), "widget");
             }
         } catch (Exception ignored) {
             // 모양이 이상하면 그대로 저장 (그리기에서 걸러진다)

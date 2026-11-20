@@ -1,4 +1,9 @@
-// CHARLES(자비스) 위젯: 지금 하는 일 요약 + 알림. 자비스 서버의 **기존 API 만 읽는다** (서버를 고치거나 다시 시작할 필요 없음).
+// CHARLES(자비스) 위젯: 지금 하는 일 요약 + 알림.
+// 0) 자비스가 위젯 정보를 직접 주면 그것이 먼저다 (2026-11-20 자비스 개발 Claude 가 연락 창구로 알려 줌):
+//    GET /urlapp-widget.json → {title, rows, note} — 작업창('자비스가 하는 일')과 같은 값(진행률 83% 등, 자비스가 잰 것)
+//    GET /urlapp-notify.json → {items:[…]} 가 있으면 알림은 앱이 그 목록으로 직접 띄우므로(15분 확인) 이 위젯은 알림을 만들지 않는다
+//    (같은 일이 두 번 알림으로 오지 않게). 둘 다 없으면(자비스 서버가 아직 옛 코드) 아래 기존 API 로 만든다.
+// 아래는 자비스 서버의 **기존 API 만 읽는** 대체 길 (서버를 고치거나 다시 시작할 필요 없음).
 //   /api/jobs/active    → {running: [채팅·실행 작업], unseen: [끝났는데 아직 화면에서 결과를 안 본 작업]}
 //                         작업: {id, kind(chat|agent), title, message, status(running|done|error|stopped), waiting, started, next}
 //   /api/job/<id>?after=N&wait=0 → 그 작업의 최근 이벤트 중 마지막 "progress"(percent·label) — 자비스가 적은 예상 진행률
@@ -22,6 +27,18 @@ async function () {
     return r.json();
   }
   const soft = (p) => get(p).catch(() => null); // 기능이 없거나 꺼져 있으면 그 부분만 뺀다
+  // 0) 자비스가 주는 위젯 정보·알림 목록 (작업창과 같은 값)
+  let siteWidget = null, siteNotify = false;
+  try {
+    const [w, n] = await Promise.all([get("/urlapp-widget.json").catch((e) => (e.message === "login" ? "login" : null)),
+      soft("/urlapp-notify.json")]);
+    if (w === "login") return null; // 로그인 전: 위젯을 바꾸지 않는다
+    siteNotify = !!(n && Array.isArray(n.items));
+    if (w && typeof w === "object" && Array.isArray(w.rows) && w.rows.length) siteWidget = w;
+  } catch (e) { /* 아래 대체 길 */ }
+  if (siteWidget && siteNotify) {
+    return { title: siteWidget.title, rows: siteWidget.rows, note: siteWidget.note || "", notify: [] };
+  }
   let act;
   try {
     act = await get("/api/jobs/active");
@@ -113,6 +130,8 @@ async function () {
     notify.push({ id: `${j.id}:${j.status}`, title: e[2], body: name(j), open: "/" });
   }
 
+  if (siteNotify) notify.length = 0; // 알림은 자비스의 알림 목록으로 (두 번 오지 않게)
+  if (siteWidget) return { title: siteWidget.title, rows: siteWidget.rows, note: siteWidget.note || "", notify };
   let rows = act1.concat(doing, queued, ended).slice(0, 4);
   if (!rows.length) rows = [{ label: "지금 하는 일", value: "없음" }];
   const notes = [];

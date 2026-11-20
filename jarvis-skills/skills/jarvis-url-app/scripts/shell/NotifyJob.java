@@ -135,7 +135,7 @@ public class NotifyJob extends JobService {
                     try (InputStream in = c.getInputStream()) {
                         body = new String(readAll(in, 200_000), StandardCharsets.UTF_8);
                     }
-                    result = apply(ctx, body);
+                    result = apply(ctx, body, "site");
                 }
             } finally {
                 c.disconnect();
@@ -149,10 +149,13 @@ public class NotifyJob extends JobService {
         return result;
     }
 
-    /** 받은 목록에서 새 알림을 띄우고 '본 것'을 저장한다. */
-    static synchronized String apply(Context ctx, String body) {
+    /** 받은 목록에서 새 알림을 띄우고 '본 것'을 저장한다.
+     *  source: "site"(사이트의 /urlapp-notify.json) 또는 "widget"(위젯 스크립트의 notify). 처음 읽었는지는 출처마다 따로 센다 —
+     *  한쪽이 이미 읽혔다고 다른 쪽의 옛 알림이 한꺼번에 뜨지 않게. */
+    static synchronized String apply(Context ctx, String body, String source) {
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        boolean primed = p.getBoolean("primed", false);
+        String key = "primed_" + source;
+        boolean primed = p.getBoolean(key, "widget".equals(source) && p.getBoolean("primed", false));
         LinkedHashSet<String> seen = new LinkedHashSet<>();
         try {
             JSONArray a = new JSONArray(p.getString("seen", "[]"));
@@ -168,7 +171,7 @@ public class NotifyJob extends JobService {
         seen.addAll(r.ids);
         ArrayList<String> keep = new ArrayList<>(seen);
         if (keep.size() > 300) keep = new ArrayList<>(keep.subList(keep.size() - 300, keep.size()));
-        p.edit().putBoolean("primed", true).putString("seen", new JSONArray(keep).toString()).apply();
+        p.edit().putBoolean(key, true).putString("seen", new JSONArray(keep).toString()).apply();
         return primed ? "새 알림 " + (r.show.size() + r.skipped) + "개" : "처음 확인 (이전 알림 " + r.ids.size() + "개는 띄우지 않음)";
     }
 
