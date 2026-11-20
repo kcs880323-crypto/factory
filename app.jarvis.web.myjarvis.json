@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 15,
- "version_name": "1.15",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v15.bin",
- "sha256": "fb592fff67d8ec67126345f4bcbd857bd137d833b71fdb837597d4c38d9512e4",
- "size": 584469,
- "notes": "‘자비스 대화’ 아이콘 추가 — 빅스비 빠른 명령어로 부르기. 늘 켜 두던 호출어는 뺌(배터리)",
- "published_at": "2026-11-20 08:58",
+ "version_code": 16,
+ "version_name": "1.16",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v16.bin",
+ "sha256": "34200894b4c1237074a6332fcd9c54d376887a563d164f19347bdf6ee8612afe",
+ "size": 588565,
+ "notes": "위젯 투명도 조절(위젯을 길게 눌러 '설정'), 4×2 위젯이 3×2로 보이던 것 고침",
+ "published_at": "2026-11-20 09:05",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "dd683bd083313bbe0f071f401e2cc8c727b3dcdcf8b9aef198c8a8e02f13c274"
+ "apk_sha256": "1a6d3c72ddf39bce47374253a057e82c47803e5d9e87d0a85abe084046dad362"
 }
