@@ -45,15 +45,16 @@ public class WidgetProvider extends AppWidgetProvider {
     private static JSONObject cfg; // assets/urlapp.json (widget_refresh_min: 0 = 단추·자동 새로고침 없음, mic)
 
     /** 위젯 종류: "" 첫 위젯, "alt" 두 번째 위젯(저장한 값의 "alt" 를 그린다),
-     *  "s2"·"s3" 첫 위젯과 같은 값을 다른 크기로 (--widget-sizes 의 두·세 번째 크기). 모양 이름은 urlapp_widget[_종류]. */
+     *  "s2"·"s3"·"s4" 첫 위젯과 같은 값을 다른 크기로 (--widget-sizes 의 두·세·네 번째 크기). 모양 이름은 urlapp_widget[_종류].
+     *  세로 1칸 크기(예: 4×1)는 가로 한 줄 모양(<모양>_oneline): 첫 줄만, 줄이 없을 때만 안내 글. */
     String kind() {
         return "";
     }
 
     /** 이 앱에 들어 있을 수 있는 위젯 종류 (매니페스트에 없는 것은 놓인 것이 없다). */
     private static final Class<?>[] KINDS = {WidgetProvider.class, WidgetProviderAlt.class, WidgetProviderS2.class,
-            WidgetProviderS3.class};
-    private static final String[] KIND_NAMES = {"", "alt", "s2", "s3"};
+            WidgetProviderS3.class, WidgetProviderS4.class};
+    private static final String[] KIND_NAMES = {"", "alt", "s2", "s3", "s4"};
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
@@ -297,6 +298,7 @@ public class WidgetProvider extends AppWidgetProvider {
         int negative = color(res, pkg, "widget_negative", 0xFFE11D48);
         int normal = color(res, pkg, "widget_value", 0xFF0F172A);
         JSONArray rows = data != null ? data.optJSONArray("rows") : null;
+        int shown = 0;
         for (int i = 0; i < Math.min(count, MAX_ROWS); i++) {
             int row = id(res, pkg, "w_row" + (i + 1));
             if (row == 0) break; // 이 앱의 위젯은 여기까지
@@ -306,6 +308,7 @@ public class WidgetProvider extends AppWidgetProvider {
                 continue;
             }
             v.setViewVisibility(row, View.VISIBLE);
+            shown++;
             v.setTextViewText(id(res, pkg, "w_label" + (i + 1)), r.optString("label", ""));
             v.setTextViewText(id(res, pkg, "w_value" + (i + 1)), r.optString("value", ""));
             String tone = r.optString("tone", "");
@@ -332,6 +335,9 @@ public class WidgetProvider extends AppWidgetProvider {
                     + (failed > at ? (ko ? " · 새로고침 실패 " : " · refresh failed ") + hm.format(new Date(failed)) : "");
         }
         v.setTextViewText(id(res, pkg, "w_note"), note);
+        if (integer(res, pkg, name + "_oneline", 0) == 1) { // 가로 한 줄 모양: 줄이 있으면 그 줄, 없으면 안내 글
+            v.setViewVisibility(id(res, pkg, "w_note"), shown > 0 ? View.GONE : View.VISIBLE);
+        }
 
         // 마이크 단추 (--mic 앱만): 앱을 열고 음성 대화를 시작한다
         int micBtn = id(res, pkg, "w_mic");

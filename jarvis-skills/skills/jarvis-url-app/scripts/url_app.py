@@ -707,7 +707,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
         receiver = widget_receiver("WidgetProvider", "@string/widget_name" if widget_label else "@string/app_name")
         if widget_alt:
             receiver += widget_receiver("WidgetProviderAlt", "@string/widget_alt_name", "urlapp_widget_alt_info")
-        for i in range(2, 2 + min(widget_extra_sizes, 2)):  # 같은 내용의 다른 크기 (위젯 목록에 크기별로)
+        for i in range(2, 2 + min(widget_extra_sizes, 3)):  # 같은 내용의 다른 크기 (위젯 목록에 크기별로)
             receiver += widget_receiver(f"WidgetProviderS{i}", "@string/widget_name" if widget_label else "@string/app_name",
                                         f"urlapp_widget_s{i}_info")
         receiver += """
@@ -1061,7 +1061,7 @@ def mix(hex_color, other, t):
 
 
 def parse_widget_sizes(text):
-    """--widget-sizes "4x2,3x2,2x2" → [(4, 2), (3, 2), (2, 2)] (가로 2~5칸, 세로 1~4칸, 1~3개, 겹치지 않게)."""
+    """--widget-sizes "4x2,3x2,2x2,4x1" → [(4, 2), (3, 2), (2, 2), (4, 1)] (가로 2~5칸, 세로 1~4칸, 1~4개, 겹치지 않게)."""
     if not text or text == "none":
         return []
     out = []
@@ -1075,14 +1075,17 @@ def parse_widget_sizes(text):
         if size in out:
             raise Fail(f"--widget-sizes 에 같은 크기가 두 번 있습니다: {part}")
         out.append(size)
-    if not 1 <= len(out) <= 3:
-        raise Fail("--widget-sizes 는 1~3개입니다.")
+    if not 1 <= len(out) <= 4:
+        raise Fail("--widget-sizes 는 1~4개입니다.")
     return out
 
 
 def size_rows(size, rows):
-    """그 크기에 들어가는 줄 수: 세로 한 칸에 약 2줄, 가로 2칸이면 1줄 덜 (제목·아래 줄 자리)."""
+    """그 크기에 들어가는 줄 수: 세로 한 칸에 약 2줄, 가로 2칸이면 1줄 덜 (제목·아래 줄 자리).
+    세로 1칸(4×1 등)은 가로 한 줄 모양이라 첫 줄 하나만."""
     w, h = size
+    if h == 1:
+        return 1
     fit = max(1, h * 2 - (1 if w <= 2 else 0))
     return max(1, min(rows, fit))
 
@@ -1245,7 +1248,96 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             android:src="@drawable/urlapp_widget_mic"
             android:visibility="gone" />""" if mic else ""
         # 바탕은 따로 그린 그림(w_bg) — 위젯 설정의 투명도를 그 그림의 알파로 (RemoteViews 는 배경 알파를 못 바꾼다)
-        w(f"layout/{name}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+        if size and size[1] == 1:
+            # 세로 1칸 (예: 4×1, 2026-11-20 사용자 요청): 가로 한 줄 — [아이콘] 제목 / 첫 줄(또는 안내) [새로고침][마이크].
+            # 그리는 코드가 만지는 id(w_title·w_row1·w_label1·w_value1·w_note·w_refresh·w_mic)는 모두 있어야 한다 (없으면 위젯이 깨짐).
+            w(f"layout/{name}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+<ImageView
+    android:id="@+id/w_bg"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/urlapp_widget_bg" />
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="{pad}dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="{pad - 4 if mic else pad}dp"
+    android:paddingBottom="4dp">
+{icon_xml}
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="{0 if compact else 10}dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/w_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/app_name"
+            android:textColor="@color/widget_title"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+        <LinearLayout
+            android:id="@+id/w_row1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+            <TextView
+                android:id="@+id/w_label1"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_label"
+                android:textSize="12sp" />
+            <TextView
+                android:id="@+id/w_value1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:maxLines="1"
+                android:textColor="@color/widget_value"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+        <TextView
+            android:id="@+id/w_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/widget_hint"
+            android:textColor="@color/widget_note"
+            android:textSize="10sp" />
+    </LinearLayout>
+    <ImageView
+        android:id="@+id/w_refresh"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:padding="5dp"
+        android:contentDescription="@string/widget_refresh"
+        android:src="@drawable/urlapp_widget_refresh"
+        android:visibility="gone" />{mic_xml}
+</LinearLayout>
+</FrameLayout>
+""")
+        else:
+            w(f"layout/{name}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/w_root"
     android:layout_width="match_parent"
@@ -1333,10 +1425,14 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     main_rows = size_rows(sizes[0], rows) if sizes else rows
     layout(main_rows, "urlapp_widget", "urlapp_widget_info", sizes[0] if sizes else None)
     counts = f'    <integer name="urlapp_widget_rows">{main_rows}</integer>\n'
-    for i, size in enumerate(sizes[1:3], start=2):  # 같은 내용, 다른 크기
+    if sizes and sizes[0][1] == 1:
+        counts += '    <integer name="urlapp_widget_oneline">1</integer>\n'
+    for i, size in enumerate(sizes[1:4], start=2):  # 같은 내용, 다른 크기
         n_i = size_rows(size, rows)
         layout(n_i, f"urlapp_widget_s{i}", f"urlapp_widget_s{i}_info", size)
         counts += f'    <integer name="urlapp_widget_s{i}_rows">{n_i}</integer>\n'
+        if size[1] == 1:  # 가로 한 줄 모양: 줄이 없을 때만 아래 안내(w_note)를 보인다
+            counts += f'    <integer name="urlapp_widget_s{i}_oneline">1</integer>\n'
     if alt_label:
         alt_n = alt_rows or rows
         layout(alt_n, "urlapp_widget_alt", "urlapp_widget_alt_info")
@@ -2286,11 +2382,12 @@ def cmd_selftest(args):
             check("--widget-style dark: 밝은/어두운 모드 모두 앱 바탕색 위젯", vals and set(vals) == {"#ff021a20"}, bgs[:1])
             # --mic + --widget-sizes: 크기별 위젯 3종(같은 내용)·마이크 단추·마이크 권한·음성 도우미·'마이크 모드' 바로가기
             check("위젯 크기 형식이 틀리면 거부", raises(lambda: parse_widget_sizes("4x2,9x9"))
-                  and raises(lambda: parse_widget_sizes("4x2,4x2")) and raises(lambda: parse_widget_sizes("4x2,3x2,2x2,2x1"))
+                  and raises(lambda: parse_widget_sizes("4x2,4x2")) and raises(lambda: parse_widget_sizes("4x2,3x2,2x2,4x1,2x1"))
+                  and parse_widget_sizes("4x2,3x2,2x2,4x1") == [(4, 2), (3, 2), (2, 2), (4, 1)]
                   and parse_widget_sizes("4x2, 3×2 2x2") == [(4, 2), (3, 2), (2, 2)])
             check("크기별 줄 수 (2칸 높이: 4줄, 가로 2칸이면 3줄)", size_rows((4, 2), 4) == 4 and size_rows((2, 2), 4) == 3
-                  and size_rows((3, 1), 4) == 2 and size_rows((4, 4), 6) == 6)
-            build(base + "/micw", "--no-fetch", "--widget", str(wjs), "--mic", "--widget-sizes", "4x2,3x2,2x2")
+                  and size_rows((3, 1), 4) == 1 and size_rows((4, 1), 4) == 1 and size_rows((4, 4), 6) == 6)
+            build(base + "/micw", "--no-fetch", "--widget", str(wjs), "--mic", "--widget-sizes", "4x2,3x2,2x2,4x1")
             recm = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/micw"))
             mfm = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", recm["apk"]], tmp_home, "xmltree")
             resm = run([tp["aapt2"], "dump", "resources", recm["apk"]], tmp_home, "resources")
@@ -2299,20 +2396,31 @@ def cmd_selftest(args):
                 cfgm = json.loads(z.read("assets/urlapp.json"))
                 scm = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/shortcuts.xml", recm["apk"]], tmp_home, "xmltree")
                 infos = {}
-                for k in ("urlapp_widget_info", "urlapp_widget_s2_info", "urlapp_widget_s3_info"):
+                for k in ("urlapp_widget_info", "urlapp_widget_s2_info", "urlapp_widget_s3_info", "urlapp_widget_s4_info"):
                     f = next((n for n in names_m if n.startswith("res/") and n.endswith(".xml")
                               and re.search(r"/" + k + r"\.xml$", n)), None)
                     infos[k] = run([tp["aapt2"], "dump", "xmltree", "--file", f, recm["apk"]], tmp_home, "xmltree") if f else ""
             cells = {k: re.findall(r"targetCell(?:Width|Height)\(0x[0-9a-f]+\)=(\d+)", v) for k, v in infos.items()}
             check("크기별 위젯: 4×2·3×2·2×2 세 가지가 위젯 목록에 따로", "app.jarvis.urlapp.WidgetProviderS2" in mfm
                   and "app.jarvis.urlapp.WidgetProviderS3" in mfm
+                  and "app.jarvis.urlapp.WidgetProviderS4" in mfm
                   and cells == {"urlapp_widget_info": ["4", "2"], "urlapp_widget_s2_info": ["3", "2"],
-                                "urlapp_widget_s3_info": ["2", "2"]}, cells)
+                                "urlapp_widget_s3_info": ["2", "2"], "urlapp_widget_s4_info": ["4", "1"]}, cells)
             dps = {k: [int(float(x)) for x in re.findall(r"min(?:Width|Height)\(0x[0-9a-f]+\)=([0-9.]+)dp", v)]
                    for k, v in infos.items()}
-            check("크기별 위젯: 넓은 칸 런처에서도 4×2 가 3칸으로 줄지 않게 (기본 너비 300·210·130dp, 높이 150dp)",
+            check("크기별 위젯: 넓은 칸 런처에서도 4×2 가 3칸으로 줄지 않게 (기본 너비 300·210·130·300dp, 높이 150·150·150·50dp)",
                   dps == {"urlapp_widget_info": [300, 150], "urlapp_widget_s2_info": [210, 150],
-                          "urlapp_widget_s3_info": [130, 150]}, dps)
+                          "urlapp_widget_s3_info": [130, 150], "urlapp_widget_s4_info": [300, 50]}, dps)
+            with zipfile.ZipFile(recm["apk"]) as z:
+                f41 = next((n for n in z.namelist() if re.search(r"layout/urlapp_widget_s4\.xml$", n)), None)
+            lay41 = run([tp["aapt2"], "dump", "xmltree", "--file", f41, recm["apk"]], tmp_home, "xmltree") if f41 else ""
+            need41 = ["w_root", "w_bg", "w_title", "w_row1", "w_label1", "w_value1", "w_note", "w_refresh", "w_mic"]
+            idhex = dict((n, h) for h, n in re.findall(r"resource (0x[0-9a-f]+) id/(w_[a-z0-9]+)", resm))
+            missing41 = [n for n in need41 if n not in idhex or f"=@{idhex[n]}" not in lay41]
+            check("4×1 위젯: 가로 한 줄 모양 (첫 줄만, 줄이 없을 때 안내), 그리는 코드가 만지는 id 가 모두 있음",
+                  f41 is not None and not missing41 and f"=@{idhex.get('w_row2', 'x')}" not in lay41
+                  and re.search(r"integer/urlapp_widget_s4_rows\n\s+\(\) 1", resm) is not None
+                  and re.search(r"integer/urlapp_widget_s4_oneline\n\s+\(\) 1", resm) is not None, missing41)
             check("위젯 꾸미기: 길게 눌러 '설정'(다시 설정 가능·놓을 때 안 물음)·투명도용 바탕 그림·설정 화면",
                   all("app.jarvis.urlapp.WidgetSettingsActivity" in v and re.search(r"widgetFeatures\(0x[0-9a-f]+\)=(\(type 0x11\))?0x0*5\b", v)
                       for v in infos.values())
@@ -2627,7 +2735,7 @@ def build_parser():
     b.add_argument("--hotword-phrase", dest="hotword_phrase", action="append", default=[],
                    help="호출어 문장 (여러 번 또는 쉼표로, 한글 낱말 2~3개. 기본: 앱 이름으로 '하이·헤이·안녕 <이름>')")
     b.add_argument("--widget-sizes", dest="widget_sizes",
-                   help="위젯을 크기별로 따로 (예: 4x2,3x2,2x2 — 최대 3개, 첫 크기가 기본 위젯) | none")
+                   help="위젯을 크기별로 따로 (예: 4x2,3x2,2x2,4x1 — 최대 4개, 첫 크기가 기본 위젯. 세로 1칸은 가로 한 줄 모양) | none")
     b.add_argument("--live", action=argparse.BooleanOptionalAction, default=None,
                    help="사이트를 자주 고치는 앱: 저장(캐시) 없이 늘 서버에서 새로 받고, 30분 넘게 나가 있다 돌아오면 새로 고침")
     b.add_argument("--dark", choices=["auto", "darken"],
