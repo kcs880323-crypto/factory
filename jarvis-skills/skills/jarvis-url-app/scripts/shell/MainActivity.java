@@ -122,6 +122,7 @@ public class MainActivity extends Activity {
     private boolean pageReady;  // 자기 사이트 페이지를 다 읽었다
     private boolean micPending; // 마이크 단추로 열렸다: 페이지가 뜨면 음성 대화를 시작한다
     private boolean micAsking;
+    private boolean resumed;    // 앱이 앞에 보이는 중 (사이트의 듣기는 이때만)
     private final ArrayList<Runnable[]> micWaiters = new ArrayList<>(); // {허락되면, 거절되면}
 
     // 알림 (--notify 로 만든 앱만): 웹 알림(Notification)을 폰 알림으로 (assets/urlapp-notify.js), 15분마다 사이트 알림 확인(NotifyJob)
@@ -942,10 +943,19 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void listen(String token, String lang, boolean partial) {
             if (!dlToken.equals(token)) return;
-            runOnUiThread(() -> withMic(() -> voice().listen(lang, partial, MainActivity.this::sendSpeech), () -> {
-                sendSpeech(Voice.ev("error").put2("error", "not-allowed"));
-                sendSpeech(Voice.ev("end"));
-            }));
+            runOnUiThread(() -> {
+                // 앱이 뒤에 있거나 음성 대화(VoiceChat)·위젯 대화 창이 마이크를 쓰는 동안은 사이트의 듣기(호출어 등)를 받지 않는다
+                // (2026-11-20: 사이트의 호출어 듣기가 폰 음성 인식을 붙잡아 대화 판의 듣기를 계속 끊었다)
+                if (!resumed || (chat != null && chat.active())) {
+                    sendSpeech(Voice.ev("error").put2("error", "audio-capture"));
+                    sendSpeech(Voice.ev("end"));
+                    return;
+                }
+                withMic(() -> voice().listen(lang, partial, MainActivity.this::sendSpeech), () -> {
+                    sendSpeech(Voice.ev("error").put2("error", "not-allowed"));
+                    sendSpeech(Voice.ev("end"));
+                });
+            });
         }
 
         @JavascriptInterface
@@ -1311,8 +1321,8 @@ public class MainActivity extends Activity {
             return true;
         }
         if (ACTION_MIC.equals(action) && speechJs != null) {
-            micPending = true;
-            if (pageReady) startMicMode(); // 이미 열려 있던 앱이면 바로 (처음 열 때는 페이지가 뜬 뒤)
+            // 마이크 모드(앱 아이콘 길게 누르기)도 위젯과 같은 대화 창으로 (빅스비처럼 위에 떠서 바로 듣기)
+            startActivity(new Intent(this, VoiceActivity.class));
             return false;
         }
         if (ACTION_UPDATE.equals(action)) {
@@ -1334,6 +1344,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (web != null) web.onResume();
+        resumed = true;
         maybeLiveReload();
         if (widgetJs != null) {
             WidgetProvider.scheduleAuto(this); // 위젯 자동 새로고침 (켠 앱·위젯이 놓여 있을 때만)
@@ -1388,6 +1399,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         pausedAt = SystemClock.elapsedRealtime();
+        resumed = false;
+        if (voice != null && (chat == null || !chat.active())) voice.cancelListening(true); // 위에 대화 창이 떠도 사이트가 마이크를 붙잡지 않게
         if (web != null) web.onPause();
         CookieManager.getInstance().flush(); // 로그인 상태가 바로 저장되게
         super.onPause();

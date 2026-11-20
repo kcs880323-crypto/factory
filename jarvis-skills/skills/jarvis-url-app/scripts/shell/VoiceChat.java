@@ -31,6 +31,14 @@ final class VoiceChat {
         void ask(String id, String question);
 
         void keepAwake(boolean on);
+
+        /** 대화를 끝냈다 ('끝내기'). 위젯의 대화 창은 여기서 닫는다. */
+        default void ended() {
+        }
+
+        /** 두 번 말이 없어 쉬었다. 위젯의 대화 창은 잠깐 뒤 닫는다. */
+        default void quiet() {
+        }
     }
 
     private static final int IDLE = 0, LISTENING = 1, THINKING = 2, SPEAKING = 3, PAUSED = 4;
@@ -84,6 +92,14 @@ final class VoiceChat {
             parent.removeView(panel);
             panel = null;
         }
+        host.ended();
+    }
+
+    /** 사이트에 물을 수 없을 때 (연결 안 됨·로그인 전 등): 답을 기다리던 중이면 이유를 보이고 쉰다. */
+    void fail(String why) {
+        if (state == IDLE) return;
+        waiting = null;
+        pause(why);
     }
 
     /** 사이트의 답 (MainActivity 가 통로에서 받아 메인 스레드로 넘긴다). ok=false 면 사이트에서 오류가 났다. */
@@ -138,6 +154,7 @@ final class VoiceChat {
                 if ("no-speech".equals(e)) {
                     if (++quiet >= 2) {
                         pause(t("말씀이 없어서 쉬고 있어요. '다시 듣기'를 누르세요.", "Paused (no speech). Tap 'Listen'."));
+                        host.quiet();
                     } else {
                         main.postDelayed(() -> { if (state == LISTENING) listen(); }, 300);
                     }

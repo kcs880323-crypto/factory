@@ -319,8 +319,8 @@ public class WidgetProvider extends AppWidgetProvider {
         if (micBtn != 0) {
             if (micEnabled(ctx)) {
                 v.setViewVisibility(micBtn, View.VISIBLE);
-                Intent mic = new Intent(ctx, MainActivity.class).setAction(MainActivity.ACTION_MIC)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                // 앱 화면을 열지 않고 홈 화면 위에 작은 대화 창만 (빅스비처럼 바로 듣기)
+                Intent mic = new Intent(ctx, VoiceActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 v.setOnClickPendingIntent(micBtn, PendingIntent.getActivity(ctx, 5, mic,
                         PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
             } else {

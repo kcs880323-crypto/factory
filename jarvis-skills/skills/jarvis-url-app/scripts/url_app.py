@@ -752,6 +752,16 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
     # --mic: 마이크 권한(앱이 처음 쓸 때 묻는다)과 폰의 음성 인식·읽어 주기 서비스를 찾는 허락 (안드로이드 11+)
     queries = ""
     if mic:
+        # 위젯 마이크의 대화 창: 앱 화면과 다른 작업(task)으로 홈 화면 위에 뜨고 최근 앱 목록에는 안 남는다
+        card_parts += f"""
+        <activity
+            android:name="app.jarvis.urlapp.VoiceActivity"
+            android:exported="false"
+            android:theme="@style/VoiceTheme"
+            android:taskAffinity="{app_id}.voice"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden" />"""
         card_perm += '\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
         queries = """
     <queries>
@@ -829,10 +839,17 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
         <item name="android:statusBarColor">@color/app_theme</item>
         <item name="android:navigationBarColor">@color/app_bg</item>
 """
+    # VoiceTheme: 위젯 마이크의 대화 창 (홈 화면 위에 투명하게 떠서 아래쪽에 대화 판만 — VoiceActivity, --mic 앱)
     w("values/styles.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
 {items}    </style>
+    <style name="VoiceTheme" parent="@android:style/Theme.Translucent.NoTitleBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+    </style>
 </resources>
 """)
     daynight = f"""    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.DayNight">
@@ -2006,6 +2023,12 @@ def cmd_selftest(args):
             check("크기별 위젯: 줄 수 4·4·3", re.search(r"integer/urlapp_widget_rows\n\s+\(\) 4", resm) is not None
                   and re.search(r"integer/urlapp_widget_s2_rows\n\s+\(\) 4", resm) is not None
                   and re.search(r"integer/urlapp_widget_s3_rows\n\s+\(\) 3", resm) is not None)
+            va = mfm[mfm.find("app.jarvis.urlapp.VoiceActivity"):]
+            va = va[:min([i for i in (va.find("E: activity"), va.find("E: receiver"), va.find("E: service"), len(va)) if i > 0])]
+            check("마이크: 위젯 대화 창(VoiceActivity)은 앱 안에서만 열리고 따로 떠서 최근 앱에 안 남음",
+                  "app.jarvis.urlapp.VoiceActivity" in mfm and "style/VoiceTheme" in resm
+                  and re.search(r"exported\(0x[0-9a-f]+\)=(false|\(type 0x12\)0x0)", va) is not None
+                  and re.search(r"excludeFromRecents\(0x[0-9a-f]+\)=(true|\(type 0x12\)0xffffffff)", va) is not None, va[:900])
             check("마이크: 권한·음성 서비스 찾기·도우미·설정·위젯 단추·바로가기", "android.permission.RECORD_AUDIO" in mfm
                   and "android.speech.RecognitionService" in mfm and "android.intent.action.TTS_SERVICE" in mfm
                   and "assets/urlapp-speech.js" in names_m and cfgm.get("mic") is True and "id/w_mic" in resm
