@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 17,
- "version_name": "1.17",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v17.bin",
- "sha256": "5b14b3a2224b93ec62e2822c309debd0d3eb475156f8b83e3ae815d0facb2476",
- "size": 592817,
- "notes": "4×1 위젯(가로 한 줄) 추가",
- "published_at": "2026-11-20 09:10",
+ "version_code": 18,
+ "version_name": "1.18",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v18.bin",
+ "sha256": "ecd419553de27555d0b13df84322ae1ee79662119b1e308deafd6e3753d4287b",
+ "size": 1175166,
+ "notes": "워치 앱 연결(타일·음성 질문), 대화 창 카드(빅스비처럼 — 자비스가 카드를 보내 주면)",
+ "published_at": "2026-11-20 14:11",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "25efc16c5ddc06abc965ed7cbc6626f856d23097f9440709ab41f85f27bb8f0e"
+ "apk_sha256": "396ddc37ffd9354e5bca5783635d6b742b182e9635599561c9174005fd92b98b"
 }
