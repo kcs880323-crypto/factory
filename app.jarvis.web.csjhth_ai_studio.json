@@ -1,0 +1,10 @@
+{
+ "package": "app.jarvis.web.csjhth_ai_studio",
+ "version_code": 15,
+ "version_name": "1.15",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.csjhth_ai_studio-v15.apk",
+ "sha256": "98a93ddd08a71fce382ef6e5912afc47dd8e3af601214f24b2faca79043eb879",
+ "size": 293018,
+ "notes": "위젯 새로고침 단추·10분 자동 새로고침, 앱 안 업데이트",
+ "published_at": "2026-11-20 03:02"
+}
