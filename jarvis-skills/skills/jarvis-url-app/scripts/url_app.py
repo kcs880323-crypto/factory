@@ -1171,9 +1171,9 @@ def save_registry(home, reg):
 
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
-                 "fullscreen", "keep_awake", "dark", "id", "update_url")
+                 "fullscreen", "keep_awake", "dark", "id", "update_url", "live")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
-            "fullscreen": False, "keep_awake": False, "dark": "auto"}
+            "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False}
 
 
 def cmd_build(args):
@@ -1327,7 +1327,7 @@ def cmd_build(args):
                "theme_color_dark": None if opt["color"] else site["theme_dark"],
                "desktop": bool(opt["desktop"]),
                "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"],
-               "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
+               "live": bool(opt["live"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
         if update_url:
             cfg["update_url"] = update_url
         assets = workdir / "assets"
@@ -1776,6 +1776,15 @@ def cmd_selftest(args):
             wl = site / "wl.js"
             wl.write_text("// urlapp:alt-label " + "가" * 31 + "\nasync function () { return null; }", encoding="utf-8")
             check("위젯 이름이 30자를 넘으면 거부", raises(lambda: build(base + "/widgetl", "--no-fetch", "--widget", str(wl))))
+            # --live: 캐시 없이 늘 새로 받기 (기억되고, --no-live 로 끈다)
+            build(base + "/live", "--no-fetch", "--live")
+            build(base + "/live", "--no-fetch")
+            idl = next(k for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/live"))
+            cfgl = json.loads(zipfile.ZipFile(load_registry(tmp_home)["apps"][idl]["apk"]).read("assets/urlapp.json"))
+            build(base + "/live", "--no-fetch", "--no-live")
+            cfgl0 = json.loads(zipfile.ZipFile(load_registry(tmp_home)["apps"][idl]["apk"]).read("assets/urlapp.json"))
+            check("--live 는 기억되고 --no-live 로 끔 (기본 앱은 꺼짐)", cfgl.get("live") is True and cfgl0.get("live") is False
+                  and json.loads(zipfile.ZipFile(rec5["apk"]).read("assets/urlapp.json")).get("live") is False, (cfgl, cfgl0))
             # 앱 안 업데이트 (--update-url, publish)
             check("업데이트 주소가 https://…/x.json 이 아니면 거부",
                   raises(lambda: build(base + "/upd", "--no-fetch", "--update-url", "http://example.com/a.json")))
@@ -1910,6 +1919,8 @@ def build_parser():
     b.add_argument("--fullscreen", action=argparse.BooleanOptionalAction, default=None, help="상태 표시줄 숨기기")
     b.add_argument("--keep-awake", dest="keep_awake", action=argparse.BooleanOptionalAction, default=None,
                    help="앱을 보는 동안 화면 꺼짐 방지")
+    b.add_argument("--live", action=argparse.BooleanOptionalAction, default=None,
+                   help="사이트를 자주 고치는 앱: 저장(캐시) 없이 늘 서버에서 새로 받고, 30분 넘게 나가 있다 돌아오면 새로 고침")
     b.add_argument("--dark", choices=["auto", "darken"],
                    help="auto(기본, 사이트가 정함) | darken(기기가 다크 모드면 사이트를 자동으로 어둡게)")
     b.add_argument("--id", help="앱 id (기본: 주소로 자동). 같은 사이트로 앱을 두 개 만들 때만")

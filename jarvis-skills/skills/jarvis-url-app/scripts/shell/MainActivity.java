@@ -20,6 +20,7 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Base64;
@@ -330,6 +331,8 @@ public class MainActivity extends Activity {
         s.setSupportMultipleWindows(false); // target=_blank 링크는 같은 화면에서 연다
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         if (cfg.optBoolean("desktop", false)) s.setUserAgentString(desktopUserAgent(s.getUserAgentString()));
+        // --live: 사이트를 자주 고치는 앱. 저장(캐시)한 화면·스크립트를 쓰지 않고 늘 서버에서 새로 받는다 (고친 내용이 바로 보이게)
+        if (cfg.optBoolean("live", false)) s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         if ("darken".equals(cfg.optString("dark")) && Build.VERSION.SDK_INT >= 33) {
             // 기기가 다크 모드일 때, 다크 모드를 지원하지 않는 사이트를 자동으로 어둡게 칠한다.
             s.setAlgorithmicDarkeningAllowed(true);
@@ -1049,6 +1052,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (web != null) web.onResume();
+        maybeLiveReload();
         if (widgetJs != null) {
             WidgetProvider.scheduleAuto(this); // 위젯 자동 새로고침 (켠 앱·위젯이 놓여 있을 때만)
             WidgetProvider.refresh(this);      // 혹시 남아 있는 "새로고침 중…"을 지운다
@@ -1083,8 +1087,21 @@ public class MainActivity extends Activity {
                 .show();
     }
 
+    /** --live: 30분 넘게 다른 앱에 있다 돌아오면 사이트를 새로 고친다 (그 사이 사이트를 고쳤으면 새 화면으로). */
+    private static final long LIVE_RELOAD_AFTER_MS = 30 * 60_000L;
+    private long pausedAt;
+
+    private void maybeLiveReload() {
+        long away = pausedAt == 0 ? 0 : SystemClock.elapsedRealtime() - pausedAt;
+        pausedAt = 0;
+        if (web == null || !cfg.optBoolean("live", false) || away < LIVE_RELOAD_AFTER_MS) return;
+        String u = web.getUrl();
+        if (u != null && u.startsWith("http")) web.reload();
+    }
+
     @Override
     protected void onPause() {
+        pausedAt = SystemClock.elapsedRealtime();
         if (web != null) web.onPause();
         CookieManager.getInstance().flush(); // 로그인 상태가 바로 저장되게
         super.onPause();

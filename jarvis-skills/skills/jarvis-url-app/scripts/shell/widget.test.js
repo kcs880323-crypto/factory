@@ -10,6 +10,7 @@ const { chromium } = require("playwright");
 const RUNNER = fs.readFileSync(path.join(__dirname, "widget-runner.js"), "utf8");
 const LEDGER = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "smart-ledger.js"), "utf8");
 const AJ = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "ajgahub-board.js"), "utf8");
+const SITEP = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "site-provided.js"), "utf8");
 const GAOPS = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "gaops-tasks.js"), "utf8")
   .replace(/__PARAM_GAOPS_PROJECT__/g, "fake-project").replace(/__PARAM_GAOPS_API_KEY__/g, "FAKE_WEB_KEY");
 const FAKE_REF = "abcdefghijklmnopqrst"; // 지어낸 Supabase 프로젝트·키·토큰
@@ -48,8 +49,15 @@ function check(label, cond, detail) {
     { id: 6, source_table: "monthly_details", date: "2026-11-08", details: "GS25", amount: "1,000", earner_name: "창수 ", memo: "현대카드 M" },
     { id: 1, source_table: "monthly_details", date: "2026-11-03", details: "메가커피", amount: 12500, earner_name: "창수", memo: "현대카드" },
   ];
+  let spMode = "none"; // 범용 위젯: /urlapp-widget.json 이 어떻게 답하는지 (none = 일반 페이지)
   let serverSession = false; // 서버(/api/session)가 로그인이라고 하는지 (보이지 않는 웹 화면에서 새로 고칠 때)
   const server = http.createServer((req, res) => {
+    if (req.url === "/urlapp-widget.json" && spMode !== "none") {
+      if (spMode === "401") { res.writeHead(401, { "Content-Type": "application/json" }); return res.end("{}"); }
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      return res.end(JSON.stringify(spMode === "empty" ? { title: "x", rows: [] } : { title: "오늘의 자비스", note: "할 일 3",
+        rows: [{ label: "일정", value: "14:00 회의", tone: "pos" }, { label: "서버", value: "정상" }] }));
+    }
     if (req.url === "/api/session") {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ authenticated: serverSession, needsPasswordSetup: false }));
@@ -360,6 +368,44 @@ function check(label, cond, detail) {
   const w4 = await ga.evaluate(() => ({ w: __w[3], auth: localStorage.getItem("urlapp_gaops_auth") }));
   check("GA Ops: 읽기 거부(403)는 위젯에 이유를 보이고 토큰을 지움", w4.w.note === "GA Ops 연결 실패 (읽기 403)"
     && w4.w.rows.length === 0 && w4.auth === null, w4);
+
+  // 범용 위젯 (사이트가 내용을 정함)
+  const sp = await browser.newPage();
+  await sp.goto(base + "jarvis");
+  await sp.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  spMode = "none";
+  await sp.evaluate(asset(SITEP).replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await sp.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  const s1 = await sp.evaluate(() => __w[0]);
+  check("범용: 사이트가 위젯 정보를 안 주면 '서버 연결됨'만", s1.rows.length === 1 && s1.rows[0].value === "연결됨"
+    && s1.note.length <= 30, s1);
+  spMode = "json";
+  await sp.evaluate(() => window.__urlappWidgetRun());
+  await sp.waitForFunction(() => __w.length === 2, null, { timeout: 5000 });
+  const s2 = await sp.evaluate(() => __w[1]);
+  check("범용: /urlapp-widget.json 의 내용을 그대로", s2.title === "오늘의 자비스" && s2.note === "할 일 3"
+    && JSON.stringify(s2.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([["일정", "14:00 회의", "pos"], ["서버", "정상", ""]]), s2);
+  for (const mode of ["401", "empty"]) {
+    spMode = mode;
+    await sp.evaluate(() => window.__urlappWidgetRun());
+    await sp.waitForTimeout(600);
+    check(`범용: ${mode === "401" ? "로그인 전(401)" : "줄 없음"}이면 위젯을 바꾸지 않음`, (await sp.evaluate(() => __w.length)) === 2);
+  }
+  spMode = "none";
+  const sp2 = await browser.newPage();
+  await sp2.goto(base + "jarvis");
+  await sp2.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+    window.urlappWidget = async () => ({ title: "사이트 함수", rows: [{ label: "a", value: "b" }] });
+  }, TOKEN);
+  await sp2.evaluate(asset(SITEP).replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await sp2.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
+  check("범용: 사이트가 window.urlappWidget 을 두면 그것이 먼저", (await sp2.evaluate(() => __w[0].title)) === "사이트 함수");
+  check("범용: 스크립트에 사이트 주소가 없음 (상대 주소만)", !/https?:\/\//.test(SITEP.replace(/^\/\/.*$/gm, "")));
 
   await browser.close();
   server.close();
