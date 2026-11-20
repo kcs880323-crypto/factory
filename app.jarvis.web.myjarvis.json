@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 19,
- "version_name": "1.19",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v19.bin",
- "sha256": "5bfbc5404fa8193f96f96bf397d8288a8d927f35557a4574c25ae8b67a857d0d",
- "size": 1439812,
- "notes": "워치와 연결할 때 앱이 꺼지던 문제 고침 (빠진 부품 추가)",
- "published_at": "2026-11-20 23:10",
+ "version_code": 20,
+ "version_name": "1.20",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v20.bin",
+ "sha256": "7381022365210bdb5dcd413fdf753e96255b844c78cd8f7b4fa814361283b525",
+ "size": 2263181,
+ "notes": "앱을 열면 바로 꺼지던 문제 고침 (부품 판 맞춤). 앞으로 갑자기 꺼지면 다음에 열 때 이유를 보여 줌",
+ "published_at": "2026-11-20 23:50",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "6eb324110f4809c9bf4550a1e543f1376a2285c9b752f26c5a9df2a5e51a4718"
+ "apk_sha256": "dfaa046e749470359e25a75f7eee1a9121993a28e17ab8c517350519fa0cf9b9"
 }
