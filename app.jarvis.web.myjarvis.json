@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 9,
- "version_name": "1.9",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v9.bin",
- "sha256": "045bdf4fb2d9269ba9931dec2dfbbbd8c2224d8b1c318944385f18f5a5e64b73",
+ "version_code": 10,
+ "version_name": "1.10",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v10.bin",
+ "sha256": "c1429ebd360c58803e66a9bce8e494bec765c37828eed346d0f0cec9edd14b74",
  "size": 555570,
- "notes": "위젯에 요청함(음악·개발)과 발행 대기도 보이게",
- "published_at": "2026-11-20 06:58",
+ "notes": "위젯이 작업창과 같은 진행률을 보이게 (자비스 서버 재시작 뒤)",
+ "published_at": "2026-11-20 07:33",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "ba1c2601e8699781a7f804ee200c095788ca19926e4befc12b90dc42922d9336"
+ "apk_sha256": "a8e616c20497faa8c77a97875651f73cb00c069f321bc48f1d1e9b966e392a21"
 }
