@@ -187,6 +187,9 @@ final class AppUpdater {
         PackageInstaller pi = a.getPackageManager().getPackageInstaller();
         PackageInstaller.SessionParams sp = new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
         sp.setAppPackageName(a.getPackageName());
+        // 안드로이드 12+: 이 앱이 자기 자신을 설치한 앱(installer of record)이면 확인 화면 없이 업데이트할 수 있다.
+        // 처음(파일로 설치한 뒤 첫 업데이트)에는 안드로이드가 확인을 묻고, 그 뒤부터는 묻지 않을 수 있다 (안드로이드가 정함).
+        if (Build.VERSION.SDK_INT >= 31) sp.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
         int id = pi.createSession(sp);
         try (PackageInstaller.Session s = pi.openSession(id)) {
             try (OutputStream out = s.openWrite("base.apk", 0, apk.length()); InputStream in = new FileInputStream(apk)) {
