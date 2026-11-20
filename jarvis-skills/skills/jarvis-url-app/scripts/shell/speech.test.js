@@ -1,4 +1,4 @@
-// speech.js(음성 도우미)와 MainActivity 의 urlappAsk 호출 시험 (개발용, 크로미움/Playwright).
+// speech.js(음성 도우미)·notify.js(알림 도우미)와 MainActivity 의 urlappAsk 호출 시험 (개발용, 크로미움/Playwright).
 // 안드로이드 쪽(UrlAppSpeech)은 가짜로 두고, 앱이 보내는 결과(__urlappSpeechEvent)를 흉내 낸다.
 //   node speech.test.js
 "use strict";
@@ -7,6 +7,7 @@ const path = require("path");
 const { chromium } = require("playwright");
 
 const SHIM = fs.readFileSync(path.join(__dirname, "speech.js"), "utf8");
+const NOTIFY = fs.readFileSync(path.join(__dirname, "notify.js"), "utf8");
 const MAIN = fs.readFileSync(path.join(__dirname, "MainActivity.java"), "utf8");
 const TOKEN = "t0k3n";
 
@@ -152,6 +153,51 @@ function check(label, cond, detail) {
   }, [askScript("글", "q1"), askScript("객체", "q2"), askScript("오류", "q3")]);
   check("urlappAsk: 글·{text} 답은 그대로, 오류면 ok=false", asks.n === 3 && JSON.stringify(asks.calls) === JSON.stringify([
     ["answer", true, "q1", "오늘 일정은 두 개예요", true], ["answer", true, "q2", "할 일 3개", true], ["answer", true, "q3", "", false]]), asks);
+
+  // 알림 도우미 (notify.js): 웹 알림 → 폰 알림
+  const np = await browser.newPage();
+  await np.route("https://jarvis.test/**", (r) => r.fulfill({ status: 200, contentType: "text/html",
+    body: "<!doctype html><html><body>jarvis</body></html>" }));
+  await np.goto("https://jarvis.test/");
+  await np.evaluate((tok) => {
+    window.__n = [];
+    window.__perm = "default";
+    window.UrlAppNotify = {
+      permission: (t) => (t === tok ? window.__perm : "denied"),
+      request: (t) => window.__n.push(["request", t === tok]),
+      show: (t, title, body, tag, p) => { window.__n.push(["show", t === tok, title, body, tag, p]); return "w:" + (tag || "x"); },
+      close: (t, key) => window.__n.push(["close", t === tok, key]),
+    };
+  }, TOKEN);
+  await np.evaluate(NOTIFY.replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  const n1 = await np.evaluate(async () => {
+    const before = Notification.permission;
+    const p = Notification.requestPermission();
+    window.__perm = "granted";
+    window.__urlappNotifyPermission("granted");
+    const got = await p;
+    return { before, got, calls: window.__n.slice() };
+  });
+  check("알림: 권한 묻기는 폰에 요청하고 결과를 돌려줌", n1.before === "default" && n1.got === "granted"
+    && JSON.stringify(n1.calls) === JSON.stringify([["request", true]]), n1);
+  const n2 = await np.evaluate(async () => {
+    window.__n.length = 0;
+    const ev = [];
+    const a = new Notification("작업 끝", { body: "블로그 글 작성 완료", tag: "t1", data: { url: location.origin + "/tasks/1?x=1" } });
+    a.onshow = () => ev.push("show");
+    const b = new Notification("다른 곳", { data: { url: "https://evil.example/x" } });
+    await new Promise((r) => setTimeout(r, 20));
+    a.close();
+    window.__perm = "denied";
+    const c = new Notification("막힘");
+    c.onerror = () => ev.push("error");
+    await new Promise((r) => setTimeout(r, 20));
+    return { ev, calls: window.__n.slice(), perm: Notification.permission };
+  });
+  check("알림: 제목·내용·태그·같은 사이트 경로로 폰 알림, 다른 사이트 주소는 경로 없음, close, 권한 없으면 error",
+    JSON.stringify(n2.calls) === JSON.stringify([["show", true, "작업 끝", "블로그 글 작성 완료", "t1", "/tasks/1?x=1"],
+      ["show", true, "다른 곳", "", "", ""], ["close", true, "w:t1"]]) && JSON.stringify(n2.ev) === JSON.stringify(["show", "error"])
+      && n2.perm === "denied", n2);
 
   await browser.close();
   const ok = results.filter(Boolean).length;

@@ -24,6 +24,15 @@ import java.util.Map;
 public class CardTests {
     static int ok = 0, fail = 0;
 
+    static boolean opens(byte[] sealed, byte[] key, String app) {
+        try {
+            UpdateInfo.open(sealed, key, app);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     static void check(String label, boolean cond, Object detail) {
         if (cond) ok++;
         else fail++;
@@ -428,6 +437,63 @@ public class CardTests {
                 && rejects.apply(info.apply("").replace("\"size\":1234", "\"size\":0"))
                 && rejects.apply(info.apply("").replace("\"version_code\":15", "\"version_code\":0"))
                 && rejects.apply("<html>"), null);
+
+        // 암호화한 업데이트 (--update-encrypt): 정보 파일의 방식·APK 검사값, 앱 안의 열쇠로 풀기
+        UpdateInfo ue = UpdateInfo.parse(info.apply(",\"encrypted\":\"aes-256-gcm\",\"apk_sha256\":\"" + "b".repeat(64) + "\"")
+                .replace("-v15.apk", "-v15.bin"), "app.jarvis.web.x", mu);
+        check("암호화 업데이트 정보: 방식·푼 APK 검사값", ue.encrypted && ue.apkSha256.equals("b".repeat(64)) && !ui.encrypted
+                && ui.apkSha256.isEmpty(), null);
+        check("모르는 암호화 방식·이상한 APK 검사값은 거부", rejects.apply(info.apply(",\"encrypted\":\"rot13\""))
+                && rejects.apply(info.apply(",\"apk_sha256\":\"xyz\"")), null);
+        byte[] key = new byte[32];
+        new java.security.SecureRandom().nextBytes(key);
+        byte[] plain = "PK fake apk with host aj.example.ts.net".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] nonce = new byte[12];
+        new java.security.SecureRandom().nextBytes(nonce);
+        javax.crypto.Cipher enc = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding");
+        enc.init(javax.crypto.Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(key, "AES"),
+                new javax.crypto.spec.GCMParameterSpec(128, nonce));
+        enc.updateAAD("app.jarvis.web.x".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        byte[] body = enc.doFinal(plain);
+        byte[] sealedBytes = new byte[12 + body.length];
+        System.arraycopy(nonce, 0, sealedBytes, 0, 12);
+        System.arraycopy(body, 0, sealedBytes, 12, body.length);
+        check("암호 풀기: 같은 열쇠·같은 앱이면 원래 내용", java.util.Arrays.equals(UpdateInfo.open(sealedBytes, key, "app.jarvis.web.x"), plain)
+                && !new String(sealedBytes, java.nio.charset.StandardCharsets.ISO_8859_1).contains("ts.net"), null);
+        java.util.function.Supplier<Boolean>[] bad = new java.util.function.Supplier[] {
+            () -> { byte[] kx = key.clone(); kx[0] ^= 1; return opens(sealedBytes, kx, "app.jarvis.web.x"); },
+            () -> opens(sealedBytes, key, "app.jarvis.web.other"),
+            () -> { byte[] t = sealedBytes.clone(); t[20] ^= 1; return opens(t, key, "app.jarvis.web.x"); },
+            () -> opens(sealedBytes, null, "app.jarvis.web.x"),
+        };
+        boolean allFail = true;
+        for (java.util.function.Supplier<Boolean> f : bad) allFail &= !f.get();
+        check("암호 풀기: 다른 열쇠·다른 앱·바뀐 파일·열쇠 없음은 실패", allFail, null);
+
+        // 앱 알림 목록 (NotifyFeed)
+        String feed = "{\"items\":[{\"id\":\"1\",\"title\":\"작업 끝\",\"body\":\"블로그 글 작성이 끝났어요\",\"open\":\"/tasks/1\"},"
+                + "{\"id\":\"2\",\"title\":\"알림\",\"open\":\"https://evil.example/x\"},{\"id\":\"\",\"title\":\"id 없음\"},"
+                + "{\"id\":\"3\",\"title\":\"\",\"body\":\"\"},{\"id\":\"1\",\"title\":\"중복\"}]}";
+        NotifyFeed.Result first = NotifyFeed.read(feed, new java.util.HashSet<>(), false, 5);
+        check("알림: 처음 읽을 땐 띄우지 않고 본 것으로만", first.show.isEmpty() && first.ids.equals(java.util.Arrays.asList("1", "2", "3")),
+                first.ids);
+        NotifyFeed.Result next = NotifyFeed.read(feed, new java.util.HashSet<>(java.util.Arrays.asList("2")), true, 5);
+        check("알림: 본 적 없는 것만, 빈 알림·id 없음·중복은 빼고, 다른 사이트 경로는 지움", next.show.size() == 1
+                && next.show.get(0).id.equals("1") && next.show.get(0).open.equals("/tasks/1")
+                && NotifyFeed.safePath("https://evil.example/x").isEmpty() && NotifyFeed.safePath("//evil.example").isEmpty()
+                && NotifyFeed.safePath("/\\evil").isEmpty() && NotifyFeed.safePath("/a b").isEmpty(), next.show.size());
+        StringBuilder manyN = new StringBuilder("[");
+        for (int i = 0; i < 8; i++) manyN.append(i == 0 ? "" : ",").append("{\"id\":\"m").append(i).append("\",\"title\":\"t\"}");
+        NotifyFeed.Result capped = NotifyFeed.read(manyN.append("]").toString(), new java.util.HashSet<>(), true, 5);
+        check("알림: 한 번에 5개까지, 나머지는 수만 (목록만 와도 읽음)", capped.show.size() == 5 && capped.skipped == 3 && capped.ids.size() == 8, null);
+        boolean badFeed;
+        try {
+            NotifyFeed.read("<html>login</html>", new java.util.HashSet<>(), true, 5);
+            badFeed = false;
+        } catch (IllegalArgumentException e) {
+            badFeed = true;
+        }
+        check("알림: 로그인 화면 같은 다른 응답은 거부", badFeed, null);
 
         System.out.println("카드 시험: " + ok + "개 통과, " + fail + "개 실패");
         System.exit(fail == 0 ? 0 : 1);

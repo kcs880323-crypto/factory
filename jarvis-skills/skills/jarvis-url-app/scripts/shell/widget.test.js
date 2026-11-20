@@ -52,7 +52,24 @@ function check(label, cond, detail) {
   let spMode = "none"; // 범용 위젯: /urlapp-widget.json 이 어떻게 답하는지 (none = 일반 페이지)
   let serverSession = false; // 서버(/api/session)가 로그인이라고 하는지 (보이지 않는 웹 화면에서 새로 고칠 때)
   const server = http.createServer((req, res) => {
-    if (req.url === "/urlapp-widget.json" && spMode !== "none") {
+    if (req.url === "/api/tasks" && spMode === "tasks") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ ok: true, data: { tasks: [
+        { id: 1, title: "영상 편집", status: "done", progress: 1 },
+        { id: 2, title: "블로그 글 작성", status: "in_progress", progress: 0.6 },
+        { id: 3, name: "메일 정리", status: "failed" },
+        { id: 4, title: "자료 조사", state: "running", percent: 35 },
+      ] } }));
+    }
+    if (req.url === "/jarvis-bars") {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      return res.end('<!doctype html><html><head><title>CHARLES</title></head><body><div id="app"></div><script>'
+        + 'setTimeout(function(){document.getElementById("app").innerHTML='
+        + '\'<div class="card"><h3>보고서 정리</h3><progress value="3" max="4"></progress></div>'
+        + '<div class="card"><span>코드 리뷰</span><div role="progressbar" aria-valuenow="40"></div><span>40%</span></div>\';},800);'
+        + '</script></body></html>');
+    }
+    if (req.url === "/urlapp-widget.json" && spMode !== "none" && spMode !== "tasks") {
       if (spMode === "401") { res.writeHead(401, { "Content-Type": "application/json" }); return res.end("{}"); }
       res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
       return res.end(JSON.stringify(spMode === "empty" ? { title: "x", rows: [] } : { title: "오늘의 자비스", note: "할 일 3",
@@ -405,6 +422,32 @@ function check(label, cond, detail) {
   await sp2.evaluate(asset(SITEP).replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
   await sp2.waitForFunction(() => __w.length === 1, null, { timeout: 5000 });
   check("범용: 사이트가 window.urlappWidget 을 두면 그것이 먼저", (await sp2.evaluate(() => __w[0].title)) === "사이트 함수");
+  spMode = "tasks";
+  const sp3 = await browser.newPage();
+  await sp3.goto(base + "jarvis");
+  await sp3.evaluate((tok) => {
+    document.title = "CHARLES";
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  await sp3.evaluate(asset(SITEP).replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await sp3.waitForFunction(() => __w.length === 1, null, { timeout: 8000 });
+  const s3 = await sp3.evaluate(() => __w[0]);
+  check("범용: 위젯 정보가 없으면 작업 목록(/api/tasks)에서 진행 중인 것 먼저", s3.title === "CHARLES · 진행 중 3"
+    && JSON.stringify(s3.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
+      ["블로그 글 작성", "60%", "pos"], ["메일 정리", "failed", "neg"], ["자료 조사", "35%", "pos"], ["영상 편집", "완료", ""]]), s3);
+  spMode = "none";
+  const sp4 = await browser.newPage();
+  await sp4.goto(base + "jarvis-bars");
+  await sp4.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  await sp4.evaluate(asset(SITEP).replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await sp4.waitForFunction(() => __w.length === 1, null, { timeout: 8000 });
+  const s4 = await sp4.evaluate(() => __w[0]);
+  check("범용: 그것도 없으면 화면의 진행 막대와 이름 (늦게 그려져도)", s4.title === "CHARLES · 진행 중 2"
+    && JSON.stringify(s4.rows.map((r) => [r.label, r.value])) === JSON.stringify([["보고서 정리", "75%"], ["코드 리뷰", "40%"]]), s4);
   check("범용: 스크립트에 사이트 주소가 없음 (상대 주소만)", !/https?:\/\//.test(SITEP.replace(/^\/\/.*$/gm, "")));
 
   await browser.close();

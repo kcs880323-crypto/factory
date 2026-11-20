@@ -15,6 +15,7 @@
   apk/        만든 APK
 """
 import argparse
+import base64
 import hashlib
 import html.parser
 import io
@@ -37,6 +38,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 SHELL_DIR = HERE / "shell"  # 안드로이드 껍데기 자바 코드 (MainActivity, WidgetProvider)
 DOWNLOAD_JS = HERE / "shell" / "download.js"  # 페이지가 만든 파일(blob:) 받기 도우미. 앱마다 assets 로 들어간다
+NOTIFY_JS = HERE / "shell" / "notify.js"  # --notify: 웹 알림(Notification)을 폰 알림으로 바꾸는 도우미
+SEAL_TOOL = HERE / "UrlAppSeal.java"  # --update-encrypt: 업데이트 파일 암호화 (AES-256-GCM)
 SPEECH_JS = HERE / "shell" / "speech.js"  # --mic: 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신하는 도우미
 WIDGET_RUNNER = HERE / "shell" / "widget-runner.js"  # 위젯 스크립트를 감싸 페이지에서 돌리는 실행기
 WIDGET_SLOT = "(/*__WIDGET_FN__*/ null)"
@@ -656,7 +659,7 @@ def android_string(s):
 # ---------------------------------------------------------------- 프로젝트 파일
 
 def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
-                 view_hosts=(), update=False, widget_extra_sizes=0, mic=False):
+                 view_hosts=(), update=False, widget_extra_sizes=0, mic=False, notify=False):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -736,6 +739,16 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
         <receiver
             android:name="app.jarvis.urlapp.UpdateReceiver"
             android:exported="false" />"""
+    # --notify: 알림 권한(안드로이드 13+ 은 처음 열 때 묻는다), 폰을 다시 켜도 15분 확인을 잇는 권한, 확인 작업
+    if notify:
+        if "POST_NOTIFICATIONS" not in card_perm:
+            card_perm += '\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
+        card_perm += '\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />'
+        card_parts += """
+        <service
+            android:name="app.jarvis.urlapp.NotifyJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />"""
     # --mic: 마이크 권한(앱이 처음 쓸 때 묻는다)과 폰의 음성 인식·읽어 주기 서비스를 찾는 허락 (안드로이드 11+)
     queries = ""
     if mic:
@@ -859,6 +872,15 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
 
 
 # ---------------------------------------------------------------- 빌드
+
+NOTIFY_ICON = """<?xml version="1.0" encoding="utf-8"?>
+<!-- 앱 알림의 작은 아이콘 (종 모양, Material Icons "notifications", Apache-2.0) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M12,22c1.1,0 2,-0.9 2,-2h-4c0,1.1 0.89,2 2,2zM18,16v-5c0,-3.07 -1.64,-5.64 -4.5,-6.32V4c0,-0.83 -0.67,-1.5 -1.5,-1.5s-1.5,0.67 -1.5,1.5v0.68C7.63,5.36 6,7.92 6,11v5l-2,2v1h16v-1l-2,-2z" />
+</vector>
+"""
 
 CARD_NOTIFY_ICON = """<?xml version="1.0" encoding="utf-8"?>
 <!-- 카드 자동 등록 알림의 작은 아이콘 (영수증 모양, Material Icons "receipt", Apache-2.0) -->
@@ -1271,9 +1293,11 @@ def save_registry(home, reg):
 
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
-                 "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style", "mic", "widget_sizes")
+                 "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style", "mic", "widget_sizes", "notify",
+                 "update_encrypt")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
-            "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto", "mic": False}
+            "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto", "mic": False, "notify": False,
+            "update_encrypt": False}
 
 
 def cmd_build(args):
@@ -1417,6 +1441,9 @@ def cmd_build(args):
         if cards_cfg:
             (res / "drawable").mkdir(exist_ok=True)
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
+        if opt["notify"]:
+            (res / "drawable").mkdir(exist_ok=True)
+            (res / "drawable" / "urlapp_notify.xml").write_text(NOTIFY_ICON, encoding="utf-8")
         widget_accent = accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8")
         if widget_js:
             dark_bg = None
@@ -1433,9 +1460,13 @@ def cmd_build(args):
                "theme_color_dark": None if opt["color"] else site["theme_dark"],
                "desktop": bool(opt["desktop"]),
                "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"],
-               "live": bool(opt["live"]), "mic": bool(opt["mic"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
+               "live": bool(opt["live"]), "mic": bool(opt["mic"]), "notify": bool(opt["notify"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
         if update_url:
             cfg["update_url"] = update_url
+            if opt["update_encrypt"]:  # 업데이트 파일을 푸는 열쇠 (이 컴퓨터와 앱 안에만)
+                cfg["update_key"] = update_key(home, app_id, create=True)
+        elif opt["update_encrypt"]:
+            raise Fail("--update-encrypt 는 --update-url 과 같이 씁니다.")
         assets = workdir / "assets"
         assets.mkdir()
         (assets / "urlapp.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -1444,6 +1475,8 @@ def cmd_build(args):
             (assets / "urlapp-widget.js").write_text(widget_js, encoding="utf-8")
         if opt["mic"]:
             shutil.copyfile(SPEECH_JS, assets / "urlapp-speech.js")
+        if opt["notify"]:
+            shutil.copyfile(NOTIFY_JS, assets / "urlapp-notify.js")
         if cards_cfg:
             (assets / "urlapp-cards.json").write_text(json.dumps(cards_cfg, ensure_ascii=False, indent=1),
                                                       encoding="utf-8")
@@ -1454,7 +1487,7 @@ def cmd_build(args):
                                                                   widget_alt=bool(widget_js and widget_alt_label),
                                                                   view_hosts=cfg["hosts"], update=bool(update_url),
                                                                   widget_extra_sizes=max(0, len(widget_sizes) - 1),
-                                                                  mic=bool(opt["mic"])),
+                                                                  mic=bool(opt["mic"]), notify=bool(opt["notify"])),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1515,6 +1548,11 @@ def cmd_build(args):
         if opt["mic"]:
             kinds += ", 마이크 단추(음성 대화)"
         say(f"  홈 화면 위젯: 있음{kinds} (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
+    if opt["notify"]:
+        say("  앱 알림: 있음 (사이트의 /urlapp-notify.json 을 15분마다, 웹 알림 → 폰 알림. 안드로이드 13+ 은 처음 열 때 권한을 묻는다)")
+    if update_url:
+        say(f"  앱 안 업데이트: {update_url}" + (" (암호화: 열쇠는 ~/.jarvis-url-app/update-keys/ 와 앱 안에만)"
+                                              if opt["update_encrypt"] else ""))
     if opt["mic"]:
         say("  마이크·음성 대화: 있음 (마이크 권한은 처음 쓸 때 묻는다. 웹 음성 기능 → 폰의 음성 인식·읽어 주기, "
             "마이크 모드 = 사이트의 urlappMic 또는 urlappAsk)")
@@ -1536,6 +1574,38 @@ def link_file_json(cards_cfg):
     }
 
 
+def update_key(home, app_id, create=False):
+    """앱마다 하나인 업데이트 열쇠 (32바이트, base64). ~/.jarvis-url-app/update-keys/<앱 id>.key (나만 읽게).
+    서명 키처럼 잃어버리면 그 앱은 앱 안 업데이트를 받지 못한다 (파일로 다시 설치하면 새 열쇠로)."""
+    d = home / "update-keys"
+    f = d / (app_id + ".key")
+    if f.is_file():
+        return f.read_text(encoding="utf-8").strip()
+    if not create:
+        raise Fail(f"업데이트 열쇠가 없습니다: {f}")
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod(d, 0o700)
+    except OSError:
+        pass
+    key = base64.b64encode(os.urandom(32)).decode("ascii")
+    fd = os.open(f, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as out:
+        out.write(key + "\n")
+    return key
+
+
+def seal_file(home, app_id, src, dst, mode="seal"):
+    java, _, _ = require_java()
+    keyfile = home / "update-keys" / (app_id + ".key")
+    if not keyfile.is_file():
+        raise Fail(f"업데이트 열쇠가 없습니다: {keyfile}")
+    r = subprocess.run([java, str(SEAL_TOOL), mode, str(keyfile), app_id, str(src), str(dst)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise Fail("업데이트 파일 암호화 실패: " + (r.stderr or r.stdout).strip()[-300:])
+
+
 def cmd_publish(args):
     """최신 APK 를 out_dir/<앱 id>-v<버전>.apk 로 두고(그 앱의 옛 APK 는 지움) out_dir/<앱 id>.json 을 쓴다.
     정보 파일의 apk 주소는 앱에 넣은 update_url 과 같은 곳(폴더)이다. 올리기(git push 등)는 사람이·자비스가 한다."""
@@ -1555,11 +1625,16 @@ def cmd_publish(args):
         raise Fail(f"APK 가 없습니다: {apk} (다시 build 하세요)")
     out = Path(args.out_dir).expanduser()
     out.mkdir(parents=True, exist_ok=True)
-    name = f"{app_id}-v{rec['version_code']}.apk"
-    for old in out.glob(f"{app_id}-v*.apk"):
+    encrypt = bool((rec.get("explicit") or {}).get("update_encrypt"))
+    # 암호화한 업데이트는 .bin (내용·주소를 볼 수 없다), 아니면 .apk
+    name = f"{app_id}-v{rec['version_code']}." + ("bin" if encrypt else "apk")
+    for old in list(out.glob(f"{app_id}-v*.apk")) + list(out.glob(f"{app_id}-v*.bin")):
         if old.name != name:
             old.unlink()
-    shutil.copyfile(apk, out / name)
+    if encrypt:
+        seal_file(home_dir(), app_id, apk, out / name)
+    else:
+        shutil.copyfile(apk, out / name)
     notes = args.notes.strip()
     if len(notes) > 300:
         raise Fail("--notes 는 300자까지입니다.")
@@ -1567,6 +1642,8 @@ def cmd_publish(args):
             "apk": update_url.rsplit("/", 1)[0] + "/" + name, "sha256": file_hashes(out / name)[1],
             "size": (out / name).stat().st_size, "notes": notes,
             "published_at": time.strftime("%Y-%m-%d %H:%M")}
+    if encrypt:
+        info.update({"encrypted": "aes-256-gcm", "apk_sha256": file_hashes(apk)[1]})
     (out / (app_id + ".json")).write_text(json.dumps(info, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     say(f"올릴 파일: {out / name} , {out / (app_id + '.json')}")
     say(f"  {rec['name']} {rec['version_name']} (코드 {rec['version_code']}) — 이 두 파일을 올리면 앱이 6시간 안에(또는 '업데이트 확인') 묻는다")
@@ -1937,6 +2014,39 @@ def cmd_selftest(args):
             check("--mic 없는 앱에는 마이크 권한·도우미·크기별 위젯 없음", "RECORD_AUDIO" not in mf_nomic
                   and "urlapp-speech.js" not in str(zipfile.ZipFile(recd["apk"]).namelist())
                   and "WidgetProviderS2" not in mf_nomic and json.loads(zipfile.ZipFile(recd["apk"]).read("assets/urlapp.json")).get("mic") is False)
+            # --notify + --update-encrypt: 앱 알림, 암호화한 앱 안 업데이트
+            check("--update-encrypt 는 --update-url 없이 거부",
+                  raises(lambda: build(base + "/enc0", "--no-fetch", "--update-encrypt")))
+            build(base + "/enc", "--no-fetch")
+            ide = next(k for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/enc"))
+            uenc = "https://raw.githubusercontent.com/o/r/app-releases/" + ide + ".json"
+            build(base + "/enc", "--no-fetch", "--update-url", uenc, "--update-encrypt", "--notify")
+            rece = load_registry(tmp_home)["apps"][ide]
+            mfe = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rece["apk"]], tmp_home, "xmltree")
+            rese = run([tp["aapt2"], "dump", "resources", rece["apk"]], tmp_home, "resources")
+            with zipfile.ZipFile(rece["apk"]) as z:
+                cfge = json.loads(z.read("assets/urlapp.json"))
+                names_e = z.namelist()
+            check("알림: 권한·재부팅 뒤 이어 하기·확인 작업·도우미·아이콘·설정", mfe.count('="android.permission.POST_NOTIFICATIONS"') == 1
+                  and "android.permission.RECEIVE_BOOT_COMPLETED" in mfe and "app.jarvis.urlapp.NotifyJob" in mfe
+                  and "assets/urlapp-notify.js" in names_e and "drawable/urlapp_notify" in rese and cfge.get("notify") is True)
+            keyfile = tmp_home / "update-keys" / (ide + ".key")
+            check("암호화 업데이트: 열쇠 파일(나만 읽기)과 앱 안 열쇠가 같음", keyfile.is_file()
+                  and (os.name == "nt" or (keyfile.stat().st_mode & 0o077) == 0)
+                  and cfge.get("update_key") == keyfile.read_text().strip()
+                  and len(base64.b64decode(cfge["update_key"])) == 32)
+            rel_e = tmp_home / "rel_e"
+            cmd_publish(argparse.Namespace(target=ide, out_dir=str(rel_e), notes="고침"))
+            info_e = json.loads((rel_e / (ide + ".json")).read_text(encoding="utf-8"))
+            sealed = rel_e / f"{ide}-v{rece['version_code']}.bin"
+            opened = tmp_home / "opened.apk"
+            seal_file(tmp_home, ide, sealed, opened, mode="open")
+            check("암호화 업데이트: .bin 만 올리고(APK 없음) 풀면 원래 APK, 정보 파일에 방식·APK 검사값",
+                  sealed.is_file() and not list(rel_e.glob("*.apk")) and info_e.get("encrypted") == "aes-256-gcm"
+                  and info_e["apk"].endswith(".bin") and info_e["sha256"] == file_hashes(sealed)[1]
+                  and info_e.get("apk_sha256") == file_hashes(Path(rece["apk"]))[1]
+                  and opened.read_bytes() == Path(rece["apk"]).read_bytes()
+                  and b"PK\x03\x04" not in sealed.read_bytes()[:64], info_e)
             # --live: 캐시 없이 늘 새로 받기 (기억되고, --no-live 로 끈다)
             build(base + "/live", "--no-fetch", "--live")
             build(base + "/live", "--no-fetch")
@@ -2082,6 +2192,10 @@ def build_parser():
                    help="앱을 보는 동안 화면 꺼짐 방지")
     b.add_argument("--widget-style", dest="widget_style", choices=["auto", "dark"],
                    help="위젯 색: auto(기본, 기기의 밝은/어두운 모드를 따름) | dark(늘 어둡게, 앱 바탕색이 어두우면 그 색)")
+    b.add_argument("--notify", action=argparse.BooleanOptionalAction, default=None,
+                   help="앱 알림: 사이트의 /urlapp-notify.json 을 15분마다 읽어 폰 알림, 웹 알림(new Notification)도 폰 알림으로")
+    b.add_argument("--update-encrypt", dest="update_encrypt", action=argparse.BooleanOptionalAction, default=None,
+                   help="업데이트 파일을 암호화해서 올린다 (주소를 숨겨야 하는 앱. 열쇠는 이 컴퓨터와 앱 안에만)")
     b.add_argument("--mic", action=argparse.BooleanOptionalAction, default=None,
                    help="마이크·음성 대화: 마이크 권한, 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신, 위젯·바로가기의 '마이크 모드'")
     b.add_argument("--widget-sizes", dest="widget_sizes",

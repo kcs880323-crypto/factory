@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
     static final String ACTION_CARDS = "app.jarvis.urlapp.action.CARDS"; // 카드 자동 등록 설정 (그 기능이 있는 앱만)
     static final String ACTION_UPDATE = "app.jarvis.urlapp.action.UPDATE"; // 업데이트 확인 (업데이트 주소가 있는 앱만)
     static final String ACTION_MIC = "app.jarvis.urlapp.action.MIC"; // 마이크 모드 (위젯의 마이크 단추·바로가기, --mic 앱만)
+    static final String ACTION_OPEN = "app.jarvis.urlapp.action.OPEN"; // 알림을 눌렀을 때: extra "path"(같은 사이트 경로)를 연다
     private static final int REQ_FILES = 41;
     private static final int MATCH = ViewGroup.LayoutParams.MATCH_PARENT;
 
@@ -122,6 +123,11 @@ public class MainActivity extends Activity {
     private boolean micPending; // 마이크 단추로 열렸다: 페이지가 뜨면 음성 대화를 시작한다
     private boolean micAsking;
     private final ArrayList<Runnable[]> micWaiters = new ArrayList<>(); // {허락되면, 거절되면}
+
+    // 알림 (--notify 로 만든 앱만): 웹 알림(Notification)을 폰 알림으로 (assets/urlapp-notify.js), 15분마다 사이트 알림 확인(NotifyJob)
+    private static final int REQ_NOTIFY = 42;
+    private String notifyJs;
+    private boolean notifyAsking;
     private final HashMap<String, PendingFile> pendingFiles = new HashMap<>();
 
     @Override
@@ -362,6 +368,8 @@ public class MainActivity extends Activity {
         if (downloadJs != null || widgetJs != null) web.addJavascriptInterface(new Bridge(), "UrlAppBridge");
         speechJs = readAssetOrNull("urlapp-speech.js");
         if (speechJs != null) web.addJavascriptInterface(new SpeechBridge(), "UrlAppSpeech");
+        notifyJs = readAssetOrNull("urlapp-notify.js");
+        if (notifyJs != null) web.addJavascriptInterface(new NotifyBridge(), "UrlAppNotify");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -739,9 +747,75 @@ public class MainActivity extends Activity {
         injectSpeech(url);
     }
 
+    /** 음성·알림 도우미는 되도록 일찍 (사이트가 그 기능을 찾기 전에). 두 번 넣어도 한 번만 돈다. */
     private void injectSpeech(String url) {
-        if (speechJs == null || url == null || web == null || !isOwnHost(Uri.parse(url).getHost())) return;
-        web.evaluateJavascript(speechJs.replace("\"__URLAPP_TOKEN__\"", JSONObject.quote(dlToken)), null);
+        if (url == null || web == null || !isOwnHost(Uri.parse(url).getHost())) return;
+        String token = JSONObject.quote(dlToken);
+        if (speechJs != null) web.evaluateJavascript(speechJs.replace("\"__URLAPP_TOKEN__\"", token), null);
+        if (notifyJs != null) web.evaluateJavascript(notifyJs.replace("\"__URLAPP_TOKEN__\"", token), null);
+    }
+
+    // ---------- 알림 (--notify) ----------
+
+    /** 웹 알림의 권한 상태: granted / denied / default(아직 안 물음). */
+    private String notifyState() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) return "granted";
+            return getSharedPreferences(NotifyJob.PREFS, MODE_PRIVATE).getBoolean("asked", false) ? "denied" : "default";
+        }
+        android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        return nm == null || nm.areNotificationsEnabled() ? "granted" : "denied";
+    }
+
+    /** 알림 권한 묻기 (안드로이드 13+). force 가 아니면 처음 한 번만. 다른 권한을 묻는 중이면 다음에. */
+    private void askNotify(boolean force) {
+        if (notifyJs == null) return;
+        if (Build.VERSION.SDK_INT < 33 || !"default".equals(notifyState()) && !force) {
+            sendNotifyState();
+            return;
+        }
+        if ("granted".equals(notifyState())) {
+            sendNotifyState();
+            return;
+        }
+        if (notifyAsking || micAsking) return;
+        notifyAsking = true;
+        requestPermissions(new String[] {Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFY);
+    }
+
+    private void sendNotifyState() {
+        if (web == null || notifyJs == null) return;
+        String u = web.getUrl();
+        if (u == null || !isOwnHost(Uri.parse(u).getHost())) return;
+        web.evaluateJavascript("window.__urlappNotifyPermission&&window.__urlappNotifyPermission("
+                + JSONObject.quote(notifyState()) + ")", null);
+    }
+
+    /** 알림 도우미(notify.js)만 부르는 통로. 모든 호출에 토큰이 맞아야 한다. */
+    private final class NotifyBridge {
+        @JavascriptInterface
+        public String permission(String token) {
+            return dlToken.equals(token) ? notifyState() : "denied";
+        }
+
+        @JavascriptInterface
+        public void request(String token) {
+            if (dlToken.equals(token)) runOnUiThread(() -> askNotify(true));
+        }
+
+        @JavascriptInterface
+        public String show(String token, String title, String body, String tag, String path) {
+            if (!dlToken.equals(token)) return "";
+            String key = "w:" + (tag == null || tag.isEmpty() ? newToken().substring(0, 12) : tag);
+            boolean ok = NotifyJob.show(getApplicationContext(), key, NotifyFeed.clip(title, 80), NotifyFeed.clip(body, 300),
+                    NotifyFeed.safePath(path));
+            return ok ? key : "";
+        }
+
+        @JavascriptInterface
+        public void close(String token, String key) {
+            if (dlToken.equals(token) && key != null && key.startsWith("w:")) NotifyJob.cancel(getApplicationContext(), key);
+        }
     }
 
     // ---------- 음성 (--mic) ----------
@@ -777,7 +851,7 @@ public class MainActivity extends Activity {
             return;
         }
         micWaiters.add(new Runnable[] {granted, denied});
-        if (!micAsking) {
+        if (!micAsking && !notifyAsking) {
             micAsking = true;
             requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, REQ_MIC);
         }
@@ -786,6 +860,16 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
+        if (code == REQ_NOTIFY) {
+            notifyAsking = false;
+            if (results.length > 0) getSharedPreferences(NotifyJob.PREFS, MODE_PRIVATE).edit().putBoolean("asked", true).apply();
+            sendNotifyState();
+            if (!micWaiters.isEmpty() && !micAsking) { // 알림 권한을 묻는 동안 기다린 마이크 요청
+                micAsking = true;
+                requestPermissions(new String[] {Manifest.permission.RECORD_AUDIO}, REQ_MIC);
+            }
+            return;
+        }
         if (code != REQ_MIC) return;
         micAsking = false;
         boolean ok = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
@@ -1219,6 +1303,13 @@ public class MainActivity extends Activity {
             startActivity(new Intent(this, CardSettingsActivity.class));
             return true;
         }
+        if (ACTION_OPEN.equals(action)) { // 알림을 눌렀다: 그 알림의 페이지(같은 사이트 경로), 없으면 보던 화면 그대로
+            String path = NotifyFeed.safePath(i.getStringExtra("path"));
+            Uri s = Uri.parse(startUrl);
+            if (!path.isEmpty()) web.loadUrl(s.getScheme() + "://" + s.getEncodedAuthority() + path);
+            else if (web.getUrl() == null) web.loadUrl(startUrl);
+            return true;
+        }
         if (ACTION_MIC.equals(action) && speechJs != null) {
             micPending = true;
             if (pageReady) startMicMode(); // 이미 열려 있던 앱이면 바로 (처음 열 때는 페이지가 뜬 뒤)
@@ -1249,6 +1340,10 @@ public class MainActivity extends Activity {
             WidgetProvider.refresh(this);      // 혹시 남아 있는 "새로고침 중…"을 지운다
         }
         if (AppUpdater.enabled(this)) AppUpdater.check(this, false); // 새 버전 확인 (6시간에 한 번, 새 버전이면 묻는다)
+        if (notifyJs != null && web != null) {
+            NotifyJob.schedule(this); // 15분마다 사이트 알림 확인 (이미 걸려 있으면 그대로)
+            web.postDelayed(() -> askNotify(false), 1500); // 알림 권한: 처음 한 번만 묻는다 (안드로이드 13+)
+        }
         if (CardEngine.available(this)) {
             CardEngine.get(this).flushAsync(); // 못 보낸 카드 결제가 있으면 지금
             CardEngine.get(this).reportStatusAsync(false); // 사이트가 상태 주소를 주면 폰 상태 알리기 (30분에 한 번)

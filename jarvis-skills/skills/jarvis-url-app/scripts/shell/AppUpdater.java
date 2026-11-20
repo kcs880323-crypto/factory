@@ -56,6 +56,16 @@ final class AppUpdater {
         return manifestUrl(c) != null;
     }
 
+    /** 암호화한 업데이트를 푸는 열쇠 (assets/urlapp.json 의 update_key, --update-encrypt 앱만). 없으면 null. */
+    static byte[] updateKey(Context c) {
+        try (InputStream in = c.getAssets().open("urlapp.json")) {
+            String k = new JSONObject(readAll(in, 1_000_000)).optString("update_key", "");
+            return k.isEmpty() ? null : android.util.Base64.decode(k, android.util.Base64.DEFAULT);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     @SuppressWarnings("deprecation") // versionCode: 안드로이드 9 미만
     static long installedCode(Context c) {
         try {
@@ -162,6 +172,16 @@ final class AppUpdater {
                 if (data.length != f.size) throw new IOException("받은 크기가 달라요");
                 String sha = hex(MessageDigest.getInstance("SHA-256").digest(data));
                 if (!sha.equals(f.sha256)) throw new IOException("검사값(SHA-256)이 달라요 — 받은 파일이 손상됐어요");
+                if (f.encrypted) { // 주소를 숨기는 앱: 앱 안의 열쇠로 푼다 (열쇠가 다르거나 바뀐 파일이면 실패)
+                    try {
+                        data = UpdateInfo.open(data, updateKey(a), a.getPackageName());
+                    } catch (java.security.GeneralSecurityException e) {
+                        throw new IOException("업데이트 파일을 풀지 못했어요 (" + e.getMessage() + ")");
+                    }
+                    if (!f.apkSha256.isEmpty() && !hex(MessageDigest.getInstance("SHA-256").digest(data)).equals(f.apkSha256)) {
+                        throw new IOException("푼 파일의 검사값이 달라요");
+                    }
+                }
                 try (FileOutputStream out = new FileOutputStream(apk)) {
                     out.write(data);
                 }
