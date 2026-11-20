@@ -186,8 +186,20 @@ public class WidgetProvider extends AppWidgetProvider {
         refresh(ctx);
     }
 
-    /** 통로에서 부른다: 받은 요약을 저장하고 홈 화면의 위젯을 모두 다시 그린다. */
+    /** 통로에서 부른다: 받은 요약을 저장하고 홈 화면의 위젯을 모두 다시 그린다.
+     *  요약에 notify(알림 목록)가 있으면 알림 기능(--notify)에 넘기고, 저장할 때는 뺀다. */
     static void save(Context ctx, String json) {
+        try {
+            JSONObject o = new JSONObject(json);
+            JSONArray notify = o.optJSONArray("notify");
+            if (notify != null) {
+                o.remove("notify");
+                json = o.toString();
+                if (NotifyJob.enabled(ctx)) NotifyJob.apply(ctx, new JSONObject().put("items", notify).toString());
+            }
+        } catch (Exception ignored) {
+            // 모양이 이상하면 그대로 저장 (그리기에서 걸러진다)
+        }
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString("data", json).putLong("at", System.currentTimeMillis()).remove("refresh_failed_at").apply();
         refresh(ctx);

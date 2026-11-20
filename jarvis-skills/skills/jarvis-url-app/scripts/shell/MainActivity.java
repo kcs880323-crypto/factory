@@ -1142,7 +1142,7 @@ public class MainActivity extends Activity {
         /** 위젯 실행기가 읽은 요약 (작은 JSON). 저장하고 홈 화면 위젯을 다시 그린다. */
         @JavascriptInterface
         public void widget(String token, String json) {
-            if (!dlToken.equals(token) || widgetJs == null || json == null || json.length() > 4000) return;
+            if (!dlToken.equals(token) || widgetJs == null || json == null || json.length() > 16000) return;
             try {
                 new JSONObject(json); // 모양만 확인
             } catch (Exception e) {

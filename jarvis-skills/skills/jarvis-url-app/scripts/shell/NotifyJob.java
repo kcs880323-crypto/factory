@@ -78,9 +78,26 @@ public class NotifyJob extends JobService {
         Context app = getApplicationContext();
         new Thread(() -> {
             check(app);
-            jobFinished(p, false);
+            // 위젯 스크립트가 있는 앱은 그 스크립트도 돌린다 (보이지 않는 웹 화면, 45초 안에 끝남): 위젯을 새로 고치고,
+            // 스크립트가 돌려준 notify 도 알림으로 띄운다 — 화면이 꺼져 있어도 15분마다.
+            android.os.Handler main = new android.os.Handler(android.os.Looper.getMainLooper());
+            main.post(() -> {
+                if (config(app).optInt("widget_refresh_min", 0) > 0 || hasWidget(app)) {
+                    WidgetRefreshJob.runNow(app, 45_000, () -> jobFinished(p, false));
+                } else {
+                    jobFinished(p, false);
+                }
+            });
         }, "urlapp-notify").start();
         return true;
+    }
+
+    private static boolean hasWidget(Context ctx) {
+        try (InputStream in = ctx.getAssets().open("urlapp-widget.js")) {
+            return in.read() >= 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override

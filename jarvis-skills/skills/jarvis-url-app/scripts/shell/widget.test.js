@@ -10,6 +10,7 @@ const { chromium } = require("playwright");
 const RUNNER = fs.readFileSync(path.join(__dirname, "widget-runner.js"), "utf8");
 const LEDGER = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "smart-ledger.js"), "utf8");
 const AJ = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "ajgahub-board.js"), "utf8");
+const CHARLES = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "charles-jobs.js"), "utf8");
 const SITEP = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "site-provided.js"), "utf8");
 const GAOPS = fs.readFileSync(path.join(__dirname, "..", "..", "widgets", "gaops-tasks.js"), "utf8")
   .replace(/__PARAM_GAOPS_PROJECT__/g, "fake-project").replace(/__PARAM_GAOPS_API_KEY__/g, "FAKE_WEB_KEY");
@@ -49,9 +50,33 @@ function check(label, cond, detail) {
     { id: 6, source_table: "monthly_details", date: "2026-11-08", details: "GS25", amount: "1,000", earner_name: "창수 ", memo: "현대카드 M" },
     { id: 1, source_table: "monthly_details", date: "2026-11-03", details: "메가커피", amount: 12500, earner_name: "창수", memo: "현대카드" },
   ];
+  let cjMode = "off"; // CHARLES 위젯: off | jobs | idle | login
+  const cjReqs = [];
   let spMode = "none"; // 범용 위젯: /urlapp-widget.json 이 어떻게 답하는지 (none = 일반 페이지)
   let serverSession = false; // 서버(/api/session)가 로그인이라고 하는지 (보이지 않는 웹 화면에서 새로 고칠 때)
   const server = http.createServer((req, res) => {
+    if (req.url.startsWith("/api/job") && cjMode !== "off") {
+      cjReqs.push(req.method + " " + req.url);
+      if (cjMode === "login") { res.writeHead(401, { "Content-Type": "application/json" }); return res.end("{}"); }
+      const now = Math.floor(Date.now() / 1000);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      if (req.url === "/api/jobs/active") {
+        return res.end(JSON.stringify(cjMode === "idle" ? { running: [], unseen: [] } : {
+          running: [
+            { id: "aaaaaaaaaaaa", kind: "agent", title: "릴스 만들기", message: "", status: "running", waiting: false, started: now - 300, next: 50 },
+            { id: "bbbbbbbbbbbb", kind: "agent", title: "", message: "메일 정리해줘\n자세히", status: "running", waiting: true, started: now - 60, next: 5 },
+            { id: "eeeeeeeeeeee", kind: "chat", title: "자료 조사", message: "", status: "running", waiting: false, started: now - 720, next: 3 },
+          ],
+          unseen: [
+            { id: "cccccccccccc", kind: "chat", title: "블로그 글", status: "done" },
+            { id: "dddddddddddd", kind: "agent", message: "유튜브 업로드", status: "error" },
+          ] }));
+      }
+      if (req.url.startsWith("/api/job/aaaaaaaaaaaa?")) {
+        return res.end(JSON.stringify({ events: [{ type: "text", seq: 1 }, { type: "progress", percent: 62, label: "장면 3/8", seq: 2 }], next: 3 }));
+      }
+      return res.end(JSON.stringify({ events: [{ type: "text", seq: 1 }], next: 2 }));
+    }
     if (req.url === "/api/tasks" && spMode === "tasks") {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ ok: true, data: { tasks: [
@@ -448,6 +473,38 @@ function check(label, cond, detail) {
   const s4 = await sp4.evaluate(() => __w[0]);
   check("범용: 그것도 없으면 화면의 진행 막대와 이름 (늦게 그려져도)", s4.title === "CHARLES · 진행 중 2"
     && JSON.stringify(s4.rows.map((r) => [r.label, r.value])) === JSON.stringify([["보고서 정리", "75%"], ["코드 리뷰", "40%"]]), s4);
+  // CHARLES(자비스) 위젯: 기존 API 만 읽어 진행 중인 작업 요약 + 알림
+  cjMode = "jobs";
+  const cj = await browser.newPage();
+  await cj.goto(base + "jarvis");
+  await cj.evaluate((tok) => {
+    window.__w = [];
+    window.UrlAppBridge = { widget: (t, j) => { if (t === tok) window.__w.push(JSON.parse(j)); } };
+  }, TOKEN);
+  await cj.evaluate(asset(CHARLES).replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
+  await cj.waitForFunction(() => __w.length === 1, null, { timeout: 8000 });
+  const c1 = await cj.evaluate(() => __w[0]);
+  check("CHARLES: 진행 중 작업(진행률 예상·승인 대기·경과 시간) → 안 본 결과, 제목·아래 줄", c1.title === "CHARLES · 진행 중 3"
+    && JSON.stringify(c1.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
+      ["릴스 만들기 · 장면 3/8", "62% 예상", "pos"], ["메일 정리해줘", "승인 대기", "neg"], ["자료 조사", "진행 12분", "pos"],
+      ["블로그 글", "완료", ""]]) && c1.note === "승인 대기 1 · 안 본 결과 2", c1);
+  check("CHARLES: 알림 목록(승인 대기·끝·오류)이 앱으로 넘어감", JSON.stringify(c1.notify) === JSON.stringify([
+    { id: "bbbbbbbbbbbb:wait", title: "승인이 필요해요", body: "메일 정리해줘", open: "/" },
+    { id: "cccccccccccc:done", title: "작업 끝", body: "블로그 글", open: "/" },
+    { id: "dddddddddddd:error", title: "작업 오류", body: "유튜브 업로드", open: "/" }]), c1.notify);
+  check("CHARLES: 읽기만 함 (GET 만, 승인 대기 작업의 기록은 읽지 않음)", cjReqs.every((r) => r.startsWith("GET "))
+    && !cjReqs.some((r) => r.includes("bbbbbbbbbbbb")), cjReqs);
+  cjMode = "idle";
+  await cj.evaluate(() => window.__urlappWidgetRun());
+  await cj.waitForFunction(() => __w.length === 2, null, { timeout: 5000 });
+  const c2 = await cj.evaluate(() => __w[1]);
+  check("CHARLES: 할 일이 없으면 '진행 중인 작업 없음'", c2.title === "CHARLES · 쉬는 중" && c2.rows.length === 1
+    && c2.rows[0].value === "없음" && c2.notify.length === 0, c2);
+  cjMode = "login";
+  await cj.evaluate(() => window.__urlappWidgetRun());
+  await cj.waitForTimeout(600);
+  check("CHARLES: 로그인이 풀리면(401) 위젯을 바꾸지 않음", (await cj.evaluate(() => __w.length)) === 2);
+  cjMode = "off";
   check("범용: 스크립트에 사이트 주소가 없음 (상대 주소만)", !/https?:\/\//.test(SITEP.replace(/^\/\/.*$/gm, "")));
 
   await browser.close();

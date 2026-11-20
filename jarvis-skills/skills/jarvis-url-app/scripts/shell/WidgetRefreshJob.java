@@ -126,7 +126,7 @@ public class WidgetRefreshJob extends JobService {
         web.addJavascriptInterface(new Object() {
             @JavascriptInterface
             public void widget(String t, String json) {
-                if (!token.equals(t) || json == null || json.length() > 4000) return;
+                if (!token.equals(t) || json == null || json.length() > 16000) return;
                 try {
                     new JSONObject(json); // 모양만 확인
                 } catch (Exception e) {

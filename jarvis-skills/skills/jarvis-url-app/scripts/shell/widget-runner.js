@@ -8,6 +8,8 @@
 //   "// urlapp:rows N" 으로 8줄까지), note: "...", alt: {같은 모양}} 또는 null(갱신 안 함)
 //   alt 는 두 번째 위젯(스크립트에 "// urlapp:alt-label 이름" 이 있으면 위젯 목록에 따로 생김)이 그린다.
 //   두 번째 위젯의 줄 수는 "// urlapp:alt-rows N" (4줄 이하면 처음 크기 3×2, 넘으면 3×3).
+//   notify: [{id, title, body, open}] 를 함께 돌려주면 앱의 알림 기능(--notify)이 처음 보는 id 만 폰 알림으로 띄운다
+//   (위젯 새로고침·앱을 볼 때·15분 알림 확인 때마다 — 사이트를 고치지 않고 기존 API 로 알림을 만들 때).
 // 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤),
 // 그리고 위젯 스크립트가 null(로그인 전 등)을 돌려주거나 오류가 나는 동안은 10초마다.
 (function (token) {
@@ -49,6 +51,11 @@
       if (!d || typeof d !== "object") { retryLater(); return; }
       var out = shape(d, MAX_ROWS);
       if (d.alt && typeof d.alt === "object") out.alt = shape(d.alt, ALT_ROWS);
+      if (Array.isArray(d.notify)) {
+        out.notify = d.notify.slice(0, 20).filter(function (n) { return n && n.id != null; }).map(function (n) {
+          return { id: clip(n.id, 64), title: clip(n.title, 80), body: clip(n.body, 300), open: clip(n.open, 300) };
+        });
+      }
       bridge.widget(token, JSON.stringify(out));
     }).catch(function () { retryLater(); /* 사이트가 바쁘거나 인터넷이 잠깐 끊김: 10초 뒤 다시 */ }).then(function () {
       busy = false;
