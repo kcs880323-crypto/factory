@@ -12,6 +12,7 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
@@ -179,6 +180,8 @@ public class MainActivity extends Activity {
         setupWebView();
 
         if (state == null) {
+            Context appCtx = getApplicationContext(); // 호출어를 뺀 버전이면 남은 음성 모델을 지운다 (뒤에서)
+            new Thread(() -> HotwordModel.cleanupIfUnused(appCtx), "hotword-cleanup").start();
             Intent in = getIntent();
             if (!handleViewLink(in) && (!handleShortcut(in) || ACTION_CARDS.equals(in.getAction()))) web.loadUrl(startUrl);
             maybeOfferCards();

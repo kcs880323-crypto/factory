@@ -673,7 +673,8 @@ def android_string(s):
 # ---------------------------------------------------------------- 프로젝트 파일
 
 def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
-                 view_hosts=(), update=False, widget_extra_sizes=0, mic=False, notify=False, hotword=False):
+                 view_hosts=(), update=False, widget_extra_sizes=0, mic=False, notify=False, hotword=False,
+                 voice_icon=False):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -776,6 +777,22 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden" />"""
+        if voice_icon:
+            # --voice-icon: 대화 창을 바로 여는 두 번째 앱 아이콘 (빅스비 '빠른 명령어'·'OO 열어줘'가 이 이름으로 연다).
+            # 아이콘으로 여는 길만 열려 있다 (MAIN/LAUNCHER). 창 자체는 그대로 exported=false.
+            card_parts += """
+        <activity-alias
+            android:name="app.jarvis.urlapp.VoiceLauncher"
+            android:targetActivity="app.jarvis.urlapp.VoiceActivity"
+            android:exported="true"
+            android:label="@string/voice_icon_name"
+            android:icon="@mipmap/ic_voice"
+            android:roundIcon="@mipmap/ic_voice">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>"""
         card_perm += '\n    <uses-permission android:name="android.permission.RECORD_AUDIO" />'
         queries = """
     <queries>
@@ -936,6 +953,45 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
 
 
 # ---------------------------------------------------------------- 빌드
+
+def write_voice_icon(res, label, bg, accent):
+    """--voice-icon: 대화 창을 바로 여는 두 번째 앱 아이콘(이름 label). 바탕 bg 위 강조색 동그라미 + 마이크."""
+    def w(rel, text):
+        p = res / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+    w("values/voice_icon.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="voice_icon_name">{android_string(label)}</string>
+    <color name="voice_icon_bg">{bg}</color>
+    <color name="voice_icon_accent">{accent}</color>
+</resources>
+""")
+    mic = ("M12,14c1.66,0 2.99,-1.34 2.99,-3L15,5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6c0,1.66 1.34,3 3,3zM17.3,11c0,3 -2.54,5.1 "
+           "-5.3,5.1S6.7,14 6.7,11L5,11c0,3.41 2.72,6.23 6,6.72L11,21h2v-3.28c3.28,-0.48 6,-3.3 6,-6.72h-1.7z")
+    # 108×108 캔버스(적응형 아이콘), 가운데 지름 52 동그라미 + 1.6배 마이크 (Material Icons "mic", Apache-2.0)
+    w("drawable/urlapp_voice_fg.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="@color/voice_icon_accent" android:pathData="M54,28a26,26 0,1 1,0 52a26,26 0,1 1,0 -52z" />
+    <group android:translateX="34.8" android:translateY="34.8" android:scaleX="1.6" android:scaleY="1.6">
+        <path android:fillColor="@color/voice_icon_bg" android:pathData="{mic}" />
+    </group>
+</vector>
+""")
+    w("mipmap-anydpi-v26/ic_voice.xml", """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/voice_icon_bg" />
+    <foreground android:drawable="@drawable/urlapp_voice_fg" />
+</adaptive-icon>
+""")
+    w("mipmap/ic_voice.xml", """<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item><shape android:shape="oval"><solid android:color="@color/voice_icon_bg" /></shape></item>
+    <item android:drawable="@drawable/urlapp_voice_fg" />
+</layer-list>
+""")
+
 
 HOTWORD_ICON = """<?xml version="1.0" encoding="utf-8"?>
 <!-- '하이 자비스' 듣는 중 알림의 작은 아이콘 (마이크, Material Icons "mic", Apache-2.0) -->
@@ -1474,10 +1530,10 @@ def save_registry(home, reg):
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style", "mic", "widget_sizes", "notify",
-                 "update_encrypt", "hotword", "hotword_phrase")
+                 "update_encrypt", "hotword", "hotword_phrase", "voice_icon", "voice_icon_name")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto", "mic": False, "notify": False,
-            "update_encrypt": False, "hotword": False, "hotword_phrase": []}
+            "update_encrypt": False, "hotword": False, "hotword_phrase": [], "voice_icon": False, "voice_icon_name": None}
 
 
 def cmd_build(args):
@@ -1556,6 +1612,15 @@ def cmd_build(args):
 
         widget_sizes = parse_widget_sizes(opt["widget_sizes"]) if widget_js else []
 
+        # 대화 창 아이콘 (--voice-icon): 빅스비 빠른 명령어로 부르는 길 (위젯 마이크와 같은 창이라 --mic 필요)
+        voice_icon = None
+        if opt["voice_icon"]:
+            if not opt["mic"]:
+                raise Fail("--voice-icon 은 --mic 와 같이 씁니다 (아이콘이 마이크 대화 창을 연다).")
+            voice_icon = clean_text(opt["voice_icon_name"] or f"{name} 대화", 20)
+            if len(voice_icon) < 2:
+                raise Fail("--voice-icon-name 이 너무 짧습니다.")
+
         # '하이 자비스' 호출어 (--hotword): 위젯 마이크와 같은 대화 창을 쓰므로 --mic 가 필요하다
         hotword = None
         if opt["hotword"]:
@@ -1628,6 +1693,9 @@ def cmd_build(args):
         if hotword:
             (res / "drawable").mkdir(exist_ok=True)
             (res / "drawable" / "urlapp_hotword.xml").write_text(HOTWORD_ICON, encoding="utf-8")
+        if voice_icon:
+            write_voice_icon(res, voice_icon, icon_info["icon_bg"],
+                             accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8"))
         if cards_cfg:
             (res / "drawable").mkdir(exist_ok=True)
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
@@ -1682,7 +1750,7 @@ def cmd_build(args):
                                                                   view_hosts=cfg["hosts"], update=bool(update_url),
                                                                   widget_extra_sizes=max(0, len(widget_sizes) - 1),
                                                                   mic=bool(opt["mic"]), notify=bool(opt["notify"]),
-                                                                  hotword=bool(hotword)),
+                                                                  hotword=bool(hotword), voice_icon=bool(voice_icon)),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -1756,6 +1824,9 @@ def cmd_build(args):
     if update_url:
         say(f"  앱 안 업데이트: {update_url}" + (" (암호화: 열쇠는 ~/.jarvis-url-app/update-keys/ 와 앱 안에만)"
                                               if opt["update_encrypt"] else ""))
+    if voice_icon:
+        say(f"  대화 창 아이콘: '{voice_icon}' (누르면 바로 듣는 대화 창. 빅스비 빠른 명령어에서 이 앱을 열게 하면 "
+            f"'하이 빅스비, …' 로 부를 수 있다)")
     if hotword:
         say(f"  호출어: ‘{hotword['phrases'][0]}’ 등 {len(hotword['phrases'])}개 (앱 아이콘 길게 누르기 → 설정에서 켠다. "
             f"음성 모델 약 {hotword['model_size'] // 1_000_000}MB 는 폰이 그때 받는다. 소리는 폰 안에서만, 화면이 켜져 있을 때 듣는 것이 기본)")
@@ -2292,6 +2363,38 @@ def cmd_selftest(args):
             check("--hotword 없는 앱에는 엔진·라이브러리·서비스·권한 없음", "classes2.dex" not in names_nh
                   and not any(n.startswith("lib/") for n in names_nh) and "HotwordService" not in mfm
                   and "FOREGROUND_SERVICE" not in mfm and "SYSTEM_ALERT_WINDOW" not in mfm)
+            build(base + "/hw", "--no-fetch", "--no-hotword")  # 다시 빼면 (사용자가 빅스비 빠른 명령어로 바꿈, 2026-11-20)
+            rech2 = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/hw"))
+            mfh2 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rech2["apk"]], tmp_home, "xmltree")
+            with zipfile.ZipFile(rech2["apk"]) as z:
+                names_h2 = z.namelist()
+                cfgh2 = json.loads(z.read("assets/urlapp.json"))
+            check("호출어를 다시 빼면 엔진·라이브러리·서비스·권한·설정이 빠지고 마이크는 남음",
+                  "classes2.dex" not in names_h2 and not any(n.startswith("lib/") for n in names_h2)
+                  and "HotwordService" not in mfh2 and "FOREGROUND_SERVICE" not in mfh2 and "SYSTEM_ALERT_WINDOW" not in mfh2
+                  and "hotword" not in cfgh2 and cfgh2.get("mic") is True and "android.permission.RECORD_AUDIO" in mfh2)
+            # --voice-icon: 대화 창을 바로 여는 두 번째 아이콘 (빅스비 빠른 명령어가 연다)
+            check("--voice-icon 은 --mic 없이 거부", raises(lambda: build(base + "/vi0", "--no-fetch", "--voice-icon")))
+            build(base + "/vi", "--no-fetch", "--name", "자비스", "--mic", "--voice-icon")
+            recv = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/vi"))
+            mfv = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", recv["apk"]], tmp_home, "xmltree")
+            resv = run([tp["aapt2"], "dump", "resources", recv["apk"]], tmp_home, "resources")
+            al = mfv[mfv.rfind("E: activity-alias", 0, mfv.find("app.jarvis.urlapp.VoiceLauncher")):]
+            al = al[:al.find("E: activity", 5) if al.find("E: activity", 5) > 0 else len(al)]
+            va2 = mfv[mfv.rfind("E: activity", 0, mfv.find("app.jarvis.urlapp.VoiceActivity\"")):]
+            va2 = va2[:va2.find("E: ", 5)]
+            check("대화 창 아이콘: 앱 목록에 '자비스 대화'(MAIN/LAUNCHER) → 대화 창, 창 자체는 그대로 앱 안에서만",
+                  "E: activity-alias" in mfv and "app.jarvis.urlapp.VoiceActivity" in al
+                  and "android.intent.action.MAIN" in al and "android.intent.category.LAUNCHER" in al
+                  and re.search(r"exported\(0x[0-9a-f]+\)=(true|\(type 0x12\)0xffffffff)", al) is not None
+                  and re.search(r"exported\(0x[0-9a-f]+\)=(false|\(type 0x12\)0x0)", va2) is not None
+                  and re.search(r"string/voice_icon_name\n\s+\(\) \"?자비스 대화", resv) is not None
+                  and "mipmap/ic_voice" in resv and "drawable/urlapp_voice_fg" in resv, al[:700])
+            build(base + "/vi", "--no-fetch", "--voice-icon-name", "자비스 음성")
+            recv2 = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/vi"))
+            resv2 = run([tp["aapt2"], "dump", "resources", recv2["apk"]], tmp_home, "resources")
+            check("대화 창 아이콘 이름 바꾸기 (옵션은 기억)", re.search(r"string/voice_icon_name\n\s+\(\) \"?자비스 음성", resv2) is not None)
+            check("--voice-icon 없는 앱에는 두 번째 아이콘 없음", "VoiceLauncher" not in mfm and "activity-alias" not in mfm)
             # --notify + --update-encrypt: 앱 알림, 암호화한 앱 안 업데이트
             check("--update-encrypt 는 --update-url 없이 거부",
                   raises(lambda: build(base + "/enc0", "--no-fetch", "--update-encrypt")))
@@ -2476,6 +2579,10 @@ def build_parser():
                    help="업데이트 파일을 암호화해서 올린다 (주소를 숨겨야 하는 앱. 열쇠는 이 컴퓨터와 앱 안에만)")
     b.add_argument("--mic", action=argparse.BooleanOptionalAction, default=None,
                    help="마이크·음성 대화: 마이크 권한, 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신, 위젯·바로가기의 '마이크 모드'")
+    b.add_argument("--voice-icon", dest="voice_icon", action=argparse.BooleanOptionalAction, default=None,
+                   help="대화 창을 바로 여는 두 번째 앱 아이콘 (--mic 필요). 빅스비 빠른 명령어·'OO 열어줘'로 부를 때 쓴다")
+    b.add_argument("--voice-icon-name", dest="voice_icon_name",
+                   help="그 아이콘의 이름 (기본: '<앱 이름> 대화', 20자까지)")
     b.add_argument("--hotword", action=argparse.BooleanOptionalAction, default=None,
                    help="'하이 자비스'처럼 부르면 대화 창이 뜨는 호출어 (--mic 필요). 폰 안에서만 듣는 오프라인 모델(Vosk 한국어, "
                         "약 87MB)은 폰이 설정 화면에서 받는다. 늘 '듣는 중' 알림이 보인다")

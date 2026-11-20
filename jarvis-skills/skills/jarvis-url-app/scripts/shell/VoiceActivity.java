@@ -6,12 +6,15 @@ package app.jarvis.urlapp;
 // 대화 창의 듣기를 계속 끊던 문제(2026-11-20 '다시 듣기·끝내기가 안 눌린다')를 피한다. 사이트의 마이크 요청도 거절한다.
 // 듣기는 창이 뜨자마자 시작하고(사이트가 뜨는 동안 말해도 된다), 질문은 사이트가 준비되면 보낸다.
 // 바깥을 누르거나 '끝내기', 두 번 조용하거나, 다른 앱으로 가면 닫힌다.
+// '<앱 이름> 대화' 아이콘(--voice-icon)으로도 바로 열린다 — 빅스비 '빠른 명령어'가 이 아이콘을 열게 하면
+// '하이 빅스비, 자비스' 처럼 부를 수 있다 (늘 켜 두는 호출어보다 배터리를 안 쓴다: 빅스비는 전용 저전력 칩으로 듣는다).
 // '하이 자비스'(HotwordService)로 떴을 때는 화면을 켜고 잠금 화면 위에 뜨되, 잠겨 있으면 잠금 풀기를 먼저 요청한다
 // (잠긴 채로는 자비스에 묻지 않는다 — 일정·메일 같은 개인 정보가 있으므로). 떠 있는 동안은 호출어 듣기가 마이크를 놓는다.
 
 import android.Manifest;
 import android.app.Activity;
 import android.app.KeyguardManager;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
@@ -129,7 +132,10 @@ public class VoiceActivity extends Activity {
         }, root, accent());
 
         if (fromHotword) unlockThenStart();
-        else micThenStart();
+        else if (Intent.ACTION_MAIN.equals(getIntent().getAction())) {
+            // '자비스 대화' 아이콘(--voice-icon)·빅스비 빠른 명령어로 열렸다: 빅스비가 마이크를 놓을 틈을 잠깐 준다
+            main.postDelayed(this::micThenStart, 700);
+        } else micThenStart();
     }
 
     /** 잠긴 폰: 잠금 풀기(지문·PIN)를 먼저. 풀리면 듣기 시작, 취소하면 닫는다. */

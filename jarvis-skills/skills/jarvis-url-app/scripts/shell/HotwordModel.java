@@ -261,6 +261,15 @@ final class HotwordModel {
         }
     }
 
+    /** 호출어를 뺀 버전으로 업데이트한 앱: 받아 둔 모델(약 260MB)이 남아 있으면 지운다. */
+    static void cleanupIfUnused(Context c) {
+        if (HotwordService.available(c)) return;
+        if (!root(c).exists() && prefs(c).getLong("dl_id", -1) < 0 && !zipFile(c).exists()) return;
+        delete(c);
+        prefs(c).edit().remove("dl_id").apply();
+        c.getSharedPreferences(HotwordService.PREFS, Context.MODE_PRIVATE).edit().putBoolean("enabled", false).apply();
+    }
+
     static void delete(Context c) {
         cancelDownload(c);
         deleteTree(root(c));
