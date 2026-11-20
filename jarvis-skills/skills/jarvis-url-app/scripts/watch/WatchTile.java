@@ -34,16 +34,21 @@ public class WatchTile extends TileService {
     @Override
     protected ListenableFuture<TileBuilders.Tile> onTileRequest(RequestBuilders.TileRequest request) {
         SettableFuture<TileBuilders.Tile> f = new SettableFuture<>();
-        // Data Layer 에 남아 있는 가장 새 요약을 한 번 읽고 (워치 앱을 막 깔았을 때도), 못 읽으면 보관한 것으로
-        Wearable.getDataClient(this).getDataItems(Uri.parse("wear://*/urlapp/widget"))
-                .addOnCompleteListener(task -> {
-                    try {
-                        if (task.isSuccessful()) take(task.getResult());
-                    } catch (Throwable ignored) {
-                        // 보관한 것으로
-                    }
-                    f.set(tile());
-                });
+        // Data Layer 에 남아 있는 가장 새 요약을 한 번 읽고 (워치 앱을 막 깔았을 때도), 못 읽으면 보관한 것으로.
+        // 연결 부품이 실패해도 타일은 그린다 (1.18 은 부품이 빠져 여기서 꺼져 타일이 검게만 보였다)
+        try {
+            Wearable.getDataClient(this).getDataItems(Uri.parse("wear://*/urlapp/widget"))
+                    .addOnCompleteListener(task -> {
+                        try {
+                            if (task.isSuccessful()) take(task.getResult());
+                        } catch (Throwable ignored) {
+                            // 보관한 것으로
+                        }
+                        f.set(tile());
+                    });
+        } catch (Throwable t) {
+            f.set(tile());
+        }
         return f;
     }
 

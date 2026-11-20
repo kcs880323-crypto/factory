@@ -68,7 +68,26 @@ GMS_LIBS = (  # (저장소, 경로, 크기, SHA-256) — Google Play 서비스 W
      "ce5c936fd66814b3602f5c6a5e929911ff973d4b05f6de9996da596bef97cad2"),
     (GMAVEN, "com/google/android/gms/play-services-tasks/18.2.0/play-services-tasks-18.2.0.aar", 80343,
      "7f2aaa8f502068eaf54356ca92aec04271d6e7c416c52c45c0d23440fcbd1654"),
+    # Play 서비스가 실행 중에 쓰는 androidx 기본 부품 (POM 의 판). 처음(1.18)에 빠뜨려 연결하는 순간 앱이 꺼졌다
+    # (GoogleApiManager 가 androidx.collection.ArraySet, Wearable 이 androidx.core.util.Preconditions) — 2026-11-20 사용자 신고
+    (GMAVEN, "androidx/core/core/1.0.0/core-1.0.0.aar", 633278,
+     "d7672358fc0d46de678968bcddfd3bdfe1618574299a753477b16116cfec74f5"),
+    (GMAVEN, "androidx/collection/collection/1.0.0/collection-1.0.0.jar", 41692,
+     "9c8d117b5c2bc120a1cdfeb857e05b495b16c36013570372a708f7827e3ac9f9"),
+    (GMAVEN, "androidx/lifecycle/lifecycle-runtime/2.0.0/lifecycle-runtime-2.0.0.aar", 9164,
+     "e4afc9e636183f6f3e0edf1cf46121a492ffd2c673075bb07f55c7a99dd43cfb"),
+    (GMAVEN, "androidx/lifecycle/lifecycle-common/2.0.0/lifecycle-common-2.0.0.jar", 20306,
+     "7bad7a188804adea6fa1f35d5ef99b705f20bd93ecadde484760ff86b535fefc"),
+    (GMAVEN, "androidx/arch/core/core-common/2.0.0/core-common-2.0.0.jar", 11249,
+     "4b80b337779b526e64b0ee0ca9e0df43b808344d145f8e9b1c42a134dac57ad8"),
+    (GMAVEN, "androidx/versionedparcelable/versionedparcelable/1.0.0/versionedparcelable-1.0.0.aar", 27250,
+     "f6438a93ed8016ccddca0e140a70be0b0110e0424edaa1472f84f98fed2e1ce3"),
 )
+# 실행 중에 없어도 되는 클래스 (빠진 클래스 검사에서 봐준다): 활동(Activity)을 넘길 때만 쓰는 오류 대화상자(fragment·activity),
+# 안드로이드 런타임 안에 있지만 SDK(android.jar)에는 없는 내부 클래스
+# 표시(annotation)는 실행 중에 없으면 무시된다
+ALLOWED_MISSING = ("androidx/fragment/", "androidx/activity/", "androidx/annotation/", "libcore/", "sun/misc/", "android/",
+                   "dalvik/")
 TILES_LIBS = (  # 워치 타일: Tiles 1.1 (Java 판, Apache-2.0) — 최신 Kotlin 판은 라이브러리가 30개가 넘어 이 빌드에 맞지 않는다
     (GMAVEN, "androidx/wear/tiles/tiles/1.1.0/tiles-1.1.0.aar", 213450,
      "d869b13f1b1cdccc1bb302fa965fbe7e4a609d018b7e4d08d75bdf490b440d6b"),
@@ -1841,6 +1860,88 @@ def dex_jars(home, tc, java, jars, min_api, workdir):
     return sorted(cache.glob("classes*.dex"), key=lambda f: int(re.sub(r"\D", "", f.stem) or 1))
 
 
+def class_refs(data):
+    """클래스 파일이 가리키는 다른 클래스들 (상수 풀의 Class·이름과 형식 설명에서)."""
+    n = struct.unpack_from(">H", data, 8)[0]
+    i, k, utf, classes, descs = 10, 1, {}, [], []
+    while k < n:
+        tag = data[i]
+        if tag == 1:
+            ln = struct.unpack_from(">H", data, i + 1)[0]
+            utf[k] = data[i + 3:i + 3 + ln].decode("utf-8", "replace")
+            i += 3 + ln
+        elif tag in (3, 4, 9, 10, 11, 17, 18):
+            i += 5
+        elif tag in (5, 6):
+            i += 9
+            k += 1
+        elif tag == 7:
+            classes.append(struct.unpack_from(">H", data, i + 1)[0])
+            i += 3
+        elif tag == 12:
+            descs.append(struct.unpack_from(">H", data, i + 3)[0])
+            i += 5
+        elif tag == 16:
+            descs.append(struct.unpack_from(">H", data, i + 1)[0])
+            i += 3
+        elif tag in (8, 19, 20):
+            i += 3
+        elif tag == 15:
+            i += 4
+        else:
+            raise ValueError(f"알 수 없는 상수 {tag}")
+        k += 1
+    out = set()
+    for c in classes:
+        name = utf.get(c, "")
+        out.update(re.findall(r"L([^;]+);", name) if name.startswith("[") else [name])
+    for d in descs:
+        out.update(re.findall(r"L([^;<>]+);", utf.get(d, "")))
+    return out
+
+
+def missing_classes(android_jar, roots, sources):
+    """roots(클래스 이름 앞부분들)에서 닿는 클래스 중 sources(jar·폴더)와 SDK 어디에도 없는 것 (봐주는 것 제외).
+    APK 를 실제로 돌리지 않고 '실행 중에 클래스를 못 찾아 앱이 꺼지는' 실수를 빌드에서 잡는다 (1.18 의 실수)."""
+    with zipfile.ZipFile(android_jar) as z:
+        sdk = {n[:-6] for n in z.namelist() if n.endswith(".class")}
+    where = {}
+    for src in sources:
+        src = Path(src)
+        if src.is_dir():
+            for f in src.rglob("*.class"):
+                where.setdefault(f.relative_to(src).as_posix()[:-6], ("dir", f))
+        else:
+            with zipfile.ZipFile(src) as z:
+                for nm in z.namelist():
+                    if nm.endswith(".class") and not nm.startswith("META-INF/"):
+                        where.setdefault(nm[:-6], ("jar", src, nm))
+    todo = [c for c in where if any(c.startswith(r) for r in roots)]
+    seen, missing, opened = set(), set(), {}
+    while todo:
+        c = todo.pop()
+        if c in seen:
+            continue
+        seen.add(c)
+        w = where[c]
+        if w[0] == "dir":
+            data = w[1].read_bytes()
+        else:
+            if w[1] not in opened:
+                opened[w[1]] = zipfile.ZipFile(w[1])
+            data = opened[w[1]].read(w[2])
+        for r in class_refs(data):
+            if r in sdk or r.startswith(("java/", "javax/")):
+                continue
+            if r in where:
+                todo.append(r)
+            elif not r.startswith(ALLOWED_MISSING):
+                missing.add(r)
+    for z in opened.values():
+        z.close()
+    return sorted(missing)
+
+
 def app_dex(tc, javac, java, workdir, tag, sources, keep, jars, gen, pkgs, min_api):
     """sources 를 (gen 의 묶음 R 과 함께) 컴파일해 keep(클래스 이름 앞부분들)과 묶음 R 만 dex 로."""
     p = tool_paths(tc)
@@ -1856,6 +1957,10 @@ def app_dex(tc, javac, java, workdir, tag, sources, keep, jars, gen, pkgs, min_a
         if any(rel.startswith(k) for k in keep) or any(
                 rel.startswith(pkg.replace(".", "/") + "/R.") or rel.startswith(pkg.replace(".", "/") + "/R$") for pkg in pkgs):
             picked.append(f)
+    lost = missing_classes(p["android_jar"], keep, [classes, *jars])
+    if lost:
+        raise Fail(f"{tag}: 실행 중에 없을 클래스가 있습니다 (앱이 꺼짐) — {', '.join(lost[:8])}"
+                   + (f" 외 {len(lost) - 8}개" if len(lost) > 8 else ""))
     out = workdir / f"{tag}-dex"
     out.mkdir()
     run([java, "-cp", p["d8"], "com.android.tools.r8.D8", "--release", "--min-api", str(min_api), "--lib", p["android_jar"],
@@ -2896,6 +3001,7 @@ def cmd_selftest(args):
                 with zipfile.ZipFile(wapk) as z:
                     allw = b"".join(z.read(n) for n in z.namelist())
                     dexww = b"".join(z.read(n) for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", n))
+                    own_dex = z.read("classes.dex")  # 워치 앱 자체 코드 (묶음은 classes2.dex 부터)
                 idw = next(k for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/watch"))
                 check("워치 앱: 같은 패키지·같은 서명·Wear OS 3+(최소 30)·워치 전용·폰 필요(standalone=false)",
                       bw.get("package") == idw and cert_digest(java, tp["apksigner"], wapk, tmp_home) == recw["cert_sha256"]
@@ -2911,7 +3017,15 @@ def cmd_selftest(args):
                       and b"Lapp/jarvis/urlapp/WatchTile;" in dexww and b"Landroidx/wear/tiles/TileService;" in dexww, tl[:600])
                 host_w = urllib.parse.urlsplit(recw["url"]).hostname.encode()
                 check("워치 앱에는 사이트 주소·웹 화면 코드가 없음 (폰을 거쳐서만)", host_w not in allw
-                      and b"Landroid/webkit/WebView;" not in dexww and b"assets/urlapp.json" not in allw, "")
+                      and b"Landroid/webkit/WebView;" not in own_dex and b"assets/urlapp.json" not in allw, "")
+            gms_only = [lib["jar"] for lib in maven_libs(tmp_home, GMS_LIBS[:4])]
+            all_libs = [lib["jar"] for lib in maven_libs(tmp_home, GMS_LIBS)]
+            lost_before = missing_classes(tp["android_jar"], ["com/google/android/gms/wearable/Wearable"], gms_only)
+            lost_after = missing_classes(tp["android_jar"], ["com/google/android/gms/wearable/Wearable"], all_libs)
+            check("빠진 클래스 검사: Play 서비스만 넣으면 androidx 가 빠졌다고 잡고(1.18 의 실수), 기본 부품을 넣으면 R 만 남음",
+                  "androidx/core/util/Preconditions" in lost_before and "androidx/collection/ArraySet" in lost_before
+                  and all(r.split("/")[-1].startswith("R") or r.split("/")[-1].startswith("R$") for r in lost_after),
+                  (lost_before[:5], lost_after[:5]))
             check("--watch 없는 앱에는 Play 서비스·워치 연결 없음", "PhoneWatchService" not in mfm
                   and "com.google.android.gms" not in mfm)
             # --notify + --update-encrypt: 앱 알림, 암호화한 앱 안 업데이트

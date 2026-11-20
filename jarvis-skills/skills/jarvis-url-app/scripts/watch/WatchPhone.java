@@ -22,6 +22,14 @@ final class WatchPhone {
     }
 
     static void send(Context ctx, String path, String json, Result result) {
+        try {
+            sendNow(ctx, path, json, result);
+        } catch (Throwable t) { // 연결 부품 오류여도 앱은 꺼지지 않고 이유를 보인다
+            result.done("워치 연결 부품 오류 (" + t.getClass().getSimpleName() + "). 워치 앱을 다시 설치해 주세요.");
+        }
+    }
+
+    private static void sendNow(Context ctx, String path, String json, Result result) {
         Context app = ctx.getApplicationContext();
         byte[] data = (json == null ? "" : json).getBytes(StandardCharsets.UTF_8);
         Wearable.getCapabilityClient(app).getCapability(CAPABILITY, CapabilityClient.FILTER_REACHABLE)

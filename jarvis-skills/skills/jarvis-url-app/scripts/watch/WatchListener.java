@@ -20,6 +20,16 @@ public class WatchListener extends WearableListenerService {
     public void onDataChanged(DataEventBuffer events) {
         boolean changed = false;
         try {
+            changed = save(events);
+        } catch (Throwable t) { // 받은 것이 이상해도 꺼지지 않게
+            changed = false;
+        }
+        if (changed) TileService.getUpdater(this).requestUpdate(WatchTile.class);
+    }
+
+    private boolean save(DataEventBuffer events) {
+        boolean changed = false;
+        try {
             for (DataEvent e : events) {
                 if (e.getType() != DataEvent.TYPE_CHANGED || !"/urlapp/widget".equals(e.getDataItem().getUri().getPath())) {
                     continue;
@@ -34,7 +44,7 @@ public class WatchListener extends WearableListenerService {
         } finally {
             events.release();
         }
-        if (changed) TileService.getUpdater(this).requestUpdate(WatchTile.class);
+        return changed;
     }
 
     @Override

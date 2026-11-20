@@ -17,6 +17,14 @@ import java.nio.charset.StandardCharsets;
 public class PhoneWatchService extends WearableListenerService {
     @Override
     public void onMessageReceived(MessageEvent e) {
+        try {
+            handle(e);
+        } catch (Throwable t) { // 워치 메시지 하나 때문에 폰 앱이 꺼지지 않게 (1.18 은 부품이 빠져 여기서 꺼졌다)
+            android.util.Log.w("urlapp", "워치 메시지 처리 실패: " + t);
+        }
+    }
+
+    private void handle(MessageEvent e) {
         String path = e.getPath();
         String node = e.getSourceNodeId();
         Context ctx = getApplicationContext();

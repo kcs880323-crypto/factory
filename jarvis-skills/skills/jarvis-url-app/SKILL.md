@@ -158,6 +158,7 @@ python "$T" selftest   # 자체 시험: 로컬 시험 서버로 실제 APK 3개�
   - **대화 화면** `WatchAskActivity` (앱 아이콘·타일 단추): 열리면 바로 워치 음성 입력(`RecognizerIntent`, 없으면 글자 입력) → 폰에 질문 → 답을 글로 보이고 읽어 줌(TTS, '소리 끔' 저장) → 마이크로 이어서. 답을 기다리는 동안 화면 켜 둠, 120초 넘으면 이유. 화면을 닫은 뒤 온 답은 보관했다가 10분 안에 다시 열면 보임. 베젤로 넘겨 보기.
   - `WatchListener`: 요약 저장·타일 새로 그리기, 상태·답을 대화 화면으로.
 - **빌드**: 묶음은 Maven(구글·중앙)에서 받고 크기·SHA-256 고정(`GMS_LIBS`·`TILES_LIBS`). 묶음 리소스를 함께 컴파일하고 R 을 만들어(`--extra-packages`) 묶음 코드가 쓰게 한다 (그래들 없이). 폰 앱은 `classes2/3.dex` 에 워치 연결·Play 서비스(+약 1MB), 워치 APK 는 `<이름>-watch-v<버전>.apk` (약 1MB, 같은 키로 서명, 서명이 다르면 빌드 실패).
+- **빠진 부품 사고와 검사 (2026-11-20, 1.18 → 1.19)**: Play 서비스 묶음이 실행 중에 `androidx.collection`(GoogleApiManager 의 ArraySet)·`androidx.core`(Wearable 의 Preconditions)를 쓰는데 1.18 에 넣지 않아, 워치와 연결하는 순간 **폰 앱이 꺼지고 워치 타일은 검게만 보였다** (사용자 신고). 이제 `GMS_LIBS` 에 androidx 기본 부품(core·collection·lifecycle·versionedparcelable, POM 의 판)을 넣고, 빌드가 **빠진 클래스 검사**(`missing_classes`: 우리 클래스에서 닿는 클래스를 상수 풀로 따라가 묶음·SDK 어디에도 없으면 빌드 실패, `ALLOWED_MISSING` = 활동을 넘길 때만 쓰는 fragment·activity, annotation, 런타임 내부 클래스)를 한다. GMS 호출은 모두 try 로 감싸 실패해도 앱이 꺼지지 않고 이유를 보인다. selftest 에 검사 시험 1개 → **107개**.
 - **설치는 사용자가 직접**: 워치 개발자 옵션 → ADB 디버깅·무선 디버깅 → PC 의 adb 로 `adb pair`·`adb connect`·`adb install -r`. 워치 앱 업데이트도 같은 방법 (앱 안 업데이트는 폰 앱만).
 - 시험: `selftest` 의 워치 6개 (폰 쪽 받는 곳·능력·연결 코드, 워치 APK 기록, 같은 패키지·서명·최소 30·워치 전용, 타일·받는 곳·대화 화면·능력, 사이트 주소·웹 화면 없음, `--watch` 없는 앱은 영향 없음) → **106개**, `shell/test/WatchTests.java` 9개 (타일 요약·시간·읽어 줄 글). **실제 워치·폰에서 Data Layer 연결·타일 모양·음성 입력·TTS 는 시험하지 못했다** (워치가 없음) — 처음엔 사용자와 확인한다.
 
