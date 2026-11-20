@@ -587,6 +587,11 @@ def is_near_white(hex_color):
     return min(r, g, b) > 225
 
 
+def is_dark(hex_color):
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return 0.299 * r + 0.587 * g + 0.114 * b < 80
+
+
 # ---------------------------------------------------------------- 앱 정보
 
 def normalize_url(raw):
@@ -908,8 +913,9 @@ def widget_labels(script_text):
     return out["label"], out["alt-label"]
 
 
-def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_rows=None):
+def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_rows=None, dark_bg=None):
     """홈 화면 위젯의 모양 (RemoteViews 로 그릴 수 있는 LinearLayout·TextView·ImageView 만 쓴다).
+    dark_bg 가 있으면(--widget-style dark) 기기의 밝은/어두운 모드와 상관없이 그 바탕색의 어두운 위젯으로 만든다.
     rows: 줄 수. 4줄이 넘으면 처음 크기를 세 칸 높이로 한다 (이미 놓인 위젯은 사용자가 늘린다).
     alt_label 이 있으면 두 번째 위젯의 모양(urlapp_widget_alt, 줄 수 alt_rows)과 크기 정보도 따로 만든다."""
     def w(rel, text):
@@ -921,12 +927,17 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
         return ('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n'
                 + "".join(f'    <color name="{k}">{v}</color>\n' for k, v in vals.items()) + "</resources>\n")
 
-    w("values/widget_colors.xml", colors({
-        "widget_bg": "#FFFFFF", "widget_title": "#0F172A", "widget_label": "#64748B", "widget_value": "#0F172A",
-        "widget_note": "#94A3B8", "widget_accent": accent, "widget_negative": "#E11D48"}))
-    w("values-night/widget_colors.xml", colors({
-        "widget_bg": "#1E293B", "widget_title": "#F1F5F9", "widget_label": "#94A3B8", "widget_value": "#F8FAFC",
-        "widget_note": "#64748B", "widget_accent": mix(accent, "#FFFFFF", 0.35), "widget_negative": "#FB7185"}))
+    night = {"widget_bg": "#1E293B", "widget_title": "#F1F5F9", "widget_label": "#94A3B8", "widget_value": "#F8FAFC",
+             "widget_note": "#64748B", "widget_accent": mix(accent, "#FFFFFF", 0.35), "widget_negative": "#FB7185"}
+    if dark_bg:
+        night = dict(night, widget_bg=dark_bg, widget_label=mix(dark_bg, "#FFFFFF", 0.6),
+                     widget_note=mix(dark_bg, "#FFFFFF", 0.42), widget_accent=accent)
+        w("values/widget_colors.xml", colors(night))
+    else:
+        w("values/widget_colors.xml", colors({
+            "widget_bg": "#FFFFFF", "widget_title": "#0F172A", "widget_label": "#64748B", "widget_value": "#0F172A",
+            "widget_note": "#94A3B8", "widget_accent": accent, "widget_negative": "#E11D48"}))
+    w("values-night/widget_colors.xml", colors(night))
     names = "".join(f'    <string name="{k}">{android_string(v)}</string>\n'
                     for k, v in (("widget_name", label), ("widget_alt_name", alt_label)) if v)
     w("values/widget_strings.xml", f"""<?xml version="1.0" encoding="utf-8"?>
@@ -1171,9 +1182,9 @@ def save_registry(home, reg):
 
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
-                 "fullscreen", "keep_awake", "dark", "id", "update_url", "live")
+                 "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
-            "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False}
+            "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto"}
 
 
 def cmd_build(args):
@@ -1316,8 +1327,11 @@ def cmd_build(args):
             (res / "drawable" / "urlapp_card_notify.xml").write_text(CARD_NOTIFY_ICON, encoding="utf-8")
         widget_accent = accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8")
         if widget_js:
+            dark_bg = None
+            if opt["widget_style"] == "dark":  # 바탕색이 어두우면 그 색, 밝으면 기본 어두운 색
+                dark_bg = bg if is_dark(bg) else "#0F172A"
             write_widget_resources(res, widget_accent, widget_n, widget_label, widget_alt_label,
-                                   widget_rows(widget_text, alt=True))
+                                   widget_rows(widget_text, alt=True), dark_bg)
 
         # 설정과 매니페스트
         version_code = int(prev.get("version_code", 0)) + 1
@@ -1776,6 +1790,13 @@ def cmd_selftest(args):
             wl = site / "wl.js"
             wl.write_text("// urlapp:alt-label " + "가" * 31 + "\nasync function () { return null; }", encoding="utf-8")
             check("위젯 이름이 30자를 넘으면 거부", raises(lambda: build(base + "/widgetl", "--no-fetch", "--widget", str(wl))))
+            # --widget-style dark: 늘 어두운 위젯 (앱 바탕색이 어두우면 그 색)
+            build(base + "/wdark", "--no-fetch", "--widget", str(wjs), "--bg", "#021A20", "--widget-style", "dark")
+            recd = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/wdark"))
+            resd = run([tp["aapt2"], "dump", "resources", recd["apk"]], tmp_home, "resources")
+            bgs = re.findall(r"color/widget_bg\n((?:\s+\(.*\) #[0-9a-f]+\n)+)", resd)
+            vals = re.findall(r"#[0-9a-f]+", bgs[0]) if bgs else []  # 같은 값이면 aapt2 가 하나로 합친다
+            check("--widget-style dark: 밝은/어두운 모드 모두 앱 바탕색 위젯", vals and set(vals) == {"#ff021a20"}, bgs[:1])
             # --live: 캐시 없이 늘 새로 받기 (기억되고, --no-live 로 끈다)
             build(base + "/live", "--no-fetch", "--live")
             build(base + "/live", "--no-fetch")
@@ -1919,6 +1940,8 @@ def build_parser():
     b.add_argument("--fullscreen", action=argparse.BooleanOptionalAction, default=None, help="상태 표시줄 숨기기")
     b.add_argument("--keep-awake", dest="keep_awake", action=argparse.BooleanOptionalAction, default=None,
                    help="앱을 보는 동안 화면 꺼짐 방지")
+    b.add_argument("--widget-style", dest="widget_style", choices=["auto", "dark"],
+                   help="위젯 색: auto(기본, 기기의 밝은/어두운 모드를 따름) | dark(늘 어둡게, 앱 바탕색이 어두우면 그 색)")
     b.add_argument("--live", action=argparse.BooleanOptionalAction, default=None,
                    help="사이트를 자주 고치는 앱: 저장(캐시) 없이 늘 서버에서 새로 받고, 30분 넘게 나가 있다 돌아오면 새로 고침")
     b.add_argument("--dark", choices=["auto", "darken"],
