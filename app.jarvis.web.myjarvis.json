@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 13,
- "version_name": "1.13",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v13.bin",
- "sha256": "421484eb752977a348977151c770fd501a0c033aa56537d4d5ba0e2ebe83fdf2",
- "size": 563762,
- "notes": "위젯 마이크: 바로 듣기 고침, 빅스비처럼 새 화면",
- "published_at": "2026-11-20 08:15",
+ "version_code": 14,
+ "version_name": "1.14",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v14.bin",
+ "sha256": "b456130a25179db0179ee3d5c7a735a514455b8f417b1acf52ddc2196d28a1f5",
+ "size": 7199787,
+ "notes": "‘하이 자비스’ 호출어 추가 (앱 아이콘 길게 누르기 → 하이 자비스에서 켜기)",
+ "published_at": "2026-11-20 08:53",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "a8a0619135e1046972285bb661c3aa8f3d4a341aea96da8631c3c3badca136b0"
+ "apk_sha256": "42f5965a9d3c7f580485e2ac9fa6594be1923d5db08a8b77a1e949d66414ee4f"
 }
