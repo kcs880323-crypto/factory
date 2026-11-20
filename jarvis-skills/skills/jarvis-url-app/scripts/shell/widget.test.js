@@ -55,13 +55,30 @@ function check(label, cond, detail) {
   let spMode = "none"; // 범용 위젯: /urlapp-widget.json 이 어떻게 답하는지 (none = 일반 페이지)
   let serverSession = false; // 서버(/api/session)가 로그인이라고 하는지 (보이지 않는 웹 화면에서 새로 고칠 때)
   const server = http.createServer((req, res) => {
+    if ((req.url === "/api/dev/requests" || req.url === "/api/reels/publish_info") && cjMode !== "off") {
+      cjReqs.push(req.method + " " + req.url);
+      if (cjMode === "login") { res.writeHead(401, { "Content-Type": "application/json" }); return res.end("{}"); }
+      const iso = (minAgo) => { const d = new Date(Date.now() - minAgo * 60000); const z = (n) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`; };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      if (req.url === "/api/reels/publish_info") {
+        return res.end(JSON.stringify({ info: cjMode === "jobs" ? { title: "스탠리 퀜처 H2.0 텀블러", batch_id: "jarvis_kv_20261120_143902" } : null }));
+      }
+      const items = cjMode === "idle" ? [] : cjMode === "music"
+        ? [{ id: 30, kind: "music", text: "[음악 제작 요청] …", status: "claimed", claimed_at: iso(3) },
+           { id: 28, kind: "music", text: "[음악 제작 요청] …", status: "done", finished_at: iso(90) }]
+        : [{ id: 31, kind: "dev", text: "/개발 위젯 고쳐줘\n자세히", status: "queued", created: iso(1) },
+           { id: 30, kind: "music", text: "[음악 제작 요청] …", status: "claimed", claimed_at: iso(3) },
+           { id: 29, kind: "byeongmat", text: "[병맛노래 제작 요청] …", status: "done", finished_at: iso(30) }];
+      return res.end(JSON.stringify({ items, watcher: {}, counts: {} }));
+    }
     if (req.url.startsWith("/api/job") && cjMode !== "off") {
       cjReqs.push(req.method + " " + req.url);
       if (cjMode === "login") { res.writeHead(401, { "Content-Type": "application/json" }); return res.end("{}"); }
       const now = Math.floor(Date.now() / 1000);
       res.writeHead(200, { "Content-Type": "application/json" });
       if (req.url === "/api/jobs/active") {
-        return res.end(JSON.stringify(cjMode === "idle" ? { running: [], unseen: [] } : {
+        return res.end(JSON.stringify(cjMode === "idle" || cjMode === "music" ? { running: [], unseen: [] } : {
           running: [
             { id: "aaaaaaaaaaaa", kind: "agent", title: "릴스 만들기", message: "", status: "running", waiting: false, started: now - 300, next: 50 },
             { id: "bbbbbbbbbbbb", kind: "agent", title: "", message: "메일 정리해줘\n자세히", status: "running", waiting: true, started: now - 60, next: 5 },
@@ -484,21 +501,31 @@ function check(label, cond, detail) {
   await cj.evaluate(asset(CHARLES).replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
   await cj.waitForFunction(() => __w.length === 1, null, { timeout: 8000 });
   const c1 = await cj.evaluate(() => __w[0]);
-  check("CHARLES: 진행 중 작업(진행률 예상·승인 대기·경과 시간) → 안 본 결과, 제목·아래 줄", c1.title === "CHARLES · 진행 중 3"
-    && JSON.stringify(c1.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
-      ["릴스 만들기 · 장면 3/8", "62% 예상", "pos"], ["메일 정리해줘", "승인 대기", "neg"], ["자료 조사", "진행 12분", "pos"],
-      ["블로그 글", "완료", ""]]) && c1.note === "승인 대기 1 · 안 본 결과 2", c1);
-  check("CHARLES: 알림 목록(승인 대기·끝·오류)이 앱으로 넘어감", JSON.stringify(c1.notify) === JSON.stringify([
+  check("CHARLES: 확인 필요(승인 대기·발행 대기) 먼저 → 하는 중(진행률 예상·경과 시간), 제목은 작업+요청 수, 아래 줄",
+    c1.title === "CHARLES · 진행 중 4" && JSON.stringify(c1.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
+      ["메일 정리해줘", "승인 대기", "neg"], ["발행 대기 · 스탠리 퀜처 H2.0 텀블러", "허용 필요", "neg"],
+      ["릴스 만들기 · 장면 3/8", "62% 예상", "pos"], ["자료 조사", "진행 12분", "pos"]])
+      && c1.note === "확인 필요 2 · 대기 1 · 안 본 결과 2", c1);
+  check("CHARLES: 알림 목록(승인 대기·요청 끝·발행 대기·작업 끝·오류)이 앱으로 넘어감", JSON.stringify(c1.notify) === JSON.stringify([
     { id: "bbbbbbbbbbbb:wait", title: "승인이 필요해요", body: "메일 정리해줘", open: "/" },
+    { id: "req29:done", title: "요청 끝", body: "병맛노래 요청 #29", open: "/" },
+    { id: "pub:jarvis_kv_20261120_143902", title: "발행 허용이 필요해요", body: "스탠리 퀜처 H2.0 텀블러", open: "/" },
     { id: "cccccccccccc:done", title: "작업 끝", body: "블로그 글", open: "/" },
     { id: "dddddddddddd:error", title: "작업 오류", body: "유튜브 업로드", open: "/" }]), c1.notify);
+  cjMode = "music";
+  await cj.evaluate(() => window.__urlappWidgetRun());
+  await cj.waitForFunction(() => __w.length === 2, null, { timeout: 5000 });
+  const cm = await cj.evaluate(() => __w[1]);
+  check("CHARLES: 작업창의 '지금 하는 일'(요청함의 음악 요청 #30)도 보임 — 채팅 작업이 없어도", cm.title === "CHARLES · 진행 중 1"
+    && JSON.stringify(cm.rows.map((r) => [r.label, r.value])) === JSON.stringify([["음악 요청 #30", "진행 3분"]]), cm);
+  await cj.evaluate(() => { __w.length = 1; });
   check("CHARLES: 읽기만 함 (GET 만, 승인 대기 작업의 기록은 읽지 않음)", cjReqs.every((r) => r.startsWith("GET "))
     && !cjReqs.some((r) => r.includes("bbbbbbbbbbbb")), cjReqs);
   cjMode = "idle";
   await cj.evaluate(() => window.__urlappWidgetRun());
   await cj.waitForFunction(() => __w.length === 2, null, { timeout: 5000 });
   const c2 = await cj.evaluate(() => __w[1]);
-  check("CHARLES: 할 일이 없으면 '진행 중인 작업 없음'", c2.title === "CHARLES · 쉬는 중" && c2.rows.length === 1
+  check("CHARLES: 할 일이 없으면 '지금 하는 일 없음'", c2.title === "CHARLES · 쉬는 중" && c2.rows.length === 1
     && c2.rows[0].value === "없음" && c2.notify.length === 0, c2);
   cjMode = "login";
   await cj.evaluate(() => window.__urlappWidgetRun());
