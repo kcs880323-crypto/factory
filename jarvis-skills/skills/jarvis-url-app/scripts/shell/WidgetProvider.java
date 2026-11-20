@@ -7,6 +7,8 @@ package app.jarvis.urlapp;
 // 위젯이 없는 앱에도 이 클래스는 들어 있지만, 매니페스트에 receiver 가 없으면 쓰이지 않는다.
 // 위젯 스크립트에 "// urlapp:refresh-min N" 이 있으면(설정의 widget_refresh_min) 위젯에 새로고침 단추가 생기고,
 // 화면이 켜져 있는 동안 N분마다 앱을 열지 않고 새로 고친다 (WidgetRefreshJob: 보이지 않는 웹 화면).
+// 단추·알람을 받으면 예약하지 않고 그 자리에서 바로 돌려(goAsync) 45초 안에 끝낸다. 아래 줄에는 늘 마지막 업데이트 시간을 보이고,
+// "새로고침 중…"은 그 뒤에 덧붙인다. 앱이 도중에 꺼져도 70초 뒤 다시 그리기 알람이 "새로고침 중…"을 지운다.
 
 import android.app.AlarmManager;
 import android.app.PendingIntent;
@@ -37,6 +39,9 @@ public class WidgetProvider extends AppWidgetProvider {
     static final int MAX_ROWS = 8; // 레이아웃에 있는 줄(w_row1…)까지만 그린다 (기본 4줄, 스크립트가 정하면 8줄까지)
     static final String ACTION_REFRESH = "app.jarvis.urlapp.action.WIDGET_REFRESH"; // 위젯의 새로고침 단추
     static final String ACTION_AUTO = "app.jarvis.urlapp.action.WIDGET_AUTO";       // N분마다 (화면이 켜져 있을 때만)
+    static final String ACTION_REDRAW = "app.jarvis.urlapp.action.WIDGET_REDRAW";   // 새로고침 시작 70초 뒤 다시 그리기
+    static final long REFRESH_TIMEOUT_MS = 45_000;   // 이 안에 반드시 끝낸다 (방송 수신 제한 60초보다 짧게)
+    static final long REFRESHING_SHOW_MS = 70_000;   // "새로고침 중…"을 보이는 최대 시간
     private static int refreshMin = -1; // 설정의 widget_refresh_min (0 = 단추·자동 새로고침 없음)
 
     /** 두 번째 위젯(WidgetProviderAlt)이면 true: 저장한 값의 "alt" 를 그린다. */
@@ -65,16 +70,32 @@ public class WidgetProvider extends AppWidgetProvider {
         String action = intent == null ? null : intent.getAction();
         if (ACTION_REFRESH.equals(action)) {
             noteRefreshing(ctx);
-            WidgetRefreshJob.enqueue(ctx);
+            runNow(ctx);
             return;
         }
         if (ACTION_AUTO.equals(action)) {
+            refresh(ctx); // 남아 있던 "새로고침 중…"도 여기서 지워진다
             PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
             boolean screenOn = pm == null || pm.isInteractive();
-            if (screenOn && anyPlaced(ctx)) WidgetRefreshJob.enqueue(ctx); // 화면이 꺼져 있으면 건너뛴다 (배터리)
+            if (screenOn && anyPlaced(ctx)) runNow(ctx); // 화면이 꺼져 있으면 건너뛴다 (배터리)
+            return;
+        }
+        if (ACTION_REDRAW.equals(action)) {
+            refresh(ctx);
             return;
         }
         super.onReceive(ctx, intent);
+    }
+
+    /** 그 자리에서 바로 새로 고친다 (작업 예약은 절전 때문에 한참 미뤄질 수 있다). 끝날 때까지 방송을 붙잡아 둔다. */
+    private void runNow(Context ctx) {
+        final PendingResult pr = goAsync();
+        try {
+            WidgetRefreshJob.runNow(ctx.getApplicationContext(), REFRESH_TIMEOUT_MS, pr::finish);
+        } catch (RuntimeException e) {
+            noteRefresh(ctx, false);
+            pr.finish();
+        }
     }
 
     /** 설정의 widget_refresh_min (분). 없으면 0. */
@@ -131,10 +152,16 @@ public class WidgetProvider extends AppWidgetProvider {
         return false;
     }
 
-    /** 새로고침을 시작했다 (위젯 아래 줄에 "새로고침 중…"). */
+    /** 새로고침을 시작했다 (위젯 아래 줄에 "새로고침 중…"). 앱이 도중에 꺼져도 지워지도록 다시 그리기 알람을 건다. */
     static void noteRefreshing(Context ctx) {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putLong("refreshing_at", System.currentTimeMillis()).apply();
         refresh(ctx);
+        AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        if (am != null) {
+            am.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + REFRESHING_SHOW_MS + 2_000,
+                    PendingIntent.getBroadcast(ctx, 3, new Intent(ctx, WidgetProvider.class).setAction(ACTION_REDRAW),
+                            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
+        }
     }
 
     /** 새로고침이 끝났다. 실패면 그 시각을 남긴다 (성공이면 save 가 이미 저장했다). */
@@ -242,15 +269,17 @@ public class WidgetProvider extends AppWidgetProvider {
         String note;
         long at = p.getLong("at", 0);
         SimpleDateFormat hm = new SimpleDateFormat("HH:mm", Locale.getDefault());
-        boolean refreshing = System.currentTimeMillis() - p.getLong("refreshing_at", 0) < 90_000;
+        long since = System.currentTimeMillis() - p.getLong("refreshing_at", 0);
+        boolean refreshing = since >= 0 && since < REFRESHING_SHOW_MS;
         long failed = p.getLong("refresh_failed_at", 0);
-        if (refreshing) {
-            note = ko ? "새로고침 중…" : "Refreshing…";
+        String when = new SimpleDateFormat("M/d HH:mm", Locale.getDefault()).format(new Date(at));
+        if (refreshing) { // 새로 고치는 동안에도 마지막 업데이트 시간을 보인다
+            note = (data != null && at > 0 ? (ko ? "업데이트 " : "Updated ") + when + " · " : "")
+                    + (ko ? "새로고침 중…" : "Refreshing…");
         } else if (data == null) {
             note = failed > 0 ? (ko ? "새로고침 못 함 — 앱을 열어 로그인해 주세요" : "Couldn't refresh — open the app and log in")
                     : (ko ? "앱을 열고 로그인하면 여기에 요약이 보여요" : "Open the app (and log in) to fill this widget");
         } else {
-            String when = new SimpleDateFormat("M/d HH:mm", Locale.getDefault()).format(new Date(at));
             String extra = data.optString("note", "");
             note = (extra.isEmpty() ? "" : extra + " · ") + (ko ? "업데이트 " : "Updated ") + when
                     + (failed > at ? (ko ? " · 새로고침 실패 " : " · refresh failed ") + hm.format(new Date(failed)) : "");

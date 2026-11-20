@@ -1049,7 +1049,10 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (web != null) web.onResume();
-        if (widgetJs != null) WidgetProvider.scheduleAuto(this); // 위젯 자동 새로고침 (켠 앱·위젯이 놓여 있을 때만)
+        if (widgetJs != null) {
+            WidgetProvider.scheduleAuto(this); // 위젯 자동 새로고침 (켠 앱·위젯이 놓여 있을 때만)
+            WidgetProvider.refresh(this);      // 혹시 남아 있는 "새로고침 중…"을 지운다
+        }
         if (AppUpdater.enabled(this)) AppUpdater.check(this, false); // 새 버전 확인 (6시간에 한 번, 새 버전이면 묻는다)
         if (CardEngine.available(this)) {
             CardEngine.get(this).flushAsync(); // 못 보낸 카드 결제가 있으면 지금

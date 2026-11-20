@@ -9,7 +9,7 @@
 //   alt 는 두 번째 위젯(스크립트에 "// urlapp:alt-label 이름" 이 있으면 위젯 목록에 따로 생김)이 그린다.
 //   두 번째 위젯의 줄 수는 "// urlapp:alt-rows N" (4줄 이하면 처음 크기 3×2, 넘으면 3×3).
 // 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤),
-// 그리고 위젯 스크립트가 null(로그인 전 등)을 돌려주는 동안은 10초마다.
+// 그리고 위젯 스크립트가 null(로그인 전 등)을 돌려주거나 오류가 나는 동안은 10초마다.
 (function (token) {
   "use strict";
   if (window.__urlappWidget) return;
@@ -50,7 +50,7 @@
       var out = shape(d, MAX_ROWS);
       if (d.alt && typeof d.alt === "object") out.alt = shape(d.alt, ALT_ROWS);
       bridge.widget(token, JSON.stringify(out));
-    }).catch(function () { /* 사이트가 바쁘거나 로그인 전: 다음에 다시 */ }).then(function () {
+    }).catch(function () { retryLater(); /* 사이트가 바쁘거나 인터넷이 잠깐 끊김: 10초 뒤 다시 */ }).then(function () {
       busy = false;
       if (again) { again = false; setTimeout(run, 500); }
     });
