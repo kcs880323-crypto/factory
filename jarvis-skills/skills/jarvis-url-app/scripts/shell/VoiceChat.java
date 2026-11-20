@@ -47,6 +47,10 @@ final class VoiceChat {
         }
 
         /** 두 번 말이 없어 쉬었다. 위젯의 대화 창은 잠깐 뒤 닫는다. */
+        /** 카드(사이트가 보여 달라는 화면)를 치웠을 때 — 웹 화면을 정리한다. */
+        default void cardGone(View card) {
+        }
+
         default void quiet() {
         }
     }
@@ -66,6 +70,8 @@ final class VoiceChat {
     private Orb orb;
     private TextView status, heard, reply;
     private ScrollView replyBox;
+    private FrameLayout cardSlot;  // 빅스비처럼 답 아래에 보이는 카드 (사이트가 준 같은 사이트 페이지)
+    private View card;
     private int state = IDLE;
     private int quiet;
     private int seq;
@@ -105,6 +111,7 @@ final class VoiceChat {
         voice.cancelListening(false);
         voice.stopSpeaking();
         host.keepAwake(false);
+        clearCard();
         if (panel != null) {
             if (orb != null) orb.stop();
             parent.removeView(panel);
@@ -122,15 +129,40 @@ final class VoiceChat {
 
     /** 사이트의 답 (통로에서 받아 메인 스레드로 넘긴다). ok=false 면 사이트에서 오류가 났다. */
     void answer(String id, String text, boolean ok) {
-        if (state != THINKING || id == null || !id.equals(waiting)) return;
+        answer(id, text, ok, null, 0);
+    }
+
+    /** 이 답의 질문을 기다리던 중인지 (카드를 만들기 전에 확인). */
+    boolean waitingFor(String id) {
+        return state == THINKING && id != null && id.equals(waiting);
+    }
+
+    boolean hasCard() {
+        return card != null;
+    }
+
+    /** 답 + (있으면) 카드: 답 글 아래에 카드를 보이고 읽어 준다. 카드는 다음 질문이나 창을 닫을 때까지 남는다. */
+    void answer(String id, String text, boolean ok, View newCard, int cardHeightDp) {
+        if (state != THINKING || id == null || !id.equals(waiting)) {
+            if (newCard != null) host.cardGone(newCard);
+            return;
+        }
         waiting = null;
         if (!ok) {
+            if (newCard != null) host.cardGone(newCard);
             pause(t("자비스가 답하지 못했어요. 마이크를 눌러 다시 말해 주세요.", "Couldn't get an answer. Tap the mic."));
             return;
         }
+        if (newCard != null) showCard(newCard, cardHeightDp);
         String say = speakable(text);
-        if (say.isEmpty()) { // 사이트가 화면에만 답했거나 할 말이 없음 → 다시 듣기
-            listen();
+        if (say.isEmpty()) { // 사이트가 화면(카드)에만 답했거나 할 말이 없음 → 다시 듣기
+            if (card != null) setStatus(t("마이크를 누르면 이어서 물어요", "Tap the mic to ask more"));
+            if (card != null) {
+                state = PAUSED;
+                mode(Orb.IDLE);
+            } else {
+                listen();
+            }
             return;
         }
         reply.setText(text.length() > 600 ? text.substring(0, 600) + "…" : text);
@@ -191,6 +223,7 @@ final class VoiceChat {
         mode(Orb.THINK);
         setStatus(t("생각 중…", "Thinking…"));
         replyBox.setVisibility(View.GONE);
+        clearCard(); // 새 질문이면 지난 카드는 치운다
         final String id = "q" + (++seq);
         waiting = id;
         host.ask(id, question);
@@ -244,6 +277,33 @@ final class VoiceChat {
 
     private void mode(int m) {
         if (orb != null) orb.mode(m);
+    }
+
+    // ---------- 카드 ----------
+
+    private void showCard(View v, int heightDp) {
+        clearCard();
+        if (cardSlot == null) {
+            host.cardGone(v);
+            return;
+        }
+        card = v;
+        int screenH = a.getResources().getConfiguration().screenHeightDp;
+        int h = Math.max(120, Math.min(heightDp <= 0 ? 360 : heightDp, Math.max(200, (int) (screenH * 0.55f))));
+        cardSlot.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(h)));
+        cardSlot.setVisibility(View.VISIBLE);
+        if (orb != null) orb.setVisibility(View.GONE); // 카드 자리를 위해 구슬은 접는다 (상태 글은 남김)
+    }
+
+    private void clearCard() {
+        View old = card;
+        card = null;
+        if (cardSlot != null) {
+            cardSlot.removeAllViews();
+            cardSlot.setVisibility(View.GONE);
+        }
+        if (orb != null) orb.setVisibility(View.VISIBLE);
+        if (old != null) host.cardGone(old);
     }
 
     // ---------- 화면 ----------
@@ -306,12 +366,22 @@ final class VoiceChat {
         // 답이 길면 카드가 화면을 덮지 않게 답 칸 높이를 200dp 로 묶는다 (넘치면 넘겨 본다)
         reply.addOnLayoutChangeListener((v, l, t2, r, b, ol, ot, or, ob) -> {
             ViewGroup.LayoutParams lp = replyBox.getLayoutParams();
-            int want = Math.min(b - t2, dp(200));
+            int want = Math.min(b - t2, dp(card != null ? 110 : 200)); // 카드가 있으면 답 칸을 줄인다
             if (lp.height != want && want > 0) {
                 lp.height = want;
                 replyBox.setLayoutParams(lp);
             }
         });
+
+        // 카드 칸 (사이트가 답과 함께 준 페이지 — 날씨·진행 상황·원격 화면 등)
+        cardSlot = new FrameLayout(a);
+        cardSlot.setVisibility(View.GONE);
+        GradientDrawable cbg = new GradientDrawable();
+        cbg.setCornerRadius(dp(20));
+        cbg.setColor(Color.argb(40, 255, 255, 255));
+        cardSlot.setBackground(cbg);
+        cardSlot.setClipToOutline(true);
+        panel.addView(cardSlot, wide(dp(12)));
 
         // 가운데 큰 마이크 단추
         FrameLayout mic = new FrameLayout(a);
@@ -338,9 +408,11 @@ final class VoiceChat {
         mp.topMargin = dp(16);
         panel.addView(mic, mp);
 
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM);
-        lp.setMargins(dp(12), 0, dp(12), dp(12));
+        // 태블릿·펼친 폴드(가로 600dp 이상)는 빅스비처럼 오른쪽 아래 패널, 폰은 아래 전체 폭
+        boolean wide = a.getResources().getConfiguration().screenWidthDp >= 600;
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(wide ? dp(480) : ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, wide ? Gravity.BOTTOM | Gravity.END : Gravity.BOTTOM);
+        lp.setMargins(dp(12), 0, dp(wide ? 20 : 12), dp(wide ? 20 : 12));
         parent.addView(panel, lp);
         panel.setTranslationY(dp(40));
         panel.setAlpha(0f);

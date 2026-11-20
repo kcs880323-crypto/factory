@@ -221,6 +221,12 @@ public class WidgetProvider extends AppWidgetProvider {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString("data", json).putLong("at", System.currentTimeMillis()).remove("refresh_failed_at").apply();
         refresh(ctx);
+        WatchBridge.pushWidget(ctx, json); // --watch 앱: 워치 타일에도 (다른 앱은 아무것도 안 함)
+    }
+
+    /** 마지막으로 저장한 요약 (없으면 null) — 워치가 새로 달라고 할 때. */
+    static String lastData(Context ctx) {
+        return ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("data", null);
     }
 
     static void refresh(Context ctx) {

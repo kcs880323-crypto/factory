@@ -9,11 +9,19 @@ const { chromium } = require("playwright");
 const SHIM = fs.readFileSync(path.join(__dirname, "speech.js"), "utf8");
 const NOTIFY = fs.readFileSync(path.join(__dirname, "notify.js"), "utf8");
 const MAIN = fs.readFileSync(path.join(__dirname, "MainActivity.java"), "utf8");
+const VOICE = fs.readFileSync(path.join(__dirname, "VoiceActivity.java"), "utf8");
 const TOKEN = "t0k3n";
 
 // MainActivity.askSite 의 자바 문자열 조각을 이어 붙여 같은 스크립트를 만든다
 function askScript(question, id) {
   const seg = /void askSite\([\s\S]*?String js = ([\s\S]*?)\+ JSONObject\.quote\(question\)/.exec(MAIN)[1];
+  const lits = [...seg.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
+  return lits.join("") + JSON.stringify(question) + "," + JSON.stringify(id) + "," + JSON.stringify(TOKEN) + ")";
+}
+
+// VoiceActivity.askJs (대화 창): 답이 객체면 card·open 도 넘긴다
+function voiceAskScript(question, id) {
+  const seg = /static String askJs\([\s\S]*?return ([\s\S]*?)\+ JSONObject\.quote\(question\)/.exec(VOICE)[1];
   const lits = [...seg.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
   return lits.join("") + JSON.stringify(question) + "," + JSON.stringify(id) + "," + JSON.stringify(TOKEN) + ")";
 }
@@ -35,7 +43,7 @@ function check(label, cond, detail) {
       window.__calls.push({ name, args: args.slice(1), tokenOk: args[0] === tok });
     };
     window.UrlAppSpeech = { listen: rec("listen"), stop: rec("stop"), abort: rec("abort"), speak: rec("speak"),
-      cancelSpeak: rec("cancelSpeak"), answer: rec("answer") };
+      cancelSpeak: rec("cancelSpeak"), answer: rec("answer"), answer2: rec("answer2") };
   }, TOKEN);
   await page.evaluate(SHIM.replace('"__URLAPP_TOKEN__"', JSON.stringify(TOKEN)));
   await page.evaluate(SHIM.replace('"__URLAPP_TOKEN__"', JSON.stringify("other"))); // 두 번 넣어도 한 번만
@@ -153,6 +161,29 @@ function check(label, cond, detail) {
   }, [askScript("글", "q1"), askScript("객체", "q2"), askScript("오류", "q3")]);
   check("urlappAsk: 글·{text} 답은 그대로, 오류면 ok=false", asks.n === 3 && JSON.stringify(asks.calls) === JSON.stringify([
     ["answer", true, "q1", "오늘 일정은 두 개예요", true], ["answer", true, "q2", "할 일 3개", true], ["answer", true, "q3", "", false]]), asks);
+
+  // VoiceActivity.askJs: 대화 창 — 객체 답의 card·open 을 덧붙여 넘긴다 (빅스비처럼 카드)
+  const vasks = await page.evaluate(async (scripts) => {
+    window.__calls.length = 0;
+    window.urlappAsk = async (q) => {
+      if (q === "글") return "그냥 글";
+      if (q === "날씨") return { text: "맑아요", card: { path: "/urlapp-card/weather", height: 300 } };
+      if (q === "원격") return { text: "", open: "/remote2" };
+      if (q === "이상") return { text: "x", card: { path: "/a", toJSON() { throw new Error("no"); } } };
+      throw new Error("x");
+    };
+    for (const s of scripts) eval(s);
+    await new Promise((r) => setTimeout(r, 50));
+    return window.__calls.map((c) => [c.name, c.tokenOk].concat(c.args));
+  }, [voiceAskScript("글", "v1"), voiceAskScript("날씨", "v2"), voiceAskScript("원격", "v3"),
+    voiceAskScript("이상", "v4"), voiceAskScript("오류", "v5")]);
+  check("대화 창 urlappAsk: 글이면 덧붙임 없음, card·open 은 JSON 으로, 직렬화 실패·오류도 안전",
+    JSON.stringify(vasks) === JSON.stringify([
+      ["answer2", true, "v1", "그냥 글", true, ""],
+      ["answer2", true, "v2", "맑아요", true, JSON.stringify({ card: { path: "/urlapp-card/weather", height: 300 }, open: null })],
+      ["answer2", true, "v3", "", true, JSON.stringify({ card: null, open: "/remote2" })],
+      ["answer2", true, "v4", "x", true, ""],
+      ["answer2", true, "v5", "", false, ""]]), vasks);
 
   // 알림 도우미 (notify.js): 웹 알림 → 폰 알림
   const np = await browser.newPage();

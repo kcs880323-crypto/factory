@@ -127,7 +127,20 @@ public class VoiceActivity extends Activity {
 
             @Override
             public void quiet() {
-                main.postDelayed(() -> close(), 2500); // 말이 없으면 잠깐 안내를 보인 뒤 닫는다
+                // 말이 없으면 잠깐 안내를 보인 뒤 닫는다 — 카드(진행 상황·원격 화면 등)를 보는 중이면 열어 둔다
+                main.postDelayed(() -> {
+                    if (chat == null || !chat.hasCard()) close();
+                }, 2500);
+            }
+
+            @Override
+            public void cardGone(View card) {
+                if (card instanceof WebView) {
+                    root.post(() -> {
+                        ((WebView) card).stopLoading();
+                        ((WebView) card).destroy();
+                    });
+                }
             }
         }, root, accent());
 
@@ -204,10 +217,14 @@ public class VoiceActivity extends Activity {
         web.addJavascriptInterface(new Object() {
             @JavascriptInterface
             public void answer(String t, String id, String text, boolean ok) {
+                answer2(t, id, text, ok, "");
+            }
+
+            /** 답 + 덧붙임 {card: {path, height}, open: "/경로"} (urlappAsk 가 객체로 답할 때). */
+            @JavascriptInterface
+            public void answer2(String t, String id, String text, boolean ok, String extra) {
                 if (!token.equals(t)) return;
-                main.post(() -> {
-                    if (chat != null) chat.answer(id, text == null ? "" : text, ok);
-                });
+                main.post(() -> onAnswer(id, text == null ? "" : text, ok, extra));
             }
         }, "UrlAppSpeech");
         web.setWebChromeClient(new WebChromeClient() {
@@ -277,12 +294,87 @@ public class VoiceActivity extends Activity {
             pending = new String[] {id, question};
             return;
         }
-        String js = "(function(q,id,tok){Promise.resolve().then(function(){return window.urlappAsk(q);})"
-                + ".then(function(r){var s=r&&typeof r==='object'?(r.text||r.reply||r.answer||''):(r==null?'':r);"
-                + "UrlAppSpeech.answer(tok,id,String(s).slice(0,20000),true);},"
-                + "function(){UrlAppSpeech.answer(tok,id,'',false);});})("
+        web.evaluateJavascript(askJs(question, id, token), null);
+    }
+
+    /** 사이트의 urlappAsk 로 묻는 스크립트. 답이 객체면 text 와 함께 card·open 도 넘긴다. */
+    static String askJs(String question, String id, String token) {
+        return "(function(q,id,tok){Promise.resolve().then(function(){return window.urlappAsk(q);})"
+                + ".then(function(r){var o=r&&typeof r==='object'?r:null;"
+                + "var s=o?(o.text||o.reply||o.answer||''):(r==null?'':r);var x='';"
+                + "try{if(o&&(o.card||o.open))x=JSON.stringify({card:o.card||null,open:o.open||null});}catch(e){}"
+                + "UrlAppSpeech.answer2(tok,id,String(s).slice(0,20000),true,String(x).slice(0,4000));},"
+                + "function(){UrlAppSpeech.answer2(tok,id,'',false,'');});})("
                 + JSONObject.quote(question) + "," + JSONObject.quote(id) + "," + JSONObject.quote(token) + ")";
-        web.evaluateJavascript(js, null);
+    }
+
+    // ---------- 카드 (빅스비처럼: 날씨·진행 상황·원격 화면 …) ----------
+
+    /** 답과 덧붙임을 처리한다: open 이면 앱을 그 경로로 열고 닫고, card 면 대화 창 안에 그 페이지를 보인다. */
+    private void onAnswer(String id, String text, boolean ok, String extra) {
+        if (chat == null || closing) return;
+        JSONObject x = null;
+        try {
+            if (extra != null && !extra.isEmpty()) x = new JSONObject(extra);
+        } catch (Exception e) {
+            x = null;
+        }
+        String open = x == null ? "" : NotifyFeed.safePath(x.optString("open", ""));
+        if (ok && !open.isEmpty() && chat.waitingFor(id)) {
+            openInApp(open);
+            return;
+        }
+        JSONObject c = x == null ? null : x.optJSONObject("card");
+        String path = c == null ? "" : NotifyFeed.safePath(c.optString("path", ""));
+        WebView cardView = ok && !path.isEmpty() && chat.waitingFor(id) ? cardWeb(path) : null;
+        chat.answer(id, text, ok, cardView, c == null ? 0 : c.optInt("height", 0));
+    }
+
+    /** 앱을 이 사이트 경로로 연다 (예: 원격 화면을 크게). 대화 창은 닫는다. */
+    private void openInApp(String path) {
+        try {
+            startActivity(new Intent(this, MainActivity.class).setAction(MainActivity.ACTION_OPEN)
+                    .putExtra("path", path).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (RuntimeException e) {
+            Toast.makeText(this, "앱을 열지 못했어요.", Toast.LENGTH_SHORT).show();
+        }
+        close();
+    }
+
+    /** 카드: 보이는 웹 화면으로 같은 사이트 페이지 (같은 로그인 쿠키). 사이트 밖 이동·마이크·카메라는 막는다. */
+    private WebView cardWeb(String path) {
+        Uri base = Uri.parse(cfg.optString("url", ""));
+        if (base.getScheme() == null || base.getEncodedAuthority() == null) return null;
+        WebView v;
+        try {
+            v = new WebView(this);
+        } catch (RuntimeException e) {
+            return null;
+        }
+        WebSettings s = v.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setMediaPlaybackRequiresUserGesture(false); // 원격 화면 영상 등
+        if (cfg.optBoolean("desktop", false)) {
+            s.setUserAgentString(s.getUserAgentString().replaceAll("\\(Linux; Android[^)]*\\)", "(X11; Linux x86_64)")
+                    .replace(" Mobile", ""));
+        }
+        v.setBackgroundColor(Color.TRANSPARENT);
+        v.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(PermissionRequest r) {
+                r.deny();
+            }
+        });
+        v.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView w, WebResourceRequest r) {
+                if (own(r.getUrl())) return false;
+                return true; // 사이트 밖으로는 가지 않는다
+            }
+        });
+        v.loadUrl(base.getScheme() + "://" + base.getEncodedAuthority() + path);
+        return v;
     }
 
     private boolean own(Uri u) {

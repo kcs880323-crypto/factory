@@ -54,6 +54,29 @@ HOTWORD_MODEL = {"model_url": "https://alphacephei.com/vosk/models/vosk-model-sm
                  "model_size": 86914329,
                  "model_sha256": "eea36124087fed26c59996a4761519458e3bd185e8ea9d9865ad8760c4a1d989",
                  "model_dir": "vosk-model-small-ko-0.22"}
+# --watch: 워치(Wear OS) 앱 — 타일 + 음성 질문. 폰과 워치는 Google Play 서비스 Wearable(Data Layer)로만 주고받는다.
+WATCH_DIR = HERE / "watch"          # 워치 앱 (WatchTile·WatchAskActivity·WatchListener …)
+WATCHLINK_DIR = HERE / "watchlink"  # 폰 쪽 워치 연결 (GmsWatchLink·PhoneWatchService) — 이 앱들에만 따로
+GMAVEN = "https://dl.google.com/dl/android/maven2/"
+WATCH_MIN_SDK = 30                  # Wear OS 3 이상
+GMS_LIBS = (  # (저장소, 경로, 크기, SHA-256) — Google Play 서비스 Wearable 과 그것이 쓰는 기본 묶음 (Android SDK 라이선스)
+    (GMAVEN, "com/google/android/gms/play-services-wearable/20.0.1/play-services-wearable-20.0.1.aar", 588168,
+     "41976c694586ef58b3e50fb858248fa7e39aa7dde70eaaa132fe75082eca39d4"),
+    (GMAVEN, "com/google/android/gms/play-services-base/18.5.0/play-services-base-18.5.0.aar", 439602,
+     "59a5c0c2da12311d75d965ce1f419498536b1a167fb28ff7dfc2dfd9cefa4157"),
+    (GMAVEN, "com/google/android/gms/play-services-basement/18.4.0/play-services-basement-18.4.0.aar", 286283,
+     "ce5c936fd66814b3602f5c6a5e929911ff973d4b05f6de9996da596bef97cad2"),
+    (GMAVEN, "com/google/android/gms/play-services-tasks/18.2.0/play-services-tasks-18.2.0.aar", 80343,
+     "7f2aaa8f502068eaf54356ca92aec04271d6e7c416c52c45c0d23440fcbd1654"),
+)
+TILES_LIBS = (  # 워치 타일: Tiles 1.1 (Java 판, Apache-2.0) — 최신 Kotlin 판은 라이브러리가 30개가 넘어 이 빌드에 맞지 않는다
+    (GMAVEN, "androidx/wear/tiles/tiles/1.1.0/tiles-1.1.0.aar", 213450,
+     "d869b13f1b1cdccc1bb302fa965fbe7e4a609d018b7e4d08d75bdf490b440d6b"),
+    (GMAVEN, "androidx/wear/tiles/tiles-proto/1.1.0/tiles-proto-1.1.0.jar", 1177293,
+     "c4d24e70cb6e9c93ae6c54fb0ce038273ea4d6f8ee690a8fe2a5bf25908c52d0"),
+    (GMAVEN, "com/google/guava/listenablefuture/1.0/listenablefuture-1.0.jar", 3149,
+     "e4ad7607e5c0477c6f890ef26a49cb8d1bb4dffb650bab4502afee64644e3069"),
+)
 SPEECH_JS = HERE / "shell" / "speech.js"  # --mic: 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신하는 도우미
 WIDGET_RUNNER = HERE / "shell" / "widget-runner.js"  # 위젯 스크립트를 감싸 페이지에서 돌리는 실행기
 WIDGET_SLOT = "(/*__WIDGET_FN__*/ null)"
@@ -674,7 +697,7 @@ def android_string(s):
 
 def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
                  view_hosts=(), update=False, widget_extra_sizes=0, mic=False, notify=False, hotword=False,
-                 voice_icon=False):
+                 voice_icon=False, watch=False):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -837,6 +860,29 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>"""
+    # --watch: 워치가 보낸 질문·새로고침을 받는 곳(Google Play 서비스가 깨움, 같은 패키지·서명의 워치 앱 메시지만),
+    # 질문을 사이트에 묻는 작업, Play 서비스 버전 표시와 오류 안내 화면(Play 서비스 묶음이 요구)
+    if watch:
+        card_parts += """
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+        <activity
+            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <service
+            android:name="app.jarvis.urlapp.PhoneWatchService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/urlapp/" />
+            </intent-filter>
+        </service>
+        <service
+            android:name="app.jarvis.urlapp.WatchAskJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />"""
     # 호출어 앱의 네이티브 라이브러리(Vosk·JNA)는 설치할 때 풀어 둔다 (APK 안에 압축해 넣으므로)
     native_attr = '\n        android:extractNativeLibs="true"' if hotword else ""
     return f"""<?xml version="1.0" encoding="utf-8"?>
@@ -963,6 +1009,162 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
 
 
 # ---------------------------------------------------------------- 빌드
+
+def watch_manifest_xml(app_id):
+    """워치 앱 매니페스트: 폰 앱과 같은 패키지 이름 (Data Layer 는 같은 패키지·서명끼리만). 사이트 주소는 들어 있지 않다."""
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="{app_id}">
+    <uses-feature android:name="android.hardware.type.watch" />
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="androidx.wear.tiles.action.BIND_UPDATE_REQUESTER" />
+        </intent>
+    </queries>
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+        <meta-data
+            android:name="com.google.android.wearable.standalone"
+            android:value="false" />
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+        <activity
+            android:name="app.jarvis.urlapp.WatchAskActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name="app.jarvis.urlapp.WatchTile"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:icon="@mipmap/ic_launcher"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/urlapp_tile_preview" />
+        </service>
+        <service
+            android:name="app.jarvis.urlapp.WatchListener"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/urlapp/" />
+            </intent-filter>
+        </service>
+        <activity
+            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
+</manifest>
+"""
+
+
+def write_watch_resources(res, name, icon_bg, accent, phone_res):
+    """워치 앱 리소스: 이름·색·폰 앱과 같은 아이콘·타일 미리보기·Data Layer 능력(urlapp_watch)."""
+    def w(rel, text):
+        f = res / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+    w("values/strings.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">{android_string(name)}</string>
+</resources>
+""")
+    w("values/colors.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="icon_bg">{icon_bg}</color>
+    <color name="watch_accent">{accent}</color>
+</resources>
+""")
+    w("values/wear.xml", """<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="android_wear_capabilities" translatable="false">
+        <item>urlapp_watch</item>
+    </string-array>
+</resources>
+""")
+    for d in phone_res.glob("mipmap-*"):
+        for f in d.glob("ic_launcher*"):
+            (res / d.name).mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(f, res / d.name / f.name)
+    # 타일 고르는 화면의 미리보기 (검은 원 + 제목·줄 자리 + 강조색 '말하기' 단추)
+    w("drawable/urlapp_tile_preview.xml", """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="192dp" android:height="192dp"
+    android:viewportWidth="192" android:viewportHeight="192">
+    <path android:fillColor="#FF000000" android:pathData="M96,0a96,96 0,1 1,0 192a96,96 0,1 1,0 -192z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M62,46h68a5,5 0,0 1,0 10h-68a5,5 0,0 1,0 -10z" />
+    <path android:fillColor="#FF9AA0A6" android:pathData="M44,70h70a4,4 0,0 1,0 8h-70a4,4 0,0 1,0 -8z" />
+    <path android:fillColor="@color/watch_accent" android:pathData="M124,70h24a4,4 0,0 1,0 8h-24a4,4 0,0 1,0 -8z" />
+    <path android:fillColor="#FF9AA0A6" android:pathData="M44,86h60a4,4 0,0 1,0 8h-60a4,4 0,0 1,0 -8z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M116,86h32a4,4 0,0 1,0 8h-32a4,4 0,0 1,0 -8z" />
+    <path android:fillColor="@color/watch_accent" android:pathData="M64,110h64a16,16 0,0 1,0 32h-64a16,16 0,0 1,0 -32z" />
+    <path android:fillColor="#FF0B1220" android:pathData="M82,120h28a3,3 0,0 1,0 6h-28a3,3 0,0 1,0 -6z" />
+    <path android:fillColor="#FF5F6368" android:pathData="M74,152h44a3,3 0,0 1,0 6h-44a3,3 0,0 1,0 -6z" />
+</vector>
+""")
+
+
+def build_watch_apk(home, tc, java, javac, ks, pw, app_id, name, icon_bg, accent, phone_res, version_code, version_name,
+                    out_dir, workdir):
+    """--watch: 워치 앱 APK (같은 패키지·같은 서명). 타일 + 대화 화면 + 폰과의 Data Layer. 사이트 주소는 넣지 않는다."""
+    p = tool_paths(tc)
+    wd = workdir / "watch"
+    res = wd / "res"
+    res.mkdir(parents=True)
+    write_watch_resources(res, name, icon_bg, accent, phone_res)
+    libs = maven_libs(home, GMS_LIBS + TILES_LIBS)
+    jars = [lib["jar"] for lib in libs]
+    lib_zips, pkgs = lib_resources(p, wd, libs, "watch")
+    run([p["aapt2"], "compile", "--dir", res, "-o", wd / "res.zip"], wd, "워치 리소스 컴파일(aapt2 compile)")
+    (wd / "AndroidManifest.xml").write_text(watch_manifest_xml(app_id), encoding="utf-8")
+    gen = wd / "gen"
+    gen.mkdir()
+    unsigned = wd / "unsigned.apk"
+    run([p["aapt2"], "link", "-o", unsigned, "-I", p["android_jar"], "--manifest", wd / "AndroidManifest.xml",
+         "--min-sdk-version", str(WATCH_MIN_SDK), "--target-sdk-version", str(TARGET_SDK),
+         "--version-code", str(version_code), "--version-name", version_name, "--auto-add-overlay",
+         "--java", gen, "--extra-packages", ":".join(pkgs), wd / "res.zip", *lib_zips], wd, "워치 앱 묶기(aapt2 link)")
+    app = app_dex(tc, javac, java, wd, "워치 앱", sorted(WATCH_DIR.glob("*.java")), ["app/jarvis/urlapp/"], jars, gen, pkgs,
+                  WATCH_MIN_SDK)
+    lib_dex = dex_jars(home, tc, java, jars, WATCH_MIN_SDK, wd)
+    with zipfile.ZipFile(unsigned, "a", compression=zipfile.ZIP_DEFLATED) as z:
+        z.write(app, "classes.dex")
+        for i, f in enumerate(lib_dex, start=2):
+            z.write(f, f"classes{i}.dex")
+    apk = out_dir / f"{app_id.split('.')[-1]}-watch-v{version_code}.apk"
+    run([java, "-jar", p["apksigner"], "sign", "--ks", ks, "--ks-pass", f"file:{pw}", "--ks-key-alias", "urlapp",
+         "--min-sdk-version", str(WATCH_MIN_SDK), "--v4-signing-enabled", "false", "--out", apk, unsigned],
+        wd, "워치 앱 서명(apksigner)")
+    run([java, "-jar", p["apksigner"], "verify", "--min-sdk-version", str(WATCH_MIN_SDK), apk], wd, "워치 앱 서명 검사")
+    bad = check_alignment(apk)
+    if bad:
+        raise Fail(f"워치 APK 정렬 문제: {', '.join(bad[:5])}")
+    b = badging(p["aapt2"], apk, wd)
+    if b.get("package") != app_id or b.get("version_code") != version_code:
+        raise Fail(f"만든 워치 APK 의 정보가 예상과 다릅니다: {b}")
+    return apk
+
 
 def write_voice_icon(res, label, bg, accent):
     """--voice-icon: 대화 창을 바로 여는 두 번째 앱 아이콘(이름 label). 바탕 bg 위 강조색 동그라미 + 마이크."""
@@ -1579,6 +1781,92 @@ def hotword_dex(home, tc, javac, java, workdir, jars):
     return dex
 
 
+def maven_lib(home, repo, path, size, sha):
+    """Maven 묶음 하나 (SHA-256 고정): {jar, res(폴더 또는 None), package(AAR 매니페스트의 패키지)}."""
+    name = path.rsplit("/", 1)[-1]
+    f = fetch_verified(repo + path, home / "deps" / "maven" / name, size, sha)
+    if name.endswith(".jar"):
+        return {"name": name, "jar": f, "res": None, "package": None}
+    out = home / "deps" / "maven" / (name[:-4] + "-" + sha[:12])
+    if not (out / "classes.jar").is_file():
+        tmp = out.with_name(out.name + ".tmp")
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        with zipfile.ZipFile(f) as z:
+            for n in z.namelist():
+                if n.endswith("/") or ".." in n.split("/"):
+                    continue
+                if n in ("classes.jar", "AndroidManifest.xml", "R.txt") or n.startswith("res/"):
+                    (tmp / n).parent.mkdir(parents=True, exist_ok=True)
+                    (tmp / n).write_bytes(z.read(n))
+        shutil.rmtree(out, ignore_errors=True)
+        tmp.replace(out)
+    m = re.search(r'package="([A-Za-z0-9_.]+)"', (out / "AndroidManifest.xml").read_text(encoding="utf-8"))
+    res = out / "res"
+    rtxt = out / "R.txt"
+    return {"name": name, "jar": out / "classes.jar", "package": m.group(1) if m else None,
+            "res": res if res.is_dir() and any(res.rglob("*.*")) else None,
+            "has_r": rtxt.is_file() and rtxt.stat().st_size > 0}
+
+
+def maven_libs(home, specs):
+    return [maven_lib(home, *spec) for spec in specs]
+
+
+def lib_resources(p, workdir, libs, tag):
+    """묶음들의 리소스를 컴파일 → (aapt2 link 에 넣을 zip 들, R 을 만들 패키지들)."""
+    zips, pkgs = [], []
+    for i, lib in enumerate(libs):
+        if lib["res"]:
+            z = workdir / f"{tag}-lib{i}.zip"
+            run([p["aapt2"], "compile", "--dir", lib["res"], "-o", z], workdir, f"묶음 리소스 컴파일({lib['name']})")
+            zips.append(z)
+        if lib.get("has_r") and lib["package"] and lib["package"] not in pkgs:
+            pkgs.append(lib["package"])
+    return zips, pkgs
+
+
+def dex_jars(home, tc, java, jars, min_api, workdir):
+    """묶음(jar)들 → dex 파일들 (같은 묶음·도구면 한 번만 변환해 둔다)."""
+    p = tool_paths(tc)
+    key = hashlib.sha256(("|".join(str(file_hashes(j)[1]) for j in jars) + TOOLCHAIN_ID + str(min_api)).encode()).hexdigest()[:16]
+    cache = home / "cache" / f"libdex-{key}"
+    if not (cache / "classes.dex").is_file():
+        out = workdir / f"libdex-{key}"
+        out.mkdir()
+        run([java, "-cp", p["d8"], "com.android.tools.r8.D8", "--release", "--min-api", str(min_api),
+             "--lib", p["android_jar"], "--output", out, *jars], workdir, "묶음 dex 변환(d8)", timeout=900)
+        shutil.rmtree(cache, ignore_errors=True)
+        shutil.copytree(out, cache)
+    return sorted(cache.glob("classes*.dex"), key=lambda f: int(re.sub(r"\D", "", f.stem) or 1))
+
+
+def app_dex(tc, javac, java, workdir, tag, sources, keep, jars, gen, pkgs, min_api):
+    """sources 를 (gen 의 묶음 R 과 함께) 컴파일해 keep(클래스 이름 앞부분들)과 묶음 R 만 dex 로."""
+    p = tool_paths(tc)
+    classes = workdir / f"{tag}-classes"
+    classes.mkdir()
+    r_files = [f for pkg in pkgs for f in [gen / Path(*pkg.split(".")) / "R.java"] if f.is_file()]
+    boot = os.pathsep.join([str(p["android_jar"]), str(p["lambda_stubs"])])
+    run([javac, "-source", "8", "-target", "8", "-Xlint:-options", "-nowarn", "-encoding", "UTF-8", "-bootclasspath", boot,
+         "-cp", os.pathsep.join(str(j) for j in jars), "-d", classes, *sources, *r_files], workdir, f"{tag} 컴파일(javac)")
+    picked = []
+    for f in sorted(classes.rglob("*.class")):
+        rel = f.relative_to(classes).as_posix()
+        if any(rel.startswith(k) for k in keep) or any(
+                rel.startswith(pkg.replace(".", "/") + "/R.") or rel.startswith(pkg.replace(".", "/") + "/R$") for pkg in pkgs):
+            picked.append(f)
+    out = workdir / f"{tag}-dex"
+    out.mkdir()
+    run([java, "-cp", p["d8"], "com.android.tools.r8.D8", "--release", "--min-api", str(min_api), "--lib", p["android_jar"],
+         "--classpath", classes, *[x for j in jars for x in ("--classpath", j)], "--output", out, *picked],
+        workdir, f"{tag} dex 변환(d8)")
+    made = sorted(out.glob("*.dex"))
+    if [f.name for f in made] != ["classes.dex"]:
+        raise Fail(f"{tag} dex 가 예상과 다릅니다: {[f.name for f in made]}")
+    return made[0]
+
+
 def hotword_phrases(name, given):
     """호출어 문장: --hotword-phrase 로 준 것, 없으면 앱 이름이 한글 한 낱말일 때 '하이·헤이·안녕 <이름>'."""
     out = []
@@ -1655,10 +1943,10 @@ def save_registry(home, reg):
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style", "mic", "widget_sizes", "notify",
-                 "update_encrypt", "hotword", "hotword_phrase", "voice_icon", "voice_icon_name")
+                 "update_encrypt", "hotword", "hotword_phrase", "voice_icon", "voice_icon_name", "watch")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto", "mic": False, "notify": False,
-            "update_encrypt": False, "hotword": False, "hotword_phrase": [], "voice_icon": False, "voice_icon_name": None}
+            "update_encrypt": False, "hotword": False, "hotword_phrase": [], "voice_icon": False, "voice_icon_name": None, "watch": False}
 
 
 def cmd_build(args):
@@ -1736,6 +2024,8 @@ def cmd_build(args):
             widget_label, widget_alt_label = widget_labels(widget_text)
 
         widget_sizes = parse_widget_sizes(opt["widget_sizes"]) if widget_js else []
+
+        watch = bool(opt["watch"])  # 워치 앱 (타일 + 음성 질문)
 
         # 대화 창 아이콘 (--voice-icon): 빅스비 빠른 명령어로 부르는 길 (위젯 마이크와 같은 창이라 --mic 필요)
         voice_icon = None
@@ -1818,6 +2108,14 @@ def cmd_build(args):
         if hotword:
             (res / "drawable").mkdir(exist_ok=True)
             (res / "drawable" / "urlapp_hotword.xml").write_text(HOTWORD_ICON, encoding="utf-8")
+        if watch:  # 워치가 이 폰의 앱을 찾는 표시 (Data Layer 능력)
+            (res / "values" / "urlapp_wear.xml").write_text("""<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="android_wear_capabilities" translatable="false">
+        <item>urlapp_phone</item>
+    </string-array>
+</resources>
+""", encoding="utf-8")
         if voice_icon:
             write_voice_icon(res, voice_icon, icon_info["icon_bg"],
                              accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8"))
@@ -1846,6 +2144,8 @@ def cmd_build(args):
                "live": bool(opt["live"]), "mic": bool(opt["mic"]), "notify": bool(opt["notify"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
         if hotword:
             cfg["hotword"] = hotword
+        if watch:
+            cfg["watch"] = True
         if update_url:
             cfg["update_url"] = update_url
             if opt["update_encrypt"]:  # 업데이트 파일을 푸는 열쇠 (이 컴퓨터와 앱 안에만)
@@ -1875,23 +2175,36 @@ def cmd_build(args):
                                                                   view_hosts=cfg["hosts"], update=bool(update_url),
                                                                   widget_extra_sizes=max(0, len(widget_sizes) - 1),
                                                                   mic=bool(opt["mic"]), notify=bool(opt["notify"]),
-                                                                  hotword=bool(hotword), voice_icon=bool(voice_icon)),
+                                                                  hotword=bool(hotword), voice_icon=bool(voice_icon),
+                                                                  watch=watch),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
         run([p["aapt2"], "compile", "--dir", res, "-o", workdir / "res.zip"], workdir, "리소스 컴파일(aapt2 compile)")
         unsigned = workdir / "unsigned.apk"
+        link_extra, gms, gen, pkgs = [], [], workdir / "gen", []
+        if watch:  # Play 서비스 묶음의 리소스와 그 R (묶음 코드가 쓴다)
+            gms = maven_libs(home, GMS_LIBS)
+            zips, pkgs = lib_resources(p, workdir, gms, "phone")
+            gen.mkdir()
+            link_extra = ["--auto-add-overlay", "--java", gen, "--extra-packages", ":".join(pkgs), *zips]
         run([p["aapt2"], "link", "-o", unsigned, "-I", p["android_jar"], "--manifest", workdir / "AndroidManifest.xml",
              "-A", assets, "--min-sdk-version", str(MIN_SDK), "--target-sdk-version", str(TARGET_SDK),
-             "--version-code", str(version_code), "--version-name", version_name, workdir / "res.zip"],
+             "--version-code", str(version_code), "--version-name", version_name, workdir / "res.zip", *link_extra],
             workdir, "앱 묶기(aapt2 link)")
         dex = shell_dex(home, tc, javac, java, workdir)
-        extra = []  # (APK 안 이름, 파일)
+        extra, dexes = [], []  # (APK 안 이름, 파일), classes2.dex 부터 붙일 dex
         if hotword:
             jars, libs = hotword_libs(home)
-            extra.append(("classes2.dex", hotword_dex(home, tc, javac, java, workdir, jars)))
+            dexes.append(hotword_dex(home, tc, javac, java, workdir, jars))
             for abi, files in libs.items():
                 extra += [(f"lib/{abi}/{f.name}", f) for f in files]
+        if watch:  # 폰 쪽 워치 연결(GmsWatchLink·PhoneWatchService)과 Play 서비스 묶음
+            gjars = [lib["jar"] for lib in gms]
+            dexes.append(app_dex(tc, javac, java, workdir, "워치 연결", sorted(WATCHLINK_DIR.glob("*.java")) + sorted(SHELL_DIR.glob("*.java")),
+                                 ["app/jarvis/urlapp/GmsWatchLink", "app/jarvis/urlapp/PhoneWatchService"], gjars, gen, pkgs, MIN_SDK))
+            dexes += dex_jars(home, tc, java, gjars, MIN_SDK, workdir)
+        extra += [(f"classes{i}.dex", f) for i, f in enumerate(dexes, start=2)]
         with zipfile.ZipFile(unsigned, "a", compression=zipfile.ZIP_DEFLATED) as z:
             z.write(dex, "classes.dex")
             for arc, f in extra:
@@ -1916,12 +2229,20 @@ def cmd_build(args):
         if prev.get("cert_sha256") and prev["cert_sha256"] != digest:
             say("주의: 이전 버전과 서명 키가 다릅니다. 이미 설치된 앱 위에 업데이트되지 않으니, "
                 "기존 앱을 지우고 설치해야 합니다 (앱 안의 로그인 정보도 지워집니다).")
+        watch_apk = None
+        if watch:
+            say("워치 앱 만드는 중")
+            watch_apk = build_watch_apk(home, tc, java, javac, ks, pw, app_id, name, icon_info["icon_bg"],
+                                        accent or icon_color or (theme if not is_near_white(theme) else "#2DD4DA"),
+                                        res, version_code, version_name, out_dir, workdir)
+            if cert_digest(java, p["apksigner"], watch_apk, workdir) != digest:
+                raise Fail("워치 앱의 서명이 폰 앱과 다릅니다 (Data Layer 가 연결되지 않음).")
 
         reg["apps"][app_id] = {
             "url": url, "name": name, "version_code": version_code, "version_name": version_name,
             "theme_color": theme, "background_color": bg, "icon_from": icon_from, "explicit": explicit,
             "apk": str(apk), "apk_sha256": file_hashes(apk)[1], "cert_sha256": digest, "widget": bool(widget_js),
-            "cards": bool(cards_cfg),
+            "cards": bool(cards_cfg), "watch_apk": str(watch_apk) if watch_apk else None,
             "built_at": time.strftime("%Y-%m-%d %H:%M:%S")}
         save_registry(home, reg)
     finally:
@@ -1949,6 +2270,11 @@ def cmd_build(args):
     if update_url:
         say(f"  앱 안 업데이트: {update_url}" + (" (암호화: 열쇠는 ~/.jarvis-url-app/update-keys/ 와 앱 안에만)"
                                               if opt["update_encrypt"] else ""))
+    if watch_apk:
+        say(f"  워치 앱: {watch_apk} ({watch_apk.stat().st_size / 1024:.0f}KB, Wear OS 3+, 같은 서명) — 타일(위젯 요약 + '말하기') + "
+            "대화 화면(워치에서 말하면 폰이 사이트에 묻고 답을 워치에). 워치에는 직접 설치(adb)한다. 사이트 주소는 워치 앱에 없다")
+        if not widget_js:
+            say("  주의: 위젯 스크립트(--widget)가 없어 워치 타일에 보일 요약이 없다 (말하기는 된다)")
     if voice_icon:
         say(f"  대화 창 아이콘: '{voice_icon}' (누르면 바로 듣는 대화 창. 빅스비 빠른 명령어에서 이 앱을 열게 하면 "
             f"'하이 빅스비, …' 로 부를 수 있다)")
@@ -2541,6 +2867,53 @@ def cmd_selftest(args):
             resv2 = run([tp["aapt2"], "dump", "resources", recv2["apk"]], tmp_home, "resources")
             check("대화 창 아이콘 이름 바꾸기 (옵션은 기억)", re.search(r"string/voice_icon_name\n\s+\(\) \"?자비스 음성", resv2) is not None)
             check("--voice-icon 없는 앱에는 두 번째 아이콘 없음", "VoiceLauncher" not in mfm and "activity-alias" not in mfm)
+            # --watch: 워치 앱(타일 + 음성 질문) — 같은 패키지·같은 서명, 폰은 Data Layer 로 질문을 받는다
+            (tmp_home / "deps" / "maven").mkdir(parents=True, exist_ok=True)
+            for f in list((home / "deps" / "maven").glob("*.aar")) + list((home / "deps" / "maven").glob("*.jar")):
+                shutil.copyfile(f, tmp_home / "deps" / "maven" / f.name)  # 이미 받은 묶음 (SHA-256 은 다시 확인)
+            build(base + "/watch", "--no-fetch", "--name", "자비스", "--mic", "--widget", str(wjs), "--watch")
+            recw = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/watch"))
+            mfw = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", recw["apk"]], tmp_home, "xmltree")
+            resw = run([tp["aapt2"], "dump", "resources", recw["apk"]], tmp_home, "resources")
+            with zipfile.ZipFile(recw["apk"]) as z:
+                dexw = b"".join(z.read(n) for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", n))
+                cfgw = json.loads(z.read("assets/urlapp.json"))
+            pws = mfw[mfw.rfind("E: service", 0, mfw.find("app.jarvis.urlapp.PhoneWatchService")):]
+            pws = pws[:pws.find("E: service", 5) if pws.find("E: service", 5) > 0 else len(pws)]
+            check("워치(폰 쪽): 워치 메시지 받는 곳(/urlapp/ 만)·질문 작업·Play 서비스 버전·능력 urlapp_phone·연결 코드",
+                  "com.google.android.gms.wearable.MESSAGE_RECEIVED" in pws and '"/urlapp/"' in pws and '"wear"' in pws
+                  and "app.jarvis.urlapp.WatchAskJob" in mfw and "com.google.android.gms.version" in mfw
+                  and '"urlapp_phone"' in resw and "integer/google_play_services_version" in resw
+                  and b"Lapp/jarvis/urlapp/GmsWatchLink;" in dexw and b"Lcom/google/android/gms/common/R$string;" in dexw
+                  and b"Lcom/google/android/gms/wearable/Wearable;" in dexw and cfgw.get("watch") is True, pws[:600])
+            wapk = Path(recw.get("watch_apk") or "")
+            check("워치 앱 APK 가 만들어지고 기록됨", wapk.is_file() and wapk.name.endswith(f"-watch-v{recw['version_code']}.apk"), recw.get("watch_apk"))
+            if wapk.is_file():
+                bw = badging(tp["aapt2"], wapk, tmp_home)
+                bw_raw = run([tp["aapt2"], "dump", "badging", wapk], tmp_home, "badging")
+                mfww = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", wapk], tmp_home, "xmltree")
+                resww = run([tp["aapt2"], "dump", "resources", wapk], tmp_home, "resources")
+                with zipfile.ZipFile(wapk) as z:
+                    allw = b"".join(z.read(n) for n in z.namelist())
+                    dexww = b"".join(z.read(n) for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", n))
+                idw = next(k for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/watch"))
+                check("워치 앱: 같은 패키지·같은 서명·Wear OS 3+(최소 30)·워치 전용·폰 필요(standalone=false)",
+                      bw.get("package") == idw and cert_digest(java, tp["apksigner"], wapk, tmp_home) == recw["cert_sha256"]
+                      and bw.get("min_sdk") == "30" and "android.hardware.type.watch" in bw_raw
+                      and "com.google.android.wearable.standalone" in mfww, bw)
+                tl = mfww[mfww.rfind("E: service", 0, mfww.find("app.jarvis.urlapp.WatchTile")):]
+                tl = tl[:tl.find("E: service", 5) if tl.find("E: service", 5) > 0 else len(tl)]
+                check("워치 앱: 타일(시스템만 묶음·미리보기)·폰 소식 받는 곳·대화 화면(아이콘)·능력 urlapp_watch",
+                      "com.google.android.wearable.permission.BIND_TILE_PROVIDER" in tl
+                      and "androidx.wear.tiles.action.BIND_TILE_PROVIDER" in tl and "androidx.wear.tiles.PREVIEW" in tl
+                      and "com.google.android.gms.wearable.DATA_CHANGED" in mfww and "app.jarvis.urlapp.WatchListener" in mfww
+                      and "launchable-activity: name='app.jarvis.urlapp.WatchAskActivity'" in bw_raw and '"urlapp_watch"' in resww
+                      and b"Lapp/jarvis/urlapp/WatchTile;" in dexww and b"Landroidx/wear/tiles/TileService;" in dexww, tl[:600])
+                host_w = urllib.parse.urlsplit(recw["url"]).hostname.encode()
+                check("워치 앱에는 사이트 주소·웹 화면 코드가 없음 (폰을 거쳐서만)", host_w not in allw
+                      and b"Landroid/webkit/WebView;" not in dexww and b"assets/urlapp.json" not in allw, "")
+            check("--watch 없는 앱에는 Play 서비스·워치 연결 없음", "PhoneWatchService" not in mfm
+                  and "com.google.android.gms" not in mfm)
             # --notify + --update-encrypt: 앱 알림, 암호화한 앱 안 업데이트
             check("--update-encrypt 는 --update-url 없이 거부",
                   raises(lambda: build(base + "/enc0", "--no-fetch", "--update-encrypt")))
@@ -2725,6 +3098,9 @@ def build_parser():
                    help="업데이트 파일을 암호화해서 올린다 (주소를 숨겨야 하는 앱. 열쇠는 이 컴퓨터와 앱 안에만)")
     b.add_argument("--mic", action=argparse.BooleanOptionalAction, default=None,
                    help="마이크·음성 대화: 마이크 권한, 웹 음성 기능을 폰의 음성 인식·읽어 주기로 대신, 위젯·바로가기의 '마이크 모드'")
+    b.add_argument("--watch", action=argparse.BooleanOptionalAction, default=None,
+                   help="워치(Wear OS) 앱도 만든다: 타일(위젯 요약) + 음성 질문(폰이 사이트의 urlappAsk 로 묻고 답을 워치로). "
+                        "폰 앱에 Google Play 서비스 Wearable 이 들어간다. 워치 APK 는 직접 설치(adb)")
     b.add_argument("--voice-icon", dest="voice_icon", action=argparse.BooleanOptionalAction, default=None,
                    help="대화 창을 바로 여는 두 번째 앱 아이콘 (--mic 필요). 빅스비 빠른 명령어·'OO 열어줘'로 부를 때 쓴다")
     b.add_argument("--voice-icon-name", dest="voice_icon_name",
