@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 11,
- "version_name": "1.11",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v11.bin",
- "sha256": "3bb1083a058c1ba8f602daa8da91ef94ebbe68e95b50a1ffea7ab7fc71331f69",
+ "version_code": 12,
+ "version_name": "1.12",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v12.bin",
+ "sha256": "e527d5cd80dd136b286dea77025955f019493d67a5d2d0998580a5e26863fc8c",
  "size": 559666,
- "notes": "위젯 마이크: 앱을 열지 않고 홈 화면 위 작은 창에서 바로 대화",
- "published_at": "2026-11-20 08:02",
+ "notes": "위젯이 자비스 작업창과 같은 값으로 (GitHub 동기화 뒤 확인)",
+ "published_at": "2026-11-20 08:04",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "d16ffe2ac54f264a1d45f550e35d40791b6ccf6476d94ff4af8dc37d120678ce"
+ "apk_sha256": "eeb2c6970adea199d6e850aceacefc55a8c8a8bdfb9f41185c12ed78013a0742"
 }
