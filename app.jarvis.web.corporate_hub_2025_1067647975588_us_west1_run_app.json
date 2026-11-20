@@ -1,10 +1,10 @@
 {
  "package": "app.jarvis.web.corporate_hub_2025_1067647975588_us_west1_run_app",
- "version_code": 7,
- "version_name": "1.7",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.corporate_hub_2025_1067647975588_us_west1_run_app-v7.apk",
- "sha256": "494defbaa9b4e2adf063c61b070907ef70ed78e71a980dc93d10a5cdbae26d35",
+ "version_code": 8,
+ "version_name": "1.8",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.corporate_hub_2025_1067647975588_us_west1_run_app-v8.apk",
+ "sha256": "af84b3cf8a08f2170655bdc74d24a2b9fa9aacf995362b5dd42beb4c825b6d16",
  "size": 661349,
- "notes": "Google 로그인을 크롬에서 열고 앱으로 돌아오기, 앱 안 업데이트",
- "published_at": "2026-11-20 03:02"
+ "notes": "업데이트 확인 화면을 줄였어요 (안드로이드 12 이상은 다음부터 바로 설치될 수 있어요)",
+ "published_at": "2026-11-20 03:04"
 }
