@@ -66,7 +66,7 @@ public class NotifyJob extends JobService {
         JobScheduler js = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (js == null) return;
         for (JobInfo j : js.getAllPendingJobs()) if (j.getId() == JOB) return;
-        js.schedule(new JobInfo.Builder(JOB, new ComponentName(ctx, NotifyJob.class))
+        Jobs.safe(js, new JobInfo.Builder(JOB, new ComponentName(ctx, NotifyJob.class))
                 .setPeriodic(EVERY_MS)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPersisted(true)

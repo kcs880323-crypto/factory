@@ -43,7 +43,7 @@ public class WidgetRefreshJob extends JobService {
     static void enqueue(Context ctx) {
         JobScheduler js = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (js == null) return;
-        js.schedule(new JobInfo.Builder(JOB, new ComponentName(ctx, WidgetRefreshJob.class))
+        Jobs.safe(js, new JobInfo.Builder(JOB, new ComponentName(ctx, WidgetRefreshJob.class))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .build());
     }

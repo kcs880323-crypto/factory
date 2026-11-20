@@ -765,7 +765,8 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{app_id}">
-    <uses-permission android:name="android.permission.INTERNET" />{card_perm}{queries}
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />{card_perm}{queries}
     <application
         android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
@@ -1856,7 +1857,8 @@ def cmd_selftest(args):
             check("빌드 1: 이름은 매니페스트 short_name", b.get("label") == "찰스 노트", str(b))
             check("빌드 1: 버전 코드 1, SDK 24/36", (b.get("version_code"), b.get("min_sdk"), b.get("target_sdk"))
                   == (1, "24", "36"), str(b))
-            check("빌드 1: 인터넷 권한만", b.get("permissions") == ["android.permission.INTERNET"], str(b))
+            check("빌드 1: 인터넷 권한만 (+ 설치 때 자동 허용되는 네트워크 상태 확인)", b.get("permissions") == [
+                "android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE"], str(b))
             check("빌드 1: 색은 페이지의 theme-color", rec["theme_color"] == "#1A73E8", rec["theme_color"])
             check("빌드 1: maskable 아이콘 사용", rec["icon_from"].endswith("/mask.png"), rec["icon_from"])
             with zipfile.ZipFile(apk) as z:
@@ -2014,6 +2016,11 @@ def cmd_selftest(args):
             check("--mic 없는 앱에는 마이크 권한·도우미·크기별 위젯 없음", "RECORD_AUDIO" not in mf_nomic
                   and "urlapp-speech.js" not in str(zipfile.ZipFile(recd["apk"]).namelist())
                   and "WidgetProviderS2" not in mf_nomic and json.loads(zipfile.ZipFile(recd["apk"]).read("assets/urlapp.json")).get("mic") is False)
+            # 안드로이드 14+: 인터넷 조건을 건 작업 예약에는 ACCESS_NETWORK_STATE 가 꼭 있어야 한다 (없으면 앱이 꺼진다)
+            raw = [f.name for f in SHELL_DIR.glob("*.java") if f.name != "Jobs.java" and "js.schedule(" in f.read_text(encoding="utf-8")]
+            check("작업 예약: 네트워크 상태 권한이 늘 있고, 예약은 모두 Jobs.safe 로 (앱이 꺼지지 않게)",
+                  'android.permission.ACCESS_NETWORK_STATE' in mf_nomic and "android.permission.ACCESS_NETWORK_STATE" in mfm
+                  and not raw, raw)
             # --notify + --update-encrypt: 앱 알림, 암호화한 앱 안 업데이트
             check("--update-encrypt 는 --update-url 없이 거부",
                   raises(lambda: build(base + "/enc0", "--no-fetch", "--update-encrypt")))

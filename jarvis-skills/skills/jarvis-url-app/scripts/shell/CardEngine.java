@@ -566,7 +566,7 @@ final class CardEngine {
             return;
         }
         if (js.getPendingJob(STATUS_JOB) != null) return;
-        js.schedule(new JobInfo.Builder(STATUS_JOB, new ComponentName(app, CardRetryJob.class))
+        Jobs.safe(js, new JobInfo.Builder(STATUS_JOB, new ComponentName(app, CardRetryJob.class))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
                 .setPeriodic(6 * 3600 * 1000L)
                 .build());
@@ -697,7 +697,7 @@ final class CardEngine {
     private void scheduleHold() {
         JobScheduler js = (JobScheduler) app.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (js == null) return;
-        js.schedule(new JobInfo.Builder(HOLD_JOB, new ComponentName(app, CardRetryJob.class))
+        Jobs.safe(js, new JobInfo.Builder(HOLD_JOB, new ComponentName(app, CardRetryJob.class))
                 .setMinimumLatency(45_000)
                 .setOverrideDeadline(150_000)
                 .build());
@@ -711,7 +711,7 @@ final class CardEngine {
                 .setMinimumLatency(30_000)
                 .setBackoffCriteria(60_000, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
                 .build();
-        js.schedule(job);
+        Jobs.safe(js, job);
     }
 
     @SuppressWarnings("deprecation") // 안드로이드 8 미만용 알림 만들기
