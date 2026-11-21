@@ -7,6 +7,10 @@
 //   url_app.py build … --widget widgets/gaops-tasks.js \
 //       --widget-param GAOPS_PROJECT=<프로젝트 id> --widget-param GAOPS_API_KEY=<웹 API 키>
 // 카드와 같은 기준: 진척율 = manualProgress, 마감 임박 = 종료일까지 0~3일, 경과 = 종료일 지남.
+// 새로고침 (2026-11-21): 위젯의 새로고침 단추와 10분마다 자동 새로고침(화면이 켜져 있을 때). 앱을 열지 않고 보이지 않는 웹 화면으로 읽는데
+// AJ GA HUB 는 로그인을 저장하지 않아 그 화면은 늘 로그아웃 상태다 → 앱 화면에서 로그인한 것을 이 폰 앱 안(localStorage)에 시각만 적어 두고,
+// 그 뒤 7일 안에는 로그인 화면이 아니어도 읽는다 (7일이 지나면 앱을 열어 한 번 로그인해야 다시 갱신). 적는 것은 시각뿐(이름·비밀번호 없음).
+// urlapp:refresh-min 10
 async function () {
   const PROJECT = "__PARAM_GAOPS_PROJECT__";
   const KEY = "__PARAM_GAOPS_API_KEY__";
@@ -19,7 +23,15 @@ async function () {
     if (!/^sb-[a-z0-9]+-auth-token$/.test(k)) continue;
     try { if (JSON.parse(localStorage.getItem(k)).access_token) loggedIn = true; } catch (e) { /* 건너뜀 */ }
   }
-  if (!loggedIn) return null;
+  const SEEN = "urlapp_gaops_login_at";
+  const KEEP_MS = 7 * 86400000;
+  const nowMs = Date.now();
+  if (loggedIn) {
+    localStorage.setItem(SEEN, String(nowMs));
+  } else {
+    const seen = Number(localStorage.getItem(SEEN) || 0);
+    if (!(seen > nowMs - KEEP_MS && seen <= nowMs)) return null; // 로그인한 적이 없거나 7일이 지남: 앱을 열어 로그인할 때까지 바꾸지 않음
+  }
   const fail = (why) => ({ title: TITLE, rows: [], note: `GA Ops 연결 실패 (${why})` });
 
   // 1) Firebase 익명 로그인. 토큰은 이 앱 안(localStorage)에만 두고, 만료 전에 갱신한다 (매번 새 익명 사용자를 만들지 않게).

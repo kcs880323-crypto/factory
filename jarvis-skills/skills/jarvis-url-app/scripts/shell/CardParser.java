@@ -143,7 +143,8 @@ public final class CardParser {
     // 가맹점이 아닌 조각들 (지운 뒤 남는 것이 가맹점 후보)
     private static final Pattern[] NOISE = {
             Pattern.compile("\\[\\s*(Web발신|국외발신|국제발신|광고)\\s*\\]"),
-            Pattern.compile("(총)?누적\\s*[:：]?\\s*[\\d,]+\\s*원?"),
+            // "누적 500,000원", "누적금액 380,722원", "누적: …", "누적사용금액 …" (롯데카드 앱은 '누적금액'. 2026-11-21 가계부에 가맹점이 '누적금액'으로 적힘)
+            Pattern.compile("(총)?누적\\s*(?:(?:사용|이용|결제)?\\s*(?:금액|액))?\\s*[:：]?\\s*[\\d,]+\\s*원?"),
             Pattern.compile("(잔여|잔액|한도|이용가능)\\s*(한도|금액)?\\s*[:：]?\\s*[\\d,]+\\s*원?"),
             Pattern.compile("\\(?\\s*(일시불|할부\\s*\\d*\\s*개?월?|\\d{1,2}\\s*개월(\\s*할부)?|체크|신용)\\s*\\)?"),
             Pattern.compile("[가-힣A-Za-z]\\*+[가-힣A-Za-z]?\\s*님?"),           // 김*수, 홍*동님
@@ -372,6 +373,9 @@ public final class CardParser {
         if (r.length() > 40) r = r.substring(0, 40).trim();
         // 이름·카드번호만 남은 짧은 조각, 기호뿐인 조각은 버린다
         if (r.matches("[\\p{Punct}\\s]*") || r.matches("(?i)(M|S|V|X|님|원|회원)")) return "";
+        // 금액 이름표만 남은 조각("누적금액", "승인금액" …)은 가맹점이 아니다 (숫자 없이 이름표만 있거나 숫자가 따로 줄에 있을 때)
+        if (r.matches("(총)?(누적|잔여|잔액|이용|결제|승인|사용|합계)?\\s*(사용|이용|결제)?\\s*(금액|액|합계|한도)")) return "";
+        if (r.matches("(총)?(누적|잔여|잔액)")) return "";
         return r;
     }
 
