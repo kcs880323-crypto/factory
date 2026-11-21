@@ -1,10 +1,10 @@
 {
  "package": "app.jarvis.web.csjhth_ai_studio",
- "version_code": 18,
- "version_name": "1.18",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.csjhth_ai_studio-v18.apk",
- "sha256": "6cd8bc482d1b5c69ad6adeed1e0528425d81d777967f4cb5aa8c9b5f5c0f27d8",
- "size": 313498,
- "notes": "위젯 새로고침·카드 다시 보내기 때 앱이 꺼지던 문제 수정 (안드로이드 14+)",
- "published_at": "2026-11-20 06:06"
+ "version_code": 19,
+ "version_name": "1.19",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.csjhth_ai_studio-v19.apk",
+ "sha256": "03f475d03c9fdf6f96afdb09e290af43602d3c6451874e5b93112fcaf3205a31",
+ "size": 350362,
+ "notes": "롯데카드 알림에서 가맹점이 '누적금액'으로 적히던 문제 고침",
+ "published_at": "2026-11-21 04:12"
 }
