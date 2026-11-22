@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 20,
- "version_name": "1.20",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v20.bin",
- "sha256": "7381022365210bdb5dcd413fdf753e96255b844c78cd8f7b4fa814361283b525",
+ "version_code": 21,
+ "version_name": "1.21",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v21.bin",
+ "sha256": "cbbc8327c78c4bf716280164b9d792efe31c28e21066f7f4c731f46290b38873",
  "size": 2263181,
- "notes": "앱을 열면 바로 꺼지던 문제 고침 (부품 판 맞춤). 앞으로 갑자기 꺼지면 다음에 열 때 이유를 보여 줌",
- "published_at": "2026-11-20 23:50",
+ "notes": "음성 창에서 내가 한 긴 말이 잘리던 것을 스크롤로 고침. 이어 묻는 말을 같은 대화로 보게 함",
+ "published_at": "2026-11-22 07:14",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "dfaa046e749470359e25a75f7eee1a9121993a28e17ab8c517350519fa0cf9b9"
+ "apk_sha256": "a613be451c954fc5f307a317e348843a7d13972b18fdde6dceb282b921fed364"
 }
