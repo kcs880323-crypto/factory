@@ -180,7 +180,7 @@ public class WatchAskJob extends JobService {
                     if (r != null && r.contains("ask")) {
                         state[1] = true;
                         why[0] = "자비스가 시간 안에 답하지 않았어요.";
-                        v.evaluateJavascript(askJs(q, token), null);
+                        v.evaluateJavascript(askJs(q, token, ChatSession.current(ctx)), null);
                     } else if (attempt < 40) {
                         MAIN.postDelayed(() -> probe(v, attempt + 1), 300);
                     } else {
@@ -194,12 +194,13 @@ public class WatchAskJob extends JobService {
     }
 
     /** 사이트의 urlappAsk 로 묻고 답을 UrlAppAsk.answer 로 돌려주는 스크립트 (VoiceActivity 와 같은 모양). */
-    static String askJs(String question, String token) {
-        return "(function(q,tok){Promise.resolve().then(function(){return window.urlappAsk(q);})"
+    static String askJs(String question, String token, String session) {
+        // 두 번째 인자 {session}: 대화 창과 같은 표시 (ChatSession) — 15분 안에 이어 묻는 말(예: "응")을 사이트가 같은 대화로 볼 수 있게
+        return "(function(q,tok,ses){Promise.resolve().then(function(){return window.urlappAsk(q,ses?{session:ses}:undefined);})"
                 + ".then(function(r){var s=r&&typeof r==='object'?(r.text||r.reply||r.answer||''):(r==null?'':r);"
                 + "UrlAppAsk.answer(tok,String(s).slice(0,20000),true);},"
                 + "function(){UrlAppAsk.answer(tok,'',false);});})("
-                + JSONObject.quote(question) + "," + JSONObject.quote(token) + ")";
+                + JSONObject.quote(question) + "," + JSONObject.quote(token) + "," + JSONObject.quote(session == null ? "" : session) + ")";
     }
 
     private static boolean own(Uri u, JSONArray hosts) {

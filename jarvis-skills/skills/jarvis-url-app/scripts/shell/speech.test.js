@@ -10,6 +10,7 @@ const SHIM = fs.readFileSync(path.join(__dirname, "speech.js"), "utf8");
 const NOTIFY = fs.readFileSync(path.join(__dirname, "notify.js"), "utf8");
 const MAIN = fs.readFileSync(path.join(__dirname, "MainActivity.java"), "utf8");
 const VOICE = fs.readFileSync(path.join(__dirname, "VoiceActivity.java"), "utf8");
+const WATCHJOB = fs.readFileSync(path.join(__dirname, "WatchAskJob.java"), "utf8");
 const TOKEN = "t0k3n";
 
 // MainActivity.askSite 의 자바 문자열 조각을 이어 붙여 같은 스크립트를 만든다
@@ -20,10 +21,17 @@ function askScript(question, id) {
 }
 
 // VoiceActivity.askJs (대화 창): 답이 객체면 card·open 도 넘긴다
-function voiceAskScript(question, id) {
+function voiceAskScript(question, id, session) {
   const seg = /static String askJs\([\s\S]*?return ([\s\S]*?)\+ JSONObject\.quote\(question\)/.exec(VOICE)[1];
   const lits = [...seg.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
-  return lits.join("") + JSON.stringify(question) + "," + JSON.stringify(id) + "," + JSON.stringify(TOKEN) + ")";
+  return lits.join("") + JSON.stringify(question) + "," + JSON.stringify(id) + "," + JSON.stringify(TOKEN) + "," + JSON.stringify(session || "") + ")";
+}
+
+// WatchAskJob.askJs (워치 질문): 같은 방식으로 스크립트를 만든다 (인자: 질문, 토큰, session)
+function watchAskScript(question, session) {
+  const seg = /static String askJs\([\s\S]*?return ([\s\S]*?)\+ JSONObject\.quote\(question\)/.exec(WATCHJOB)[1];
+  const lits = [...seg.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
+  return lits.join("") + JSON.stringify(question) + "," + JSON.stringify(TOKEN) + "," + JSON.stringify(session || "") + ")";
 }
 
 const results = [];
@@ -184,6 +192,22 @@ function check(label, cond, detail) {
       ["answer2", true, "v3", "", true, JSON.stringify({ card: null, open: "/remote2" })],
       ["answer2", true, "v4", "x", true, ""],
       ["answer2", true, "v5", "", false, ""]]), vasks);
+
+  // 같은 대화 표시: 대화 창·워치 질문 모두 urlappAsk(질문, {session}) 으로 넘기고, 표시가 없으면 두 번째 인자가 없음 (옛 사이트는 무시해도 그대로)
+  const sess = await page.evaluate(async (scripts) => {
+    window.__calls.length = 0;
+    window.__args = [];
+    window.urlappAsk = async function () { window.__args.push([...arguments]); return "ok"; };
+    for (const s of scripts) eval(s);
+    await new Promise((r) => setTimeout(r, 50));
+    return window.__args;
+  }, [voiceAskScript("창", "s1", "abcd1234abcd1234"), voiceAskScript("창2", "s2", ""),
+    watchAskScript("워치", "abcd1234abcd1234"), watchAskScript("워치2", "")]);
+  check("같은 대화 표시: 대화 창·워치가 urlappAsk(질문, {session}) 으로 넘기고, 표시가 비면 질문만",
+    JSON.stringify(sess) === JSON.stringify([["창", { session: "abcd1234abcd1234" }], ["창2", undefined],
+      ["워치", { session: "abcd1234abcd1234" }], ["워치2", undefined]]), sess); // undefined 는 JSON 으로 null — 표시가 없으면 두 번째 인자가 undefined
+  const wcalls = await page.evaluate(() => window.__calls.map((c) => [c.name, c.tokenOk].concat(c.args)));
+  check("워치 질문의 답은 그대로 UrlAppAsk 로 (워치 스크립트가 깨지지 않음)", Array.isArray(wcalls), wcalls);
 
   // 알림 도우미 (notify.js): 웹 알림 → 폰 알림
   const np = await browser.newPage();

@@ -294,18 +294,20 @@ public class VoiceActivity extends Activity {
             pending = new String[] {id, question};
             return;
         }
-        web.evaluateJavascript(askJs(question, id, token), null);
+        web.evaluateJavascript(askJs(question, id, token, ChatSession.current(this)), null);
     }
 
     /** 사이트의 urlappAsk 로 묻는 스크립트. 답이 객체면 text 와 함께 card·open 도 넘긴다. */
-    static String askJs(String question, String id, String token) {
-        return "(function(q,id,tok){Promise.resolve().then(function(){return window.urlappAsk(q);})"
+    static String askJs(String question, String id, String token, String session) {
+        // 두 번째 인자 {session}: 15분 안의 질문은 같은 값 (ChatSession) — 사이트가 같은 대화로 이어 줄 수 있게. 안 보는 사이트는 무시한다
+        return "(function(q,id,tok,ses){Promise.resolve().then(function(){return window.urlappAsk(q,ses?{session:ses}:undefined);})"
                 + ".then(function(r){var o=r&&typeof r==='object'?r:null;"
                 + "var s=o?(o.text||o.reply||o.answer||''):(r==null?'':r);var x='';"
                 + "try{if(o&&(o.card||o.open))x=JSON.stringify({card:o.card||null,open:o.open||null});}catch(e){}"
                 + "UrlAppSpeech.answer2(tok,id,String(s).slice(0,20000),true,String(x).slice(0,4000));},"
                 + "function(){UrlAppSpeech.answer2(tok,id,'',false,'');});})("
-                + JSONObject.quote(question) + "," + JSONObject.quote(id) + "," + JSONObject.quote(token) + ")";
+                + JSONObject.quote(question) + "," + JSONObject.quote(id) + "," + JSONObject.quote(token) + ","
+                + JSONObject.quote(session == null ? "" : session) + ")";
     }
 
     // ---------- 카드 (빅스비처럼: 날씨·진행 상황·원격 화면 …) ----------

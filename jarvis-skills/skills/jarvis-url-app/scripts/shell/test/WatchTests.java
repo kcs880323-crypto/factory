@@ -63,6 +63,15 @@ public class WatchTests {
                 && !d2.contains("버전"), d2.length());
         check("오류 없이도(빈 값) 꺼지지 않음", CrashLog.describe(null, null, now, null).startsWith("앱이 갑자기 꺼졌어요"), "");
 
+        System.out.println("같은 대화 표시 (ChatSession)");
+        long t0 = 1_763_600_000_000L, min = 60_000L;
+        check("15분 안이면 이어 씀", ChatSession.pick("aaaa", t0, t0 + 14 * min, "bbbb").equals("aaaa"), null);
+        check("정확히 15분까지는 이어 씀", ChatSession.pick("aaaa", t0, t0 + 15 * min, "bbbb").equals("aaaa"), null);
+        check("15분이 지나면 새 표시", ChatSession.pick("aaaa", t0, t0 + 15 * min + 1, "bbbb").equals("bbbb"), null);
+        check("이전 표시가 없거나 비면 새 표시", ChatSession.pick(null, 0, t0, "bbbb").equals("bbbb")
+                && ChatSession.pick("", t0, t0, "bbbb").equals("bbbb"), null);
+        check("시계가 거꾸로 가면 새 표시", ChatSession.pick("aaaa", t0, t0 - min, "bbbb").equals("bbbb"), null);
+
         System.out.println("\n결과: 통과 " + ok + " / 실패 " + fail);
         if (fail > 0) System.exit(1);
     }

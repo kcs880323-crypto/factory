@@ -19,7 +19,6 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
-import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -69,7 +68,7 @@ final class VoiceChat {
     private LinearLayout panel;
     private Orb orb;
     private TextView status, heard, reply;
-    private ScrollView replyBox;
+    private ScrollView replyBox, heardBox; // 내가 한 말도 길면 스크롤로 다 보이게 (3줄에서 잘리던 문제, 2026-11-22)
     private FrameLayout cardSlot;  // 빅스비처럼 답 아래에 보이는 카드 (사이트가 준 같은 사이트 페이지)
     private View card;
     private int state = IDLE;
@@ -189,6 +188,7 @@ final class VoiceChat {
         state = LISTENING;
         mode(Orb.LISTEN);
         setStatus(t("듣고 있어요", "Listening"));
+        if (heardBox != null) heardBox.scrollTo(0, 0);
         voice.listen("", true, ev -> {
             if (state != LISTENING) return;
             String type = ev.optString("type");
@@ -273,6 +273,21 @@ final class VoiceChat {
         if (heard == null) return;
         heard.setText(s);
         heard.setTextColor(partial ? Color.argb(200, 255, 255, 255) : Color.WHITE);
+        // 80자가 넘으면 글씨를 조금 줄여 한 화면에 더 많이 담는다
+        heard.setTextSize(TypedValue.COMPLEX_UNIT_SP, s != null && s.length() > 80 ? 18 : 22);
+        // 말하는 동안(중간 결과)은 맨 아래(방금 한 말)가 보이게, 다 들은 뒤에는 그 자리에 두어 손가락으로 올려 읽게
+        if (partial && heardBox != null) heardBox.post(() -> heardBox.fullScroll(View.FOCUS_DOWN));
+    }
+
+    /** 내 말 칸 높이: 글 높이만큼, 최대 132dp (카드가 있으면 84dp). 넘치면 스크롤. */
+    private void fitHeard(int contentPx) {
+        if (heardBox == null) return;
+        ViewGroup.LayoutParams lp = heardBox.getLayoutParams();
+        int want = Math.min(contentPx, dp(card != null ? 84 : 132));
+        if (lp.height != want && want > 0) {
+            lp.height = want;
+            heardBox.setLayoutParams(lp);
+        }
     }
 
     private void mode(int m) {
@@ -293,6 +308,7 @@ final class VoiceChat {
         cardSlot.addView(v, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(h)));
         cardSlot.setVisibility(View.VISIBLE);
         if (orb != null) orb.setVisibility(View.GONE); // 카드 자리를 위해 구슬은 접는다 (상태 글은 남김)
+        if (heard != null) fitHeard(heard.getHeight()); // 카드가 있으면 내 말 칸을 낮춘다
     }
 
     private void clearCard() {
@@ -303,6 +319,7 @@ final class VoiceChat {
             cardSlot.setVisibility(View.GONE);
         }
         if (orb != null) orb.setVisibility(View.VISIBLE);
+        if (heard != null) fitHeard(heard.getHeight());
         if (old != null) host.cardGone(old);
     }
 
@@ -347,11 +364,20 @@ final class VoiceChat {
         heard = text(22, Color.WHITE, false);
         heard.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         heard.setGravity(Gravity.CENTER);
-        heard.setMaxLines(3);
-        heard.setEllipsize(TextUtils.TruncateAt.START);
+        // setMaxLines(3) + 앞쪽 줄임(START)은 안드로이드 TextView 가 여러 줄에서 지원하지 않아 말줄임표 없이 앞 3줄만 그려졌다
+        // → 답 칸처럼 스크롤 칸에 넣고 높이만 묶는다
         heard.setHint(t("자비스에게 말해 보세요", "Say something to Jarvis"));
         heard.setHintTextColor(Color.rgb(100, 116, 139));
-        panel.addView(heard, wide(dp(10)));
+        heardBox = new ScrollView(a);
+        heardBox.setVerticalScrollBarEnabled(true);
+        heardBox.setVerticalFadingEdgeEnabled(true); // 위·아래에 더 있다는 표시
+        heardBox.setFadingEdgeLength(dp(16));
+        heardBox.addView(heard);
+        LinearLayout.LayoutParams hp = wide(dp(10));
+        hp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+        panel.addView(heardBox, hp);
+        // 길어지면 높이를 묶는다 (22sp 약 4줄, 카드가 있으면 더 낮게 — 패널이 화면을 넘지 않게)
+        heard.addOnLayoutChangeListener((v, l, t2, r, b, ol, ot, or, ob) -> fitHeard(b - t2));
 
         replyBox = new ScrollView(a);
         replyBox.setVerticalScrollBarEnabled(false);
