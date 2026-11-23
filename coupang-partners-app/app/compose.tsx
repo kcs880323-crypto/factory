@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -6,6 +6,7 @@ import { CHANNELS, composePost, ensureDisclosureOnTop, hasDisclosureOnTop, type 
 import { won } from '@/src/lib/format';
 import { useApp } from '@/src/store/AppContext';
 import { Banner, Button, Card, Chip, Field, Row, Screen, T } from '@/src/ui/kit';
+import { VaultPickerButton } from '@/src/ui/VaultPicker';
 
 export default function Compose() {
   const params = useLocalSearchParams<{ linkId?: string }>();
@@ -19,13 +20,14 @@ export default function Compose() {
 
   const link = useMemo(() => links.find((l) => l.id === linkId), [links, linkId]);
   const disclosure = settings.disclosure;
+  const profileSite = settings.sites[0];
 
   const draft = useMemo(() => {
     const input = link
       ? { title: link.title, url: link.url, price: link.price, memo: link.memo, isRocket: link.isRocket }
       : { title: manualTitle, url: manualUrl || '(링크를 여기에)' };
-    return composePost(channel, { ...input, disclosure });
-  }, [link, channel, manualTitle, manualUrl, disclosure]);
+    return composePost(channel, { ...input, disclosure, profileLabel: profileSite?.label });
+  }, [link, channel, manualTitle, manualUrl, disclosure, profileSite]);
   const text = edit && edit.from === draft ? edit.text : draft;
   const setText = (v: string) => setEdit({ from: draft, text: v });
 
@@ -38,11 +40,22 @@ export default function Compose() {
 
   return (
     <Screen>
+      <Card style={{ gap: 6 }}>
+        <T v="h3">긴 블로그 글이나 영상이 필요하면</T>
+        <T v="sub">자비스 방식(상품 정보만 근거, 써 본 척 금지, 검사 후 완성)으로 블로그 소개 글과 세로 홍보 영상을 만들 수 있어요.</T>
+        <Row>
+          <Button style={{ flex: 1 }} small kind="secondary" icon="article" label="블로그 소개 글" onPress={() => router.push({ pathname: '/post', params: link ? { linkId: link.id } : {} })} />
+          <Button style={{ flex: 1 }} small kind="secondary" icon="movie" label="홍보 영상" onPress={() => router.push({ pathname: '/reel', params: link ? { linkId: link.id } : {} })} />
+        </Row>
+      </Card>
       <View style={{ gap: 6 }}>
-        <T v="h3">어떤 링크로 쓸까요?</T>
+        <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <T v="h3">어떤 링크로 쓸까요?</T>
+          {links.length ? <VaultPickerButton links={links} selectedId={link?.id} onPick={(l) => setLinkId(l.id)} /> : null}
+        </Row>
         {links.length ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {links.slice(0, 30).map((l) => (
+            {(link && links.indexOf(link) >= 30 ? [link, ...links.slice(0, 29)] : links.slice(0, 30)).map((l) => (
               <Chip key={l.id} label={l.title.length > 18 ? `${l.title.slice(0, 17)}…` : l.title} selected={l.id === linkId} onPress={() => setLinkId(l.id)} />
             ))}
             <Chip label="직접 입력" selected={!link} onPress={() => setLinkId(undefined)} />
@@ -118,6 +131,14 @@ export default function Compose() {
       </Row>
       {channel === 'instagram' && link ? (
         <Button kind="ghost" icon="copy" label="링크만 따로 복사 (프로필·스토리용)" onPress={() => copy(link.url, '링크를 복사했어요')} />
+      ) : null}
+      {channel === 'instagram' && profileSite ? (
+        <Button
+          kind="ghost"
+          icon="copy"
+          label={`${profileSite.label} 주소 복사 (인스타 프로필 링크에 넣기)`}
+          onPress={() => copy(profileSite.url, `${profileSite.label} 주소를 복사했어요`)}
+        />
       ) : null}
       <T v="caption">가격은 바뀔 수 있어서 글에 &lsquo;게시 시점 기준&rsquo;을 붙여 뒀어요. 후기·장점은 직접 써 보고 확인한 내용만 넣어 주세요.</T>
     </Screen>

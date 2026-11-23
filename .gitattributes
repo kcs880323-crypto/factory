@@ -3,3 +3,8 @@
 *.sh  text eol=lf
 *.md  text eol=lf
 *.zip binary
+# 파트너스 매니저 PC 설치판의 윈도 스크립트는 CRLF·인코딩(BOM)을 그대로 둔다 (변환하면 cmd·PowerShell이 잘못 읽는다)
+coupang-partners-app/desktop/*.bat -text
+coupang-partners-app/desktop/*.ps1 -text
+coupang-partners-app/desktop/*.txt -text
+coupang-partners-app/desktop/*.ico binary

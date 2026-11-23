@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Platform, ScrollView, View } from 'react-native';
 
 import { toNumber } from '@/src/api/client';
+import { linksToCsv, skippedText } from '@/src/lib/jarvis';
 import { classifyUrl, extractUrl, productIdFromUrl } from '@/src/lib/links';
 import { errorText, useApp } from '@/src/store/AppContext';
 import { Banner, Button, Card, Chip, Empty, Field, Row, Screen, Section, T } from '@/src/ui/kit';
@@ -84,6 +85,13 @@ export default function Links() {
     }
   };
 
+  // 자비스 🛒 내 제휴 상품 → 📥 파트너스 매니저에서 가져오기에 붙여 넣을 CSV (파트너스 링크만, 예시 제외)
+  const sendToJarvis = () => {
+    const r = linksToCsv(links, { onlyPartner: true });
+    if (!r.count) return showToast(`자비스로 보낼 파트너스 링크가 없어요${skippedText(r.skipped)}`);
+    copy(r.csv, `${r.count}개를 복사했어요${skippedText(r.skipped)}. 자비스 🛒 내 제휴 상품 → 📥 파트너스 매니저에서 가져오기에 붙여 넣으세요`);
+  };
+
   const shown = filter.trim()
     ? links.filter((l) => `${l.title} ${l.memo ?? ''} ${l.subId ?? ''}`.toLowerCase().includes(filter.trim().toLowerCase()))
     : links;
@@ -148,7 +156,9 @@ export default function Links() {
         />
       </Card>
 
-      <Section title={`보관함 ${links.length}개`}>
+      <Section
+        title={`보관함 ${links.length}개`}
+        right={links.length ? <Button small kind="secondary" icon="share" label="자비스로 보내기" onPress={sendToJarvis} /> : null}>
         {links.length > 4 ? <Field placeholder="이름·메모·채널로 찾기" value={filter} onChangeText={setFilter} /> : null}
         {shown.length === 0 ? (
           <Empty icon="link" title={links.length ? '찾는 링크가 없어요' : '아직 저장한 링크가 없어요'}>
