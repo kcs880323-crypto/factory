@@ -1,10 +1,10 @@
 {
  "package": "app.jarvis.web.csjhth_ai_studio",
- "version_code": 19,
- "version_name": "1.19",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.csjhth_ai_studio-v19.apk",
- "sha256": "03f475d03c9fdf6f96afdb09e290af43602d3c6451874e5b93112fcaf3205a31",
- "size": 350362,
- "notes": "롯데카드 알림에서 가맹점이 '누적금액'으로 적히던 문제 고침",
- "published_at": "2026-11-21 04:12"
+ "version_code": 20,
+ "version_name": "1.20",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.csjhth_ai_studio-v20.apk",
+ "sha256": "6104767b1f22e4dcaa7102bf710af4effb50121849f6460c4ba4033c3cb41208",
+ "size": 354458,
+ "notes": "아이콘을 길게 눌러 '사용 중지' — 은행 앱(NH pay 등)이 악성 앱으로 막을 때 카드 알림 읽기를 잠깐 끄기",
+ "published_at": "2026-11-23 00:27"
 }
