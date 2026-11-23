@@ -2265,6 +2265,11 @@ def cmd_build(args):
             explicit["cards"] = str(keep_c)
             cards_cfg = load_cards_config(keep_c)
             cards_cfg["via"] = cards_via
+            if cards_via == "listener" and update_url:
+                # 2026-11-23 실측: 알림 읽기 + 앱 설치 권한(앱 안 업데이트)을 같이 가진 직접 설치 앱은 은행 앱(NH pay)이
+                # '원격 조정 기능이 있는 악성 앱'으로 막았다 (둘 중 하나만 있으면 통과, 앱 안 업데이트를 빼자 해결)
+                say("  ⚠ 주의: 카드 알림 읽기와 앱 안 업데이트(--update-url)를 같이 넣으면 은행 앱이 '악성 앱'으로 막을 수 있어요"
+                    " (NH pay 실측). 은행 앱을 쓰는 폰이면 --update-url none 으로 만드세요.")
 
         # 아이콘
         icon_choice = opt["icon"] or "auto"
