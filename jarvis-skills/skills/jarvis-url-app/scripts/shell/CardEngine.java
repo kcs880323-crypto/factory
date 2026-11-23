@@ -499,6 +499,7 @@ final class CardEngine {
             f.put("now", System.currentTimeMillis());
             f.put("via", via());
             f.put("access", listenerEnabled());
+            f.put("paused", CardPause.paused(app));
             f.put("listener_connected_at", store.listenerOnAt());
             f.put("listener_disconnected_at", store.listenerOffAt());
             f.put("owner", store.owner() == null ? "" : store.owner());

@@ -428,6 +428,16 @@ public class CardTests {
         check("3일 넘게 카드 알림 없음은 권할 것(정상은 유지)", a5.getBoolean("ok") && a5.getJSONArray("notes").getString(0).contains("3일"), a5);
         JSONObject a6 = CardStatus.judge(new JSONObject(good.toString()).put("via", "intent").put("access", false));
         check("MacroDroid 방식이면 알림 접근은 보지 않음", a6.getBoolean("ok"), a6);
+        // 사용 중지(일시중지, CardPause): 은행 앱을 쓰려고 일부러 끈 것 — 알림 접근·듣기 끊김을 문제로 보지 않고 안내만
+        JSONObject a7 = CardStatus.judge(new JSONObject(good.toString()).put("paused", true).put("access", false)
+                .put("listener_disconnected_at", 9L).put("last_card_at", now - 9L * 24 * 3600 * 1000));
+        check("사용 중지 중이면 문제 없음(정상)이고 '사용 중지 중' 안내만", a7.getBoolean("ok") && a7.getJSONArray("problems").length() == 0
+                && a7.getJSONArray("notes").length() == 1 && a7.getJSONArray("notes").getString(0).contains("사용 중지 중"), a7);
+        JSONObject a8 = CardStatus.judge(new JSONObject(good.toString()).put("paused", true).put("owner", ""));
+        check("사용 중지 중이어도 담당자 없음 같은 다른 문제는 그대로 알림", !a8.getBoolean("ok")
+                && a8.getJSONArray("problems").length() == 1, a8);
+        check("사용 중지가 아니면 안내 없음", !CardStatus.judge(new JSONObject(good.toString()).put("paused", false))
+                .getJSONArray("notes").toString().contains("사용 중지"), null);
         JSONArray many = new JSONArray();
         for (int i = 0; i < 80; i++) many.put(new JSONObject().put("t", i).put("k", "받음").put("m", "x"));
         check("사이트에 보내는 기록은 최근 30개까지", CardStatus.report(g, many).getJSONArray("journal").length() == 30, null);

@@ -21,6 +21,17 @@ public class CardListenerService extends NotificationListenerService {
     // 설정 화면의 '알림창에 남은 알림으로 시험'이 지금 알림창의 알림을 읽을 때 쓴다 (듣기가 연결돼 있을 때만)
     private static volatile CardListenerService live;
 
+    /** 사용 중지: 지금 묶여 있는 듣기를 풀어 달라고 한다 (구성요소를 끈 뒤에 부른다). */
+    static void unbindNow() {
+        CardListenerService s = live;
+        if (s == null) return;
+        try {
+            s.requestUnbind();
+        } catch (RuntimeException ignored) {
+            // 이미 풀렸음
+        }
+    }
+
     @Override
     public void onListenerConnected() {
         live = this;
@@ -119,6 +130,7 @@ public class CardListenerService extends NotificationListenerService {
     }
 
     private void handle(StatusBarNotification sbn) {
+        if (CardPause.paused(this)) return; // 사용 중지(일시중지) 중에는 읽지 않는다 — 서비스가 아직 묶여 있는 짧은 사이를 막는 안전장치
         if (!CardEngine.available(this)) return;
         String[] r = read(this, sbn);
         if (r == null) return;

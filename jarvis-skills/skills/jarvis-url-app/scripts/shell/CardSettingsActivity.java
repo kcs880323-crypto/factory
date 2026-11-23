@@ -93,6 +93,13 @@ public class CardSettingsActivity extends Activity {
         // 0) 상태 (정상 작동 여부)
         renderStatus();
 
+        // 0-1) 사용 중지: 은행 앱(NH pay 등)이 알림을 읽는 앱을 '악성 앱'으로 막을 때 (앱 아이콘을 길게 눌러도 열린다)
+        if (!viaIntent && CardPause.available(this)) {
+            boolean ps = CardPause.paused(this);
+            row((ps ? "⏸ 일시중지 중" : "▶ 켜져 있음") + " — 은행 앱이 '악성 앱'으로 막을 때", ps ? "다시 켜기" : "일시중지",
+                    v -> startActivity(new Intent(this, CardPauseActivity.class)));
+        }
+
         // 1) 담당자
         head("이 폰의 담당자");
         RadioGroup g = new RadioGroup(this);

@@ -3,7 +3,7 @@ package app.jarvis.urlapp;
 // 카드 자동 등록이 정상인지 판정한다 (안드로이드 API 를 쓰지 않아 PC 자바로 시험할 수 있다).
 // 사실(facts)은 CardEngine.status() 가 모은다:
 //   access(알림 접근), listener_connected_at / listener_disconnected_at, owner, auth_required, key_saved,
-//   auth_errors, pending, pending_error, link_errors, battery_ok, last_card_at, now
+//   auth_errors, pending, pending_error, link_errors, battery_ok, last_card_at, now, paused(사용 중지 중)
 // 결과: facts 에 "ok"(true/false), "problems"(고칠 것), "notes"(권하는 것)를 더해 돌려준다.
 
 import org.json.JSONArray;
@@ -18,7 +18,10 @@ public final class CardStatus {
         JSONArray problems = new JSONArray();
         JSONArray notes = new JSONArray();
         boolean intent = "intent".equals(f.optString("via"));
-        if (!intent && !f.optBoolean("access")) {
+        boolean paused = f.optBoolean("paused"); // 사용 중지(일시중지) 중 (CardPause): 은행 앱을 쓰려고 일부러 끈 것이라 문제로 보지 않는다
+        if (paused) {
+            notes.put("사용 중지 중이에요 — 은행 앱을 다 쓴 뒤 앱 아이콘을 길게 눌러 '사용 중지'에서 다시 켜 주세요 (그동안의 카드 알림은 등록되지 않아요)");
+        } else if (!intent && !f.optBoolean("access")) {
             problems.put("알림 접근이 꺼져 있어요 — 카드 알림을 읽지 못해요");
         } else if (!intent && f.optLong("listener_disconnected_at") > f.optLong("listener_connected_at")) {
             problems.put("알림 듣기가 끊겼어요 — 알림 접근을 껐다 켜거나 폰을 다시 켜 주세요");
@@ -37,7 +40,7 @@ public final class CardStatus {
         if (f.optInt("link_errors") > 0) problems.put("가계부가 등록을 거절했어요 — 사이트 주소·형식이 바뀌었을 수 있어요");
         if (!f.optBoolean("battery_ok", true)) notes.put("배터리 최적화에서 빼면 알림을 더 놓치지 않아요");
         long last = f.optLong("last_card_at"), now = f.optLong("now");
-        if (now > 0 && (last == 0 || now - last > QUIET_DAYS * 24 * 3600 * 1000L)) {
+        if (!paused && now > 0 && (last == 0 || now - last > QUIET_DAYS * 24 * 3600 * 1000L)) {
             notes.put(last == 0 ? "아직 받은 카드 알림이 없어요" : QUIET_DAYS + "일 넘게 카드 알림이 없었어요 (결제가 없었다면 괜찮아요)");
         }
         try {

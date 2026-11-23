@@ -804,6 +804,17 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             android:name="app.jarvis.urlapp.CardSettingsActivity"
             android:exported="false"
             android:label="@string/sc_cards" />""") if cards else ""
+    if cards == "listener":
+        # 사용 중지(일시중지) 화면: 앱 아이콘 길게 누르기 바로가기로 연다. 홈 화면 위에 작게 뜨고 최근 앱 목록에는 안 남는다
+        card_parts += f"""
+        <activity
+            android:name="app.jarvis.urlapp.CardPauseActivity"
+            android:exported="false"
+            android:theme="@style/VoiceTheme"
+            android:taskAffinity="{app_id}.pause"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:label="@string/sc_pause" />"""
     card_perm = '\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />' if cards else ""
     # 앱 안 업데이트 (--update-url): 설치 요청 권한(사용자가 '이 출처 허용'을 한 번 켠다)과 설치 결과 받는 곳 (이 앱 안에서만)
     if update:
@@ -958,6 +969,8 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
     <string name="sc_home">처음 화면</string>
     <string name="sc_browser">브라우저에서 열기</string>
     <string name="sc_cards">카드 자동 등록</string>
+    <string name="sc_pause">사용 중지</string>
+    <string name="sc_pause_long">카드 알림 읽기 사용 중지 (은행 앱용)</string>
     <string name="sc_update">업데이트 확인</string>
     <string name="sc_mic">마이크 모드</string>
     <string name="sc_hotword">{android_string(hotword or "호출어")}</string>
@@ -968,6 +981,8 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
     <string name="sc_home">Home</string>
     <string name="sc_browser">Open in browser</string>
     <string name="sc_cards">Card auto-entry</string>
+    <string name="sc_pause">Pause</string>
+    <string name="sc_pause_long">Pause card reading (for bank apps)</string>
     <string name="sc_update">Check for update</string>
     <string name="sc_mic">Voice mode</string>
     <string name="sc_hotword">Wake word</string>
@@ -1024,16 +1039,25 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
             android:targetPackage="{pkg}" android:targetClass="{cls}" />
     </shortcut>
 """
+    # '사용 중지' (카드 알림 읽기를 잠깐 끄기): 은행 앱이 '악성 앱'으로 막을 때. 앱 화면을 거치지 않고 바로 작은 창을 연다
+    pause_shortcut = """    <shortcut android:shortcutId="pause" android:enabled="true" android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/sc_pause" android:shortcutLongLabel="@string/sc_pause_long">
+        <intent android:action="app.jarvis.urlapp.action.CARD_PAUSE"
+            android:targetPackage="{pkg}" android:targetClass="app.jarvis.urlapp.CardPauseActivity" />
+    </shortcut>
+"""
     # 런처는 바로가기를 4개까지 보여 준다 → 필요한 것부터 (호출어가 있으면 '브라우저에서 열기'가 빠진다)
     picks = [("mic", "sc_mic", "MIC", mic), ("hotword", "sc_hotword", "HOTWORD", bool(hotword)),
+             ("pause", "sc_pause", "PAUSE", cards == "listener"),
              ("cards", "sc_cards", "CARDS", cards), ("update", "sc_update", "UPDATE", update),
              ("home", "sc_home", "HOME", True), ("browser", "sc_browser", "BROWSER", True)]
     picks = [x for x in picks if x[3]][:4]
-    order = ["mic", "hotword", "home", "browser", "cards", "update"]  # 보이는 순서는 예전과 같게
+    order = ["pause", "mic", "hotword", "home", "browser", "cards", "update"]  # 보이는 순서는 예전과 같게 (사용 중지는 가장 먼저 — 급할 때 쓴다)
     picks.sort(key=lambda x: order.index(x[0]))
     w("xml/shortcuts.xml", '<?xml version="1.0" encoding="utf-8"?>\n'
       '<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">\n'
-      + "".join(shortcut.format(sid=sid, label=label, action=action, pkg=app_id, cls=SHELL_CLASS)
+      + "".join(pause_shortcut.format(pkg=app_id) if sid == "pause"
+                else shortcut.format(sid=sid, label=label, action=action, pkg=app_id, cls=SHELL_CLASS)
                 for sid, label, action, _ in picks)
       + "</shortcuts>\n")
 
@@ -2280,7 +2304,8 @@ def cmd_build(args):
         icon_info = json.loads(icon_out.strip().splitlines()[-1])
         if icon_info["used"] == "letter":
             icon_from = "글자 아이콘" + (" (그림이 64px 보다 작거나 읽을 수 없는 형식이라)" if src else "")
-        write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"], cards=bool(cards_cfg), update=bool(update_url),
+        write_resources(res, app_id, name, theme, bg, icon_info["icon_bg"], cards=(cards_via or True) if cards_cfg else False,
+                        update=bool(update_url),
                         mic=bool(opt["mic"]), hotword=hotword["phrases"][0] if hotword else None)
         if hotword:
             (res / "drawable").mkdir(exist_ok=True)
@@ -3229,6 +3254,21 @@ def cmd_selftest(args):
             check("카드(기본 listener): 알림 듣기 서비스는 시스템만 묶을 수 있게", "app.jarvis.urlapp.CardListenerService" in mf9
                   and "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" in mf9
                   and "android.service.notification.NotificationListenerService" in mf9 and "CardIntentReceiver" not in mf9)
+            # 사용 중지(일시중지): 은행 앱(NH pay 등)이 알림 읽는 앱을 '악성 앱'으로 막을 때 (2026-11-23)
+            sc9 = run([tp["aapt2"], "dump", "xmltree", "--file", "res/xml/shortcuts.xml", rec9["apk"]], tmp_home, "xmltree")
+            pi9 = mf9.find("app.jarvis.urlapp.CardPauseActivity")
+            pause_blk = mf9[mf9.rfind("E: activity", 0, pi9):mf9.find("E: ", pi9)] if pi9 >= 0 else ""
+            with zipfile.ZipFile(rec9["apk"]) as z9:
+                dex9 = b"".join(z9.read(n) for n in z9.namelist() if re.fullmatch(r"classes\d*\.dex", n))
+            check("카드(listener): 사용 중지 화면 = 내보내지 않음·따로 뜨는 작업·최근 앱에 안 남음",
+                  pi9 >= 0 and re.search(r"android:exported\(0x01010010\)=(false|\(type 0x12\)0x0\b)", pause_blk)
+                  and "taskAffinity" in pause_blk and ".pause" in pause_blk and "excludeFromRecents" in pause_blk, pause_blk[:500])
+            check("카드(listener): 앱 아이콘 길게 누르기에 '사용 중지'가 앱 화면을 거치지 않고 바로 (바로가기 4개 이하, 카드 설정·업데이트도 그대로)",
+                  "app.jarvis.urlapp.CardPauseActivity" in sc9 and "app.jarvis.urlapp.action.CARD_PAUSE" in sc9
+                  and "app.jarvis.urlapp.action.CARDS" in sc9 and sc9.count("E: shortcut (") <= 4
+                  and b"Lapp/jarvis/urlapp/CardPauseActivity;" in dex9 and b"Lapp/jarvis/urlapp/CardPause;" in dex9, sc9[:600])
+            check("카드(intent·MacroDroid): 듣기 서비스가 없어서 사용 중지 화면·바로가기도 없음",
+                  "CardPauseActivity" not in mf8 and "CARD_PAUSE" not in sc8)
             lf = link_file_json(load_cards_config(cards_json))
             (site / "urlapp.json").write_text(json.dumps(lf, ensure_ascii=False), encoding="utf-8")
             (site / "lc").mkdir()
