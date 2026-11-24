@@ -18,6 +18,28 @@ export interface ImprovementEntry {
 
 export const IMPROVEMENTS: ImprovementEntry[] = [
   {
+    id: 'IMP-20261125-03',
+    date: '2026-11-25',
+    category: 'guard',
+    target: '영상 작업 링크·상품 선정 (NIGHT-011)',
+    title: '추천 페이지에 올린 링크로 영상 만들기',
+    summary:
+      '아침 세탁조클리너 영상이 「제휴 링크 없음」으로 멈췄어요. 생성기가 자비스가 가진 진짜 링크를 링크 발급에 실패한 수집 결과로 덮어썼기 때문이에요. 이제 영상 작업에는 추천 페이지에 올린 쿠팡 링크가 그대로 들어가고 덮이지 않아요. 30개 묶음처럼 대량 묶음 상품은 1묶음 가격으로 점수를 매겨 고가 꿀템으로 뽑히지 않게 했어요.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
+    id: 'IMP-20261125-02',
+    date: '2026-11-25',
+    category: 'reels',
+    target: 'Flow 전 대본 채점 (NIGHT-010)',
+    title: '대본 점수 개선 — 채점 원칙 정렬·고쳐 쓰기 sonnet',
+    summary:
+      '채점기가 과장 표현이 없다고 감점하던 것을 바로잡고, 훅 채점에도 확인된 가격을 알려 줘요. 고쳐 쓰기만 더 좋은 모델로 바꿨어요. 세탁조클리너는 4번째에 대본 81·훅 87점으로 통과했어요.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
     id: 'IMP-20261125-01',
     date: '2026-11-25',
     category: 'guard',
