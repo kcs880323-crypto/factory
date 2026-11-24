@@ -11,6 +11,7 @@
 
 > **11/25 새벽 처리 순서:** `NIGHT-009` → `NIGHT-010`(같은 zip·같은 파일) → 자비스 서버 재시작 → 일꾼 배포본 갱신.
 > **11/25 01:30 `NIGHT-009` 자비스 반영 완료(대표 직접 지시, Claude):** `NIGHT-010` zip은 00:26 배포본 기준이라 그대로 덮으면 NIGHT-009가 사라진다 — `hotgen_runner.py`의 `LAST_SCORER`·`is_free_scorer`·`script_min_for`·`video_min_for`와 `_patient_calls`의 `_model` 기록은 남기고 합칠 것.
+> **11/25 04:10 일꾼 배포본(대표 지시):** 원본 `production_crew.py`에 일꾼과 같은 `CLI_SCORE_CALLS` 카운터, `hotgen_runner.py`는 답의 `_model` → 없으면 카운터로 무료 채점 판단(`_scorer_of`). 지금 업데이트 묶음에 두 파일 모두 80점 규칙 포함(묶음을 만들어 확인). **단 NIGHT-010은 아직 원본에 없음 → 일꾼 '업데이트'를 지금 누르면 일꾼의 NIGHT-010 대본 개선이 덮여 사라진다. NIGHT-010을 합친 뒤 업데이트할 것.** 자비스 서버 04:12 재시작.
 > **처리 순서 (2026-11-24 19:35 대표 지시 "새벽 과제를 지금 해줘" — Claude 기록):** 한 번에 3건이면 **`NIGHT-007` → `NIGHT-003` → `NIGHT-005`** 먼저(오트밀→땅콩버터 사고·가격 절반·채점 유지), 다음 실행에서 `NIGHT-004` → `NIGHT-006` → `NIGHT-001` → `NIGHT-002`.
 > **`NIGHT-005`·`NIGHT-007` 기준 코드:** DESKTOP-4CMADIK에서 Tailscale 파일 보내기로 자비스 PC `다운로드\worker_fix_20261124.zip` 전송(5개 파일 + README, 비밀 없음). 이 zip을 풀어 자비스 원본 생성기의 같은 파일과 비교·반영할 것. zip이 안 보이면 `tailscale file get <다운로드 폴더>` 실행.
 
