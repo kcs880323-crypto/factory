@@ -18,6 +18,17 @@ export interface ImprovementEntry {
 
 export const IMPROVEMENTS: ImprovementEntry[] = [
   {
+    id: 'IMP-20261125-01',
+    date: '2026-11-25',
+    category: 'guard',
+    target: '대본 관문·업로드 재확인 (NIGHT-009)',
+    title: '무료 채점일 때만 통과 기준 80점',
+    summary:
+      'API 키 잔액이 없어 Claude Code(무료)로 채점하면 점수가 10점쯤 짜게 나와요. 그래서 그 점수를 낸 채점 모델이 무료일 때만 대본·훅 관문과 업로드 직전 재확인 기준을 80점으로, API 채점이면 그대로 90점으로 둬요. 로그에 적용 기준을 함께 적고, API 키를 충전하면 자동으로 90점으로 돌아가요.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
     id: 'IMP-20261124-13',
     date: '2026-11-24',
     category: 'guard',
