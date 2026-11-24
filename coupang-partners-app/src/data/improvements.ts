@@ -18,6 +18,17 @@ export interface ImprovementEntry {
 
 export const IMPROVEMENTS: ImprovementEntry[] = [
   {
+    id: 'IMP-20261124-03',
+    date: '2026-11-24',
+    category: 'reels',
+    target: '자비스 영상일꾼 · R&D 모니터 앱',
+    title: '바탕화면 실행용 영상일꾼 · R&D 모니터링 데스크톱 앱 구축',
+    summary:
+      '개선 조치 이력, R/K 라인 R&D 실험 현황, 로컬 영상일꾼 최근 MP4, 추천 페이지 이미지·중복 자동 점검, 회의 보드를 한 화면에서 보는 원클릭 데스크톱 앱(video-rnd/monitor-app/)을 구현했어요.',
+    status: 'done',
+    owner: 'Antigravity',
+  },
+  {
     id: 'IMP-20261124-02',
     date: '2026-11-24',
     category: 'page',
