@@ -10,3 +10,4 @@ clauses/
 runs/
 snapshots/
 __pycache__/
+nightly/logs/

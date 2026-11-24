@@ -18,6 +18,17 @@ export interface ImprovementEntry {
 
 export const IMPROVEMENTS: ImprovementEntry[] = [
   {
+    id: 'IMP-20261124-06',
+    date: '2026-11-24',
+    category: 'reels',
+    target: '자비스 야간 자동 개발 (03:30~05:00)',
+    title: 'R&D 개선 과제 새벽 자동 개발·반영 및 실적 탭 자동 표기 체계 구축',
+    summary:
+      '낮 동안 쌓인 R&D 개선 과제(NIGHTLY_QUEUE.md)를 매일 새벽 03:30 자비스 Claude가 자동 백업·개발·테스트 후 반영하고, 완료 내역을 제품 릴스 실적 탭(improvements.ts)과 UPDATES.md에 자동 기록하도록 구축했어요.',
+    status: 'done',
+    owner: 'Antigravity',
+  },
+  {
     id: 'IMP-20261124-05',
     date: '2026-11-24',
     category: 'experiment',

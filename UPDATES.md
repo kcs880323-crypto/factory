@@ -11,6 +11,7 @@
 
 | 시각(KST) | 영역 | 변경·업그레이드 내용 | 상태 | 기대 효과 / 비고 |
 |---|---|---|---|---|
+| 18:10 | **야간 자동 개발 (`DEC-008`)** | 매일 새벽 03:30~05:00 자비스 Claude 자동 개발·반영 스케줄러([`video-rnd/nightly/`](video-rnd/nightly/NIGHTLY_QUEUE.md)) 구축 + 완료 시 실적(`improvements.ts`) 자동 표기 연동 | ✅ 준비 완료 | 낮 R&D 과제 → 새벽 자동 개발·테스트 → 아침 실적 탭 확인 (자비스 PC에서 `install_schedule.ps1` 1회 실행 시 가동) |
 | 18:05 | **운영 정책 (`DEC-007`)** | 일반 개선 즉시 자율 적용 + 결과만 `UPDATES.md`로 자비스 브리핑 체계 확정 | ✅ 적용 | 대표님 확인 피로도 감소, 큰 업데이트(유료/브랜드/계정)만 사전 문의 |
 | 14:16 | **블로그 자동발행 (B 라인)** | 5줄 단순 링크 투척 → **SEO 7단 구매 가이드 생성기**([`generate_blog_post.py`](jarvis-skills/skills/jarvis-publish/scripts/generate_blog_post.py)) + 앱 [`compose.ts`](coupang-partners-app/src/lib/compose.ts) 고도화 | ✅ 적용 | 문제 해결형 제목·스펙 표·FAQ·연관 상품 내부 링크 + `FIX-001` 금지 표현 자동 차단 |
 | 13:54 | **영상일꾼 모니터 앱** | 바탕화면 실행용 **자비스 영상일꾼 · R&D 모니터 앱**([`video-rnd/monitor-app/`](video-rnd/monitor-app/README.md)) + 찰스 아이콘(`icon.ico`)·상품 썸네일 추가 | ✅ 적용 | 개선 이력·실험 현황·로컬 MP4·추천 페이지 무결성 이상을 한 창에서 모니터링 |
