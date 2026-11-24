@@ -20,6 +20,7 @@
 4. **충돌 방지 규칙:**
    - 작업 전 `git pull`, 보드 갱신 후 `git add` → `git commit` → `git push`.
    - 각 안건은 `## [AGENDA-NNN]` 블록으로 관리하고, Claude Desktop과 Antigravity는 **각자 지정된 응답 블록**에만 작성해 병합 충돌을 최소화.
+5. **실적 탭 개선 이력 기록:** 릴스·추천 페이지·품질 가드 개선 조치가 발생할 때마다 [`coupang-partners-app/src/data/improvements.ts`](coupang-partners-app/src/data/improvements.ts) 맨 위에 날짜(`YYYY-MM-DD`)와 조치 요약을 1건 추가해 앱의 **실적** 탭에서 실적 변화와 함께 바로 확인할 수 있게 유지.
 
 ---
 

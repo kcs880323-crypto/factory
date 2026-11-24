@@ -9,6 +9,7 @@ import { API_AVAILABLE } from '@/src/lib/hosting';
 import { summarize } from '@/src/lib/reports';
 import { errorText, useApp, type Cached } from '@/src/store/AppContext';
 import { Banner, Bars, Button, Card, Chip, Loading, Row, Screen, Section, Stat, T } from '@/src/ui/kit';
+import { ImprovementLog } from '@/src/ui/ImprovementLog';
 import { CacheNote, ModeBanner, PARTNERS_SITE, UsageMeter } from '@/src/ui/parts';
 import { useTheme } from '@/src/ui/theme';
 
@@ -81,6 +82,7 @@ export default function Reports() {
         <Button label="파트너스 사이트 열기" icon="open" href={PARTNERS_SITE} />
         {API_AVAILABLE ? <Button label="API 키 넣기" icon="key" kind="secondary" onPress={() => router.push('/settings')} /> : null}
         <Button label="예시 데이터로 화면 둘러보기" icon="eye" kind="ghost" onPress={() => updateSettings({ demoMode: true })} />
+        <ImprovementLog />
       </Screen>
     );
   }
@@ -190,6 +192,8 @@ export default function Reports() {
           ) : null}
         </>
       ) : null}
+
+      <ImprovementLog range={range} />
 
       <Card>
         <UsageMeter />
