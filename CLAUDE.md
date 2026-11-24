@@ -9,3 +9,4 @@
   - 만든 뒤 `knowledge-videos/ledger.json`에 기록한다. MP4 파일은 저장소에 올리지 않는다 (사용자가 요청하지 않는 한).
 - 사용자가 **"지식영상 유튜브·인스타 업로드"**라고 말하면 `jarvis-skills/skills/jarvis-publish/SKILL.md`를 읽고 그 절차대로 올린다: 연결 상태(`status`) 확인 → 올릴 내용(제목·설명·캡션·공개 범위)을 사용자에게 보여 주고 확인받기 → 허락받은 뒤에만 `--confirmed`로 업로드. 올리기 전 확인 없이 올리지 않고, 구글 클라이언트 비밀번호·토큰·Zernio API 키는 `~/.jarvis-publish`에만 두며 저장소·채팅에 쓰지 않는다. 로그인·2단계 인증·동의는 사용자가 직접 한다.
 - 예약, 가격 비교, 일정·메일, 브리핑, 문서·회의 요약 같은 **비서 업무 요청**은 `jarvis-skills/skills/jarvis-secretary/SKILL.md`의 절차를 따른다 (제안형 대화, 위임 한도 판정 `secretary_store.py decide`, 결제·민감정보는 하지 않음). "이거 배워", "다음부터 이렇게 해줘"는 `jarvis-skills/skills/jarvis-skill-learner/SKILL.md`를 따른다.
+- 사용자가 **"업그레이드 브리핑"**, **"최근 변경 사항 알려줘"**, **"뭐가 개선됐어?"**처럼 기능 변경·개선 결과를 물으면 `UPDATES.md`를 읽어 최신 날짜순으로 핵심 결과만 간결하게 요약 보고한다. R&D팀(Antigravity·Claude Desktop)이 기능을 수정·업그레이드하면 `DEC-007` 기준에 따라 일반 개선은 바로 적용하고 `UPDATES.md`에 결과만 누적한다.
