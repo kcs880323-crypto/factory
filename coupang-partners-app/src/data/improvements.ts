@@ -18,6 +18,17 @@ export interface ImprovementEntry {
 
 export const IMPROVEMENTS: ImprovementEntry[] = [
   {
+    id: 'IMP-20261124-04',
+    date: '2026-11-24',
+    category: 'reels',
+    target: '자비스 블로그 자동발행 · compose.ts',
+    title: 'SEO 7단 구매 가이드 블로그 생성 로직 및 진실성 가드 연동',
+    summary:
+      '단순 5줄 링크 투척에서 문제 해결형 제목·3줄 요약·스펙 표·체크리스트·FAQ·연관 상품 클러스터 구조로 고도화하고, FIX-001 금지 표현 차단기 포함 자비스 연동 스크립트(generate_blog_post.py)와 앱 compose.ts를 반영했어요.',
+    status: 'done',
+    owner: 'Antigravity',
+  },
+  {
     id: 'IMP-20261124-03',
     date: '2026-11-24',
     category: 'reels',

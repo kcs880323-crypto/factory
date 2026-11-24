@@ -17,9 +17,18 @@ export interface ComposeInput {
   title: string;
   url: string;
   price?: number;
+  priceDate?: string;
   memo?: string;
   isRocket?: boolean;
   disclosure?: string;
+  /** 검색 의도·문제 상황 한 줄 (블로그 SEO 제목·요약용) */
+  problem?: string;
+  /** 확인된 핵심 특징 목록 (최대 3개 권장) */
+  features?: string[];
+  /** 구매 전 체크·주의사항 */
+  cautions?: string[];
+  /** 함께 비교해 볼 만한 연관 상품 링크 */
+  relatedLinks?: { title: string; url: string; price?: number }[];
 }
 
 const won = (n: number) => `${Math.round(n).toLocaleString('ko-KR')}원`;
@@ -38,26 +47,77 @@ export function composePost(channel: Channel, input: ComposeInput): string {
   const disclosure = (input.disclosure || DEFAULT_DISCLOSURE).trim();
   const title = input.title.trim() || '추천 상품';
   const price = input.price && input.price > 0 ? won(input.price) : '';
+  const priceBasis = input.priceDate ? `${input.priceDate} 기준` : '글 쓴 시점 기준';
   const memo = input.memo?.trim();
   const rocket = input.isRocket ? '로켓배송' : '';
 
   switch (channel) {
-    case 'blog':
-      return [
-        `[광고] ${title}`,
+    case 'blog': {
+      const problem = input.problem?.trim();
+      const features = (input.features ?? []).map((f) => f.trim()).filter(Boolean);
+      const cautions = (input.cautions ?? []).map((c) => c.trim()).filter(Boolean);
+      const related = input.relatedLinks ?? [];
+      const headline = problem ? `[광고] ${problem.replace(/[.?!]+$/, '')}? ${title} 스펙·구매 전 체크` : `[광고] ${title}`;
+
+      if (!problem && features.length === 0 && cautions.length === 0 && related.length === 0) {
+        return [
+          headline,
+          '',
+          `※ ${disclosure}`,
+          '',
+          `오늘 소개할 상품은 「${title}」입니다.`,
+          memo ? `\n${memo}\n` : '',
+          price || rocket ? `■ 가격: ${[price, rocket].filter(Boolean).join(' · ')} (${priceBasis}, 바뀔 수 있어요)` : '',
+          `■ 상품 보러 가기: ${input.url}`,
+          '',
+          '※ 가격과 재고는 쿠팡 상품 페이지에서 최종 확인해 주세요.',
+        ]
+          .filter((l, i, a) => !(l === '' && a[i - 1] === ''))
+          .join('\n')
+          .trim();
+      }
+
+      const lines: string[] = [
+        headline,
         '',
         `※ ${disclosure}`,
         '',
-        `오늘 소개할 상품은 「${title}」입니다.`,
-        memo ? `\n${memo}\n` : '',
-        price || rocket ? `■ 가격: ${[price, rocket].filter(Boolean).join(' · ')} (글 쓴 시점 기준, 바뀔 수 있어요)` : '',
-        `■ 상품 보러 가기: ${input.url}`,
+        '1. 3줄 핵심 요약',
+        problem ? `- 이런 고민에 적합: ${problem}` : '',
+        features.length ? `- 핵심 특징: ${features.slice(0, 3).join(' / ')}` : '',
+        price || rocket ? `- 오늘 확인가: ${[price, rocket].filter(Boolean).join(' · ')} (${priceBasis})` : '',
+        memo ? `\n${memo}` : '',
         '',
-        '※ 가격과 재고는 쿠팡 상품 페이지에서 최종 확인해 주세요.',
-      ]
+        `■ 상품 상세 스펙·현재 가격 확인: ${input.url}`,
+      ];
+
+      if (features.length) {
+        lines.push('', '2. 구매 전 짚어볼 핵심 포인트');
+        features.forEach((f, idx) => lines.push(`${idx + 1}) ${f}`));
+      }
+
+      lines.push('', '3. 구매 전 꼭 체크할 점');
+      if (cautions.length) {
+        cautions.forEach((c) => lines.push(`- ${c}`));
+      } else {
+        lines.push(`- 표기된 가격은 ${priceBasis}이며 판매처 사정에 따라 변동될 수 있어요.`);
+        lines.push('- 구매 전 상세페이지에서 정확한 치수·옵션·배송 조건을 최종 확인해 주세요.');
+      }
+
+      if (related.length) {
+        lines.push('', '4. 함께 비교해 볼 만한 추천템');
+        related.slice(0, 3).forEach((r) => {
+          const rp = r.price && r.price > 0 ? ` (${won(r.price)})` : '';
+          lines.push(`- ${r.title}${rp}: ${r.url}`);
+        });
+      }
+
+      lines.push('', `👉 상품 보러 가기: ${input.url}`, '', hashtagsFrom(title));
+      return lines
         .filter((l, i, a) => !(l === '' && a[i - 1] === ''))
         .join('\n')
         .trim();
+    }
     case 'instagram':
       return [
         `[광고] ${disclosure}`,
