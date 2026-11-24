@@ -18,6 +18,17 @@ export interface ImprovementEntry {
 
 export const IMPROVEMENTS: ImprovementEntry[] = [
   {
+    id: 'IMP-20261124-05',
+    date: '2026-11-24',
+    category: 'experiment',
+    target: '네이버 블로그 찰스 추천템 · 자비스 blog_rnd',
+    title: 'B 라인(제품 블로그) R&D 자동 순환 가동 — 글별 클릭 실측·자동 승격',
+    summary:
+      '상품 글마다 챔피언·도전안을 번갈아 쓰고 쿠팡 링크를 글 전용 채널 ID(nb-…)로 발급해 글별 클릭을 실측해요. 판정 규칙(각 4편·7일, 1.2배 승격·0.9배 폐기)대로 대표 확인 없이 자동 적용하고, 표지에 제품 크게+큰 고민 글씨 배치(hero_keyword)를 더했어요. 네이버 조회수는 아직 데이터 필요.',
+    status: 'in_progress',
+    owner: '자비스',
+  },
+  {
     id: 'IMP-20261124-04',
     date: '2026-11-24',
     category: 'reels',
