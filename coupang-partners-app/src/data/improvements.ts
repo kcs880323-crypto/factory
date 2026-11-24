@@ -18,6 +18,83 @@ export interface ImprovementEntry {
 
 export const IMPROVEMENTS: ImprovementEntry[] = [
   {
+    id: 'IMP-20261124-13',
+    date: '2026-11-24',
+    category: 'guard',
+    target: '제품 릴스 링크·대본·발행 (NIGHT-007)',
+    title: '오트밀 영상에 땅콩버터가 소개된 사고 재발 방지',
+    summary:
+      '판매 링크가 영상 상품과 같은지 수집·자동화·추천 페이지에서 확인하고, Flow 전에 대본을 채점·고쳐 써서 실채점 90점·위반 0건일 때만 장면을 만들어요. 일꾼이 실패로 알린 영상은 올리지 않아요. 추천 페이지 34번(골든잇츠) 삭제, 33번 플라하반 확인.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
+    id: 'IMP-20261124-12',
+    date: '2026-11-24',
+    category: 'reels',
+    target: '대본 가격 (NIGHT-003)',
+    title: '대사 가격을 쿠팡 확인가로',
+    summary:
+      '일꾼에게 보내는 작업의 가격이 확인가의 절반으로 들어가 「이만원대」(실제 40,500원)라고 말하던 것을 고쳤어요. 과장 템플릿 문구도 대본 채점에서 막아요.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
+    id: 'IMP-20261124-11',
+    date: '2026-11-24',
+    category: 'guard',
+    target: '원본 생성기 채점 (NIGHT-005)',
+    title: 'API 키 없이도 실제 채점',
+    summary:
+      '일꾼에서 검증된 Claude Code CLI 채점을 원본에 반영하고, 키가 있어도 API가 실패하면 CLI로 채점해요(기본 98.5점만 남던 문제 방지).',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
+    id: 'IMP-20261124-10',
+    date: '2026-11-24',
+    category: 'reels',
+    target: '상품 선정 (NIGHT-004)',
+    title: '살림꿀템 위주 + 가격 높은 상품 우선',
+    summary:
+      '하루 비중 살림꿀템 60%·시즌가전 25%·식품 15%, 식품 연속 금지, 3만~15만원 우선. 실데이터 dry-run 평균 확인가 171,752원.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
+    id: 'IMP-20261124-09',
+    date: '2026-11-24',
+    category: 'reels',
+    target: '제품 릴스 품질 (NIGHT-006)',
+    title: '댓글 키워드·첫 화면 글자 위치·채점 정상화',
+    summary:
+      '댓글 키워드에서 「드럼·혼합·30개」를 빼고 핵심 품목(오트밀·볶음밥)으로, 첫 화면 글자를 위로 올려 제품을 가리지 않게, 채점기의 과장 문구 가산점을 없앴어요.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
+    id: 'IMP-20261124-08',
+    date: '2026-11-24',
+    category: 'page',
+    target: '추천 페이지 등록기 (NIGHT-001)',
+    title: '누락·중복·오매칭 등록 차단',
+    summary:
+      '사진 파일이 실제로 있는지, 같은 상품·같은 사진이 이미 있는지, 자동 설명이 다른 상품 이야기인지 등록 전에 확인해요.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
+    id: 'IMP-20261124-07',
+    date: '2026-11-24',
+    category: 'guard',
+    target: '블로그 자동발행 (NIGHT-002)',
+    title: 'SEO 7단 구매 가이드 + 진실성 검사',
+    summary:
+      '상품 글마다 7단 구매 가이드를 함께 만들고, 상품 소개 글은 발행 직전에 체험 사칭·근거 없는 1위·최저가·출처 없는 별점이 있으면 발행하지 않아요.',
+    status: 'done',
+    owner: '자비스',
+  },
+  {
     id: 'IMP-20261124-06',
     date: '2026-11-24',
     category: 'reels',
