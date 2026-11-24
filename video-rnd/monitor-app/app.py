@@ -211,6 +211,20 @@ class MonitorHandler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             html_bytes = (APP_DIR / "index.html").read_bytes()
             self._send(HTTPStatus.OK, "text/html; charset=utf-8", html_bytes)
+        elif self.path == "/favicon.png":
+            fav = REPO_ROOT / "docs" / "img" / "icon-192.png"
+            if fav.exists():
+                self._send(HTTPStatus.OK, "image/png", fav.read_bytes())
+            else:
+                self._send(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8", b"Not Found")
+        elif self.path.startswith("/product-img/"):
+            fname = pathlib.Path(self.path.removeprefix("/product-img/")).name
+            img_path = REPO_ROOT / "docs" / "img" / "p" / fname
+            if img_path.is_file():
+                ctype = "image/png" if fname.endswith(".png") else "image/webp" if fname.endswith(".webp") else "image/jpeg"
+                self._send(HTTPStatus.OK, ctype, img_path.read_bytes())
+            else:
+                self._send(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8", b"Not Found")
         elif self.path == "/api/overview":
             payload = json.dumps(build_overview(), ensure_ascii=False).encode("utf-8")
             self._send(HTTPStatus.OK, "application/json; charset=utf-8", payload)
