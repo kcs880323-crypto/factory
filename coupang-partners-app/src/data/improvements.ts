@@ -18,6 +18,28 @@ export interface ImprovementEntry {
 
 export const IMPROVEMENTS: ImprovementEntry[] = [
   {
+    id: 'IMP-20261127-02',
+    date: '2026-11-27',
+    category: 'reels',
+    target: '본편 자막 리듬·상품 선정 중복 방지 (NIGHT-014)',
+    title: '자막 한 줄 14자·핵심어 1개 강조 + 최근 3건 유사 품목 연속 차단',
+    summary:
+      '무음 시청에서도 한눈에 읽히도록 본편 자막을 모든 줄 14자 이하로 줄바꿈하고 한 화면에 핵심어 1개만 강조 색을 쓰도록 다듬었어요. 상품 자동 선정에서는 최근 3건의 핵심 품목명을 비교해 결로쿠션 같은 유사 상품이 연속으로 뽑히지 않도록 막았어요.',
+    status: 'done',
+    owner: 'Antigravity(임시 대행)',
+  },
+  {
+    id: 'IMP-20261127-01',
+    date: '2026-11-27',
+    category: 'experiment',
+    target: '첫 3초 시연 훅 (NIGHT-013 / EXP-005)',
+    title: '첫 프레임 0초 작동 시연 + 상단 훅 14자 안전영역 고정',
+    summary:
+      '상단 훅 글자를 14자 이하로 줄이고 인스타 상단 안전영역(제품 중앙 비가림)에 고정해 첫 화면에서 제품이 가려지지 않게 했어요. Flow 오프닝 영상도 0초부터 제품이 크게 움직이는 시연 장면을 우선 만들도록 바꿨어요.',
+    status: 'done',
+    owner: 'Antigravity(임시 대행)',
+  },
+  {
     id: 'IMP-20261125-03',
     date: '2026-11-25',
     category: 'guard',
