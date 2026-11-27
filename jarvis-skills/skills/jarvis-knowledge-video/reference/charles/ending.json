@@ -1,0 +1,40 @@
+[
+ {
+  "id": "en1",
+  "line": 99,
+  "part": "ending",
+  "spoken": "알아두면 언젠가 쓴다!",
+  "caption": "알아두면 언젠가 쓴다!",
+  "gap_before": 0.9
+ },
+ {
+  "id": "en2a",
+  "line": 100,
+  "part": "ending",
+  "spoken": "오늘의 지식공유가 유익했다면",
+  "caption": "오늘의 지식공유가 유익했다면 좋아요와 구독,"
+ },
+ {
+  "id": "en2b",
+  "line": 100,
+  "part": "ending",
+  "spoken": "좋아요와",
+  "caption": "",
+  "cap_join": true
+ },
+ {
+  "id": "en2c",
+  "line": 100,
+  "part": "ending",
+  "spoken": "구독,",
+  "caption": "",
+  "cap_join": true
+ },
+ {
+  "id": "en3",
+  "line": 100,
+  "part": "ending",
+  "spoken": "찰스였습니다!",
+  "caption": "찰스였습니다!"
+ }
+]

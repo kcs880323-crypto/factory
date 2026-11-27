@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>자비스 영상일꾼 · R&D 모니터</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <style>
+    :root {
+      --bg: #0f141e;
+      --panel: #161d2b;
+      --panel-2: #1d2638;
+      --border: #2a364f;
+      --text: #eef2fa;
+      --sub: #9aa7c0;
+      --accent: #ffb81c;
+      --blue: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(15, 20, 30, 0.92);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 22px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-icon { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); object-fit: cover; }
+    .thumb { width: 42px; height: 42px; border-radius: 8px; object-fit: cover; border: 1px solid var(--border); background: #fff; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+    h1 { margin: 0; font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+    .meta { font-size: 12px; color: var(--sub); }
+    button {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+      padding: 7px 13px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 13px;
+    }
+    button:hover { border-color: var(--blue); }
+    button.active { background: var(--blue); border-color: var(--blue); color: #07121f; }
+    main { max-width: 1120px; margin: 0 auto; padding: 18px 22px 48px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .kpi {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+    }
+    .kpi .label { font-size: 12px; color: var(--sub); }
+    .kpi .val { font-size: 24px; font-weight: 800; margin-top: 4px; }
+    .kpi .val.warn { color: var(--accent); }
+    .kpi .val.ok { color: var(--green); }
+    .kpi .val.err { color: var(--red); }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 18px; margin-bottom: 14px;
+    }
+    .card h2 { margin: 0 0 12px; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: space-between; }
+    .row {
+      padding: 12px 0; border-top: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .row:first-of-type { border-top: 0; padding-top: 0; }
+    .row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
+      background: var(--panel-2); color: var(--sub); border: 1px solid var(--border);
+    }
+    .badge.done { color: var(--green); border-color: rgba(63,185,80,0.4); }
+    .badge.prog { color: var(--accent); border-color: rgba(255,184,28,0.4); }
+    .badge.err { color: var(--red); border-color: rgba(248,81,73,0.45); }
+    .date-tag { color: var(--accent); font-weight: 800; font-size: 13px; }
+    .title { font-weight: 700; font-size: 15px; }
+    .desc { font-size: 13px; color: #cfd8ea; }
+    .sub { font-size: 12px; color: var(--sub); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { color: var(--sub); font-weight: 600; font-size: 12px; }
+    .hidden { display: none; }
+    .empty { color: var(--sub); font-size: 13px; padding: 8px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <img class="brand-icon" src="/favicon.png" alt="찰스" />
+      <div>
+        <h1>자비스 영상일꾼 · 퀄리티 R&D 모니터</h1>
+        <div class="meta" id="updated-at">불러오는 중…</div>
+      </div>
+    </div>
+    <button onclick="loadData()">↻ 새로고침</button>
+  </header>
+
+  <main>
+    <div class="kpi-grid" id="kpis"></div>
+
+    <div class="tabs">
+      <button class="active" data-tab="improvements" onclick="switchTab('improvements', this)">개선 조치 이력</button>
+      <button data-tab="experiments" onclick="switchTab('experiments', this)">R&D 실험 현황</button>
+      <button data-tab="worker" onclick="switchTab('worker', this)">영상일꾼 · 추천템 점검</button>
+      <button data-tab="board" onclick="switchTab('board', this)">회의 보드 · 결정 로그</button>
+    </div>
+
+    <section id="tab-improvements"></section>
+    <section id="tab-experiments" class="hidden"></section>
+    <section id="tab-worker" class="hidden"></section>
+    <section id="tab-board" class="hidden"></section>
+  </main>
+
+  <script>
+    const CAT = { reels: '제품 릴스', page: '추천 페이지', guard: '품질 가드', experiment: 'A/B 실험' };
+    const ST = { done: '조치 완료', in_progress: '진행 중' };
+    let DATA = null;
+    let impFilter = 'all';
+
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+    function fmtMD(ymd) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
+      return m ? `${Number(m[2])}월 ${Number(m[3])}일` : esc(ymd);
+    }
+
+    function switchTab(id, btn) {
+      document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+      document.getElementById('tab-' + id).classList.remove('hidden');
+      document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+    }
+
+    function renderAll() {
+      const d = DATA;
+      document.getElementById('updated-at').textContent = `마지막 동기화: ${d.generated_at} · 저장소: ${d.repo_root}`;
+
+      const doneCnt = d.improvements.filter(x => x.status === 'done').length;
+      const progCnt = d.improvements.filter(x => x.status === 'in_progress').length;
+      const issueCnt = d.products.issues.length;
+      const workerOk = d.worker.worker_connected;
+
+      document.getElementById('kpis').innerHTML = `
+        <div class="kpi"><div class="label">개선 조치 (완료 / 진행)</div><div class="val ok">${doneCnt}건 <span class="sub">/ 진행 ${progCnt}건</span></div></div>
+        <div class="kpi"><div class="label">추천 페이지 상품</div><div class="val">${d.products.total}개</div></div>
+        <div class="kpi"><div class="label">추천 페이지 무결성 이상</div><div class="val ${issueCnt ? 'err' : 'ok'}">${issueCnt}건</div></div>
+        <div class="kpi"><div class="label">로컬 일꾼 폴더</div><div class="val ${workerOk ? 'ok' : 'warn'}">${workerOk ? '연결됨' : '미연결'}</div></div>
+      `;
+
+      renderImprovements();
+      renderExperiments();
+      renderWorker();
+      renderBoard();
+    }
+
+    function renderImprovements() {
+      const list = DATA.improvements.filter(x => impFilter === 'all' || x.status === impFilter);
+      const rows = list.length ? list.map(it => `
+        <div class="row">
+          <div class="row-head">
+            <div>
+              <span class="date-tag">${fmtMD(it.date)}</span>
+              <span class="badge">${esc(CAT[it.category] || it.category)}</span>
+              <span class="badge">${esc(it.id)}</span>
+            </div>
+            <span class="badge ${it.status === 'done' ? 'done' : 'prog'}">${esc(ST[it.status] || it.status)}</span>
+          </div>
+          <div class="title">${esc(it.title)}</div>
+          <div class="desc">${esc(it.summary)}</div>
+          <div class="sub">대상: ${esc(it.target)}${it.owner ? ' · 담당: ' + esc(it.owner) : ''}</div>
+        </div>
+      `).join('') : '<div class="empty">해당 조건의 개선 이력이 없습니다.</div>';
+
+      document.getElementById('tab-improvements').innerHTML = `
+        <div class="card">
+          <h2>
+            <span>날짜별 릴스 · 운영 개선 조치 요약</span>
+            <span style="display:flex;gap:6px;">
+              <button class="${impFilter==='all'?'active':''}" onclick="impFilter='all';renderImprovements()">전체</button>
+              <button class="${impFilter==='done'?'active':''}" onclick="impFilter='done';renderImprovements()">조치 완료</button>
+              <button class="${impFilter==='in_progress'?'active':''}" onclick="impFilter='in_progress';renderImprovements()">진행 중</button>
+            </span>
+          </h2>
+          ${rows}
+        </div>
+      `;
+    }
+
+    function tableHtml(rows) {
+      if (!rows || !rows.length) return '<div class="empty">데이터가 없습니다.</div>';
+      const cols = Object.keys(rows[0]);
+      return `<table><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    }
+
+    function renderExperiments() {
+      document.getElementById('tab-experiments').innerHTML = `
+        <div class="card"><h2>R 라인 (제품 릴스 — 매출 엔진) 실험</h2>${tableHtml(DATA.r_line_experiments)}</div>
+        <div class="card"><h2>K 라인 (찰스 지식영상 — 신뢰 엔진) 실험</h2>${tableHtml(DATA.k_line_experiments)}</div>
+      `;
+    }
+
+    function renderWorker() {
+      const w = DATA.worker;
+      const p = DATA.products;
+      const issuesHtml = p.issues.length
+        ? p.issues.map(i => `<div class="row"><div class="row-head"><span class="badge err">${esc(i.type)}</span><span class="sub">${esc(i.no)}번</span></div><div class="desc">${esc(i.detail)}</div></div>`).join('')
+        : '<div class="empty" style="color:var(--green)">추천 페이지(docs/products.json) 이미지·중복 이상 0건 ✓</div>';
+
+      const vidsHtml = w.recent_videos.length
+        ? `<table><thead><tr><th>파일명</th><th>크기</th><th>생성 시각</th></tr></thead><tbody>${w.recent_videos.map(v => `<tr><td>${esc(v.name)}</td><td>${v.size_mb} MB</td><td>${esc(v.updated)}</td></tr>`).join('')}</tbody></table>`
+        : `<div class="empty">${w.worker_connected ? 'output/videos/ 안에 아직 MP4가 없습니다.' : '로컬 PC에서 실행하면 영상일꾼 출력 폴더(MP4)가 자동으로 표시됩니다.'}</div>`;
+
+      const recentProdHtml = `<table><thead><tr><th>사진</th><th>번호</th><th>상품명</th><th>가격</th><th>기준일</th></tr></thead><tbody>${
+        p.recent.map(x => {
+          const fname = x.image ? String(x.image).split('/').pop() : '';
+          const imgCell = fname ? `<img class="thumb" src="/product-img/${esc(fname)}" alt="" />` : '<span style="color:var(--red);font-size:12px;">없음</span>';
+          return `<tr><td>${imgCell}</td><td>${esc(x.no)}</td><td>${esc(x.title)}</td><td>${Number(x.price||0).toLocaleString()}원</td><td>${esc(x.priceDate||'')}</td></tr>`;
+        }).join('')
+      }</tbody></table>`;
+
+      document.getElementById('tab-worker').innerHTML = `
+        <div class="card">
+          <h2>로컬 영상일꾼 상태 (읽기 전용 · 키/쿠키 미접근)</h2>
+          <div class="sub">운영 일꾼: ${esc(w.worker_dir)} (${w.worker_connected ? '✅ 연결' : '⚪ 미연결'})</div>
+          <div class="sub" style="margin-bottom:10px;">R&D 복사본: ${esc(w.rnd_copy_dir)} (${w.rnd_copy_connected ? '✅ 연결' : '⚪ 미연결'})</div>
+          ${vidsHtml}
+        </div>
+        <div class="card"><h2>추천 페이지 무결성 자동 점검</h2>${issuesHtml}</div>
+        <div class="card"><h2>최근 등록 추천 상품 (상위 8개)</h2>${recentProdHtml}</div>
+      `;
+    }
+
+    function renderBoard() {
+      document.getElementById('tab-board').innerHTML = `
+        <div class="card"><h2>현재 R&D 현황판 (SYNC_BOARD.md)</h2>${tableHtml(DATA.status_board)}</div>
+        <div class="card"><h2>결정 사항 로그 (Decision Log)</h2>${tableHtml(DATA.decisions)}</div>
+      `;
+    }
+
+    async function loadData() {
+      const res = await fetch('/api/overview', { cache: 'no-store' });
+      DATA = await res.json();
+      renderAll();
+    }
+    loadData();
+  </script>
+</body>
+</html>

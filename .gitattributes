@@ -1,0 +1,5 @@
+# 윈도우에서 git clone 할 때 줄바꿈이 CRLF 로 바뀌면 install.sh 가 bash 에서 실패한다
+# (set: pipefail: invalid option name). 스크립트와 문서는 항상 LF 로 받는다.
+*.sh  text eol=lf
+*.md  text eol=lf
+*.zip binary

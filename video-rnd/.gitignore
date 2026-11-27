@@ -1,0 +1,13 @@
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.m4a
+proj/
+renders/
+audio/
+clauses/
+runs/
+snapshots/
+__pycache__/
+nightly/logs/
