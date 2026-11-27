@@ -478,6 +478,20 @@ def clean_text(s, limit=40):
     return s[:limit].strip()
 
 
+def parse_start_tab(value):
+    """--start-tab: 앱을 열 때 눌러 줄 사이트의 탭(단추) 글자. '|' 로 여러 개 (폰·태블릿에서 글자가 다를 때). 없으면 []."""
+    if not value or value == "none":
+        return []
+    out = []
+    for part in str(value).split("|"):
+        t = clean_text(part, 30)
+        if t and t not in out:
+            out.append(t)
+    if not out or len(out) > 4:
+        raise Fail("--start-tab 은 탭 글자 1~4개입니다 (예: '변동지출' 또는 '변동지출|변동지출 관리').")
+    return out
+
+
 def short_title(title):
     t = clean_text(title, 200)
     for sep in (" | ", " - ", " — ", " – ", " · ", " :: "):
@@ -2144,10 +2158,11 @@ def save_registry(home, reg):
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style", "mic", "widget_sizes", "notify",
-                 "update_encrypt", "hotword", "hotword_phrase", "voice_icon", "voice_icon_name", "watch")
+                 "update_encrypt", "hotword", "hotword_phrase", "voice_icon", "voice_icon_name", "watch", "start_tab")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto", "mic": False, "notify": False,
-            "update_encrypt": False, "hotword": False, "hotword_phrase": [], "voice_icon": False, "voice_icon_name": None, "watch": False}
+            "update_encrypt": False, "hotword": False, "hotword_phrase": [], "voice_icon": False, "voice_icon_name": None, "watch": False,
+            "start_tab": None}
 
 
 def cmd_build(args):
@@ -2353,6 +2368,9 @@ def cmd_build(args):
             cfg["hotword"] = hotword
         if watch:
             cfg["watch"] = True
+        start_tab = parse_start_tab(opt["start_tab"])
+        if start_tab:
+            cfg["start_click"] = start_tab
         if update_url:
             cfg["update_url"] = update_url
             if opt["update_encrypt"]:  # 업데이트 파일을 푸는 열쇠 (이 컴퓨터와 앱 안에만)
@@ -2491,6 +2509,8 @@ def cmd_build(args):
     if opt["mic"]:
         say("  마이크·음성 대화: 있음 (마이크 권한은 처음 쓸 때 묻는다. 웹 음성 기능 → 폰의 음성 인식·읽어 주기, "
             "마이크 모드 = 사이트의 urlappMic 또는 urlappAsk)")
+    if parse_start_tab(opt["start_tab"]):
+        say(f"  시작 탭: {' / '.join(parse_start_tab(opt['start_tab']))} (앱을 열 때·10분 넘게 나가 있다 돌아올 때 그 탭을 눌러 준다)")
     say(f"  다른 사이트 링크: {'브라우저로' if opt['external'] == 'browser' else '앱 안에서'} | 앱 안에서 여는 사이트: "
         + ", ".join(cfg["hosts"]))
     say("설치: 이 APK 를 태블릿·폰으로 옮겨 파일을 누르고 '출처를 알 수 없는 앱 설치'를 그 앱(파일 관리자 등)에만 허용한다."
@@ -3253,7 +3273,7 @@ def cmd_selftest(args):
                   "app.jarvis.urlapp.CardIntentReceiver" in mf8 and "app.jarvis.urlapp.action.CARD_NOTIFICATION" in mf8
                   and "CardListenerService" not in mf8 and "BIND_NOTIFICATION_LISTENER_SERVICE" not in mf8
                   and json.loads(z8.read("assets/urlapp-cards.json"))["via"] == "intent")
-            build(base + "/cards-l", "--no-fetch", "--cards", str(cards_json))  # 기본 = listener
+            build(base + "/cards-l", "--no-fetch", "--cards", str(cards_json), "--start-tab", "변동지출|변동지출 관리")  # 기본 = listener
             id9, rec9 = next((k, v) for k, v in load_registry(tmp_home)["apps"].items() if v["url"].endswith("/cards-l"))
             mf9 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec9["apk"]], tmp_home, "xmltree")
             check("카드(기본 listener): 알림 듣기 서비스는 시스템만 묶을 수 있게", "app.jarvis.urlapp.CardListenerService" in mf9
@@ -3272,6 +3292,14 @@ def cmd_selftest(args):
                   "app.jarvis.urlapp.CardPauseActivity" in sc9 and "app.jarvis.urlapp.action.CARD_PAUSE" in sc9
                   and "app.jarvis.urlapp.action.CARDS" in sc9 and sc9.count("E: shortcut (") <= 4
                   and b"Lapp/jarvis/urlapp/CardPauseActivity;" in dex9 and b"Lapp/jarvis/urlapp/CardPause;" in dex9, sc9[:600])
+            with zipfile.ZipFile(rec9["apk"]) as z9:
+                cfg9 = json.loads(z9.read("assets/urlapp.json"))
+            with zipfile.ZipFile(rec["apk"]) as zp:
+                cfg_plain = json.loads(zp.read("assets/urlapp.json"))
+            check("시작 탭(--start-tab): 설정에 글자 목록, 앱 코드에 누르는 스크립트, 안 준 앱에는 없음",
+                  cfg9.get("start_click") == ["변동지출", "변동지출 관리"] and b"__urlappStartTab" in dex9
+                  and "start_click" not in cfg_plain and raises(lambda: parse_start_tab("a|b|c|d|e")) and parse_start_tab("none") == [],
+                  (cfg9.get("start_click"), "start_click" in cfg_plain))
             check("카드(intent·MacroDroid): 듣기 서비스가 없어서 사용 중지 화면·바로가기도 없음",
                   "CardPauseActivity" not in mf8 and "CARD_PAUSE" not in sc8)
             lf = link_file_json(load_cards_config(cards_json))
@@ -3358,6 +3386,10 @@ def build_parser():
     b.add_argument("--watch", action=argparse.BooleanOptionalAction, default=None,
                    help="워치(Wear OS) 앱도 만든다: 타일(위젯 요약) + 음성 질문(폰이 사이트의 urlappAsk 로 묻고 답을 워치로). "
                         "폰 앱에 Google Play 서비스 Wearable 이 들어간다. 워치 APK 는 직접 설치(adb)")
+    b.add_argument("--start-tab", dest="start_tab",
+                   help="앱을 열 때 사이트의 이 탭(단추 글자)을 한 번 눌러 준다 — 주소로 탭을 고를 수 없는 사이트용 "
+                        "(예: '변동지출', 폰·태블릿에서 글자가 다르면 '변동지출|변동지출 관리'). 앱을 처음 열 때와 10분 넘게 나가 있다 "
+                        "돌아올 때. 'none' 이면 끈다")
     b.add_argument("--voice-icon", dest="voice_icon", action=argparse.BooleanOptionalAction, default=None,
                    help="대화 창을 바로 여는 두 번째 앱 아이콘 (--mic 필요). 빅스비 빠른 명령어·'OO 열어줘'로 부를 때 쓴다")
     b.add_argument("--voice-icon-name", dest="voice_icon_name",

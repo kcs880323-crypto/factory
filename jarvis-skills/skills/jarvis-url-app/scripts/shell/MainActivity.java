@@ -422,6 +422,7 @@ public class MainActivity extends Activity {
                 updateBackHandling();
                 pageReady = !mainFrameError && url != null && isOwnHost(Uri.parse(url).getHost());
                 if (pageReady && micPending) startMicMode();
+                if (pageReady) clickStartTab(url, false);
             }
 
             @Override
@@ -1381,6 +1382,8 @@ public class MainActivity extends Activity {
         // (안드로이드 14+ 는 앱이 앞에 있을 때만 마이크 서비스를 켤 수 있다)
         HotwordService.hold("app", true);
         HotwordService.appVisible(this);
+        long away = pausedAt == 0 ? 0 : SystemClock.elapsedRealtime() - pausedAt;
+        if (away >= START_TAB_AGAIN_MS && pageReady && web != null) clickStartTab(web.getUrl(), true); // 오래 나가 있다 다시 열면 시작 탭으로
         maybeLiveReload();
         if (widgetJs != null) {
             WidgetProvider.scheduleAuto(this); // 위젯 자동 새로고침 (켠 앱·위젯이 놓여 있을 때만)
@@ -1418,6 +1421,38 @@ public class MainActivity extends Activity {
                 .setNegativeButton(t("나중에", "Later"), null)
                 .setNeutralButton(t("다시 묻지 않기", "Don't ask again"), (d, w) -> store.setNeverAsk())
                 .show();
+    }
+
+    /**
+     * --start-tab: 앱을 열 때 사이트의 그 탭(단추)을 한 번 눌러 준다 — 사이트가 늘 첫 화면(예: 대시보드)으로 시작하고 주소로 탭을
+     * 고를 수 없을 때 (2026-11-27 가계부: 열면 '변동지출' 탭). 보이는 button·a·role=tab|button 중 글자(빈칸 무시)가 정확히 같은
+     * 첫 것을 누른다. 로그인 화면 등으로 아직 없으면 3분 동안 기다렸다가 나타나면 누르고, 한 화면(문서)에 한 번만.
+     */
+    static String startTabJs(JSONArray labels, boolean again) {
+        return "(function(labels,again){if(!again&&window.__urlappStartTab)return;window.__urlappStartTab=true;"
+                + "var until=Date.now()+180000;"
+                + "function norm(s){return String(s||'').replace(/\\s+/g,'');}"
+                + "var want=labels.map(norm);"
+                + "function find(){var els=document.querySelectorAll('button,a,[role=\"tab\"],[role=\"button\"]');"
+                + "for(var w=0;w<want.length;w++)for(var i=0;i<els.length;i++){var e=els[i];"
+                + "if(norm(e.innerText||e.textContent)===want[w]){var r=e.getBoundingClientRect();if(r.width>0&&r.height>0)return e;}}return null;}"
+                + "(function tick(){var e=find();if(e){e.click();return;}if(Date.now()<until)setTimeout(tick,400);})();"
+                + "})(" + labels.toString() + "," + again + ")";
+    }
+
+    private static final long START_TAB_AGAIN_MS = 10 * 60_000L;
+
+    /** 시작 탭 누르기: 첫 화면(시작 주소)일 때만. again 이면 이미 누른 문서라도 다시 (오래 나가 있다 돌아왔을 때). */
+    private void clickStartTab(String url, boolean again) {
+        JSONArray labels = cfg.optJSONArray("start_click");
+        if (web == null || labels == null || labels.length() == 0 || url == null) return;
+        if (!sameStart(url)) return; // 알림·바로가기로 다른 경로를 연 때는 그대로 둔다
+        web.evaluateJavascript(startTabJs(labels, again), null);
+    }
+
+    private boolean sameStart(String url) {
+        String a = url.replaceAll("#.*$", "").replaceAll("/+$", ""), b = startUrl.replaceAll("#.*$", "").replaceAll("/+$", "");
+        return a.equals(b);
     }
 
     /** --live: 30분 넘게 다른 앱에 있다 돌아오면 사이트를 새로 고친다 (그 사이 사이트를 고쳤으면 새 화면으로). */

@@ -34,6 +34,13 @@ function watchAskScript(question, session) {
   return lits.join("") + JSON.stringify(question) + "," + JSON.stringify(TOKEN) + "," + JSON.stringify(session || "") + ")";
 }
 
+// MainActivity.startTabJs (--start-tab): 앱을 열 때 사이트의 그 탭을 한 번 눌러 준다
+function startTabScript(labels, again) {
+  const seg = /static String startTabJs\([\s\S]*?return ([\s\S]*?)\+ labels\.toString\(\)/.exec(MAIN)[1];
+  const lits = [...seg.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
+  return lits.join("") + JSON.stringify(labels) + "," + again + ")";
+}
+
 const results = [];
 function check(label, cond, detail) {
   results.push(!!cond);
@@ -208,6 +215,35 @@ function check(label, cond, detail) {
       ["워치", { session: "abcd1234abcd1234" }], ["워치2", undefined]]), sess); // undefined 는 JSON 으로 null — 표시가 없으면 두 번째 인자가 undefined
   const wcalls = await page.evaluate(() => window.__calls.map((c) => [c.name, c.tokenOk].concat(c.args)));
   check("워치 질문의 답은 그대로 UrlAppAsk 로 (워치 스크립트가 깨지지 않음)", Array.isArray(wcalls), wcalls);
+
+  // 시작 탭 (--start-tab): 글자가 정확히 같은 '보이는' 단추만, 늦게 나타나도(로그인 뒤 등) 기다렸다 한 번, 같은 화면에선 다시 안 누름
+  const tp = await browser.newPage();
+  await tp.setContent("<!doctype html><html><body><span>변동지출</span><button style='display:none' onclick='window.__c.push(\"hidden\")'>변동지출</button>"
+    + "<button onclick='window.__c.push(\"side\")'>변동지출 관리</button><div id='nav'></div></body></html>");
+  const tabs = await tp.evaluate(async (scripts) => {
+    window.__c = [];
+    setTimeout(() => { document.getElementById("nav").innerHTML =
+      "<button onclick='window.__c.push(\"nav\")'><svg width='4' height='4'></svg><span>변동 지출</span></button>"; }, 700);
+    eval(scripts[0]);
+    await new Promise((r) => setTimeout(r, 1600));
+    const first = window.__c.slice();
+    eval(scripts[1]); // 같은 화면에서 또 불려도 (again=false) 누르지 않음
+    await new Promise((r) => setTimeout(r, 600));
+    const second = window.__c.slice();
+    eval(scripts[2]); // 오래 나가 있다 돌아옴 (again=true) → 다시 누름
+    await new Promise((r) => setTimeout(r, 600));
+    window.__c2 = window.__c.slice();
+    window.__c = [];
+    eval(scripts[3]); // 폰 글자가 없고 태블릿 글자만 있을 때는 그것
+    await new Promise((r) => setTimeout(r, 600));
+    return { first, second, third: window.__c2, alt: window.__c.slice() };
+  }, [startTabScript(["변동지출"], false), startTabScript(["변동지출"], false), startTabScript(["변동지출"], true),
+    startTabScript(["없는탭", "변동지출 관리"], true)]);
+  check("시작 탭: 늦게 나타난 보이는 단추를 한 번만 누름 (숨은 단추·글자만 있는 곳·'변동지출 관리'는 안 누름)",
+    JSON.stringify(tabs.first) === JSON.stringify(["nav"]) && JSON.stringify(tabs.second) === JSON.stringify(["nav"]), tabs);
+  check("시작 탭: 오래 나가 있다 돌아오면 다시 누르고, 여러 글자 중 있는 것을 누름",
+    JSON.stringify(tabs.third) === JSON.stringify(["nav", "nav"]) && JSON.stringify(tabs.alt) === JSON.stringify(["side"]), tabs);
+  await tp.close();
 
   // 알림 도우미 (notify.js): 웹 알림 → 폰 알림
   const np = await browser.newPage();
