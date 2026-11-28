@@ -1726,8 +1726,11 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
         # 기본 크기. 예전 계산(n칸 = 70n-30dp)은 칸이 좁던 시절 값이라, 칸이 넓은 요즘 런처(삼성 4·5열 등)에서는
         # 4칸 위젯이 3칸에 들어가 '3×2'로 보였다 (2026-11-20 사용자 "4X2 위젯도 만들어줘"). 4·5열 격자 모두에서
         # 원하는 칸 수가 되도록 고른 값 (안드로이드 12+ 는 targetCell 도 함께 본다).
+        # 2칸 높이는 125dp: 삼성 런처는 targetCell 을 따르지 않고 최소 높이로 칸을 세는데, 폴드 펼친 화면은 칸이 낮아
+        # 150dp 면 '4×2' 가 '4×3' 으로 보였다 (2026-11-28 사용자 위젯 목록 캡처 — '자비스'·'자비스 할 일' 모두 4X3).
+        # 칸이 높은 화면(덮개 화면 4×5 등)에서 1칸으로 줄지 않을 만큼은 남긴 값 (실기기 칸 크기는 추정).
         min_w = {1: 40, 2: 130, 3: 210, 4: 300, 5: 380}[cw]
-        min_h = {1: 50, 2: 150, 3: 270, 4: 400}[ch]
+        min_h = {1: 50, 2: 125, 3: 270, 4: 400}[ch]
         w(f"xml/{info}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_desc"
@@ -3093,9 +3096,9 @@ def cmd_selftest(args):
                                 "urlapp_widget_s3_info": ["2", "2"], "urlapp_widget_s4_info": ["4", "1"]}, cells)
             dps = {k: [int(float(x)) for x in re.findall(r"min(?:Width|Height)\(0x[0-9a-f]+\)=([0-9.]+)dp", v)]
                    for k, v in infos.items()}
-            check("크기별 위젯: 넓은 칸 런처에서도 4×2 가 3칸으로 줄지 않게 (기본 너비 300·210·130·300dp, 높이 150·150·150·50dp)",
-                  dps == {"urlapp_widget_info": [300, 150], "urlapp_widget_s2_info": [210, 150],
-                          "urlapp_widget_s3_info": [130, 150], "urlapp_widget_s4_info": [300, 50]}, dps)
+            check("크기별 위젯: 넓은 칸 런처에서도 4×2 가 3칸으로 줄지 않고 낮은 칸(폴드 펼친 화면)에서 3칸으로 늘지 않게 (너비 300·210·130·300dp, 높이 125·125·125·50dp)",
+                  dps == {"urlapp_widget_info": [300, 125], "urlapp_widget_s2_info": [210, 125],
+                          "urlapp_widget_s3_info": [130, 125], "urlapp_widget_s4_info": [300, 50]}, dps)
             with zipfile.ZipFile(recm["apk"]) as z:
                 f41 = next((n for n in z.namelist() if re.search(r"layout/urlapp_widget_s4\.xml$", n)), None)
             lay41 = run([tp["aapt2"], "dump", "xmltree", "--file", f41, recm["apk"]], tmp_home, "xmltree") if f41 else ""
