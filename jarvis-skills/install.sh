@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Jarvis 스킬 33종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
+# Jarvis 스킬 34종 설치 스크립트 (안내 스킬 복사 + 선택 옵션으로 실제 도구 설치)
 #
-#   ./install.sh                         jarvis-* 스킬 33개를 현재 폴더의 .claude/skills 에 복사
+#   ./install.sh                         jarvis-* 스킬 34개를 현재 폴더의 .claude/skills 에 복사
 #   ./install.sh --global                계정 전체(~/.claude/skills)에 복사
 #   ./install.sh --with-upstream         + 공식 스킬 원본 4개와 GSD 설치 (네트워크 필요)
 #   ./install.sh --with-browser          + agent-browser 명령줄 도구와 자동화용 크롬 설치
@@ -26,6 +26,8 @@
 #                                          <설정 폴더>/CLAUDE.md 에 덧붙임 (백업, 이미 있으면 건너뜀). 위임·비서 도구의 시험도 실행
 #   ./install.sh --with-devices          + 갤럭시탭·아이폰 화면 조작의 안전 훅 2개를 Claude Code 설정 파일에 추가 (백업, python3 필요)
 #                                          adb·Tailscale·Mac 은 설치하지 않음 (jarvis-device-control 스킬 참고)
+#   ./install.sh --with-url-app          + URL 을 안드로이드 앱(APK)으로 만드는 도구 준비: 구글 공식 빌드 도구(약 130MB, dl.google.com,
+#                                          해시 고정)를 ~/.jarvis-url-app 에 받고 서명 키를 만든 뒤 자체 시험. 파이썬 3.9+, JDK 17+ 필요
 #   (Claude Animation Base 는 프로젝트 폴더가 필요한 스타터 킷이라 설치하지 않음: jarvis-claude-animation-base 스킬 참고)
 #   환경변수 PPT_PYTHON=<python 경로>    PPT Master 부품을 설치할 파이썬 (기본 python3, 가상환경용)
 #   환경변수 REA_VERSION=<버전>          REA npm 버전 (기본: 시험한 6.7.0)
@@ -57,6 +59,7 @@ WITH_UIUX=0
 WITH_RUFLO=0
 WITH_CORE=0
 WITH_DEVICES=0
+WITH_URL_APP=0
 # 직접 시험한 버전으로 고정한다 (바뀔 수 있는 최신 버전을 그대로 실행하지 않기 위해).
 REA_VERSION="${REA_VERSION:-6.7.0}"
 GRAPHIFY_SPEC="${GRAPHIFY_SPEC:-graphifyy==0.9.95}"
@@ -81,6 +84,7 @@ JARVIS_SKILLS=(
   jarvis-ruflo
   jarvis-dispatch jarvis-device-control
   jarvis-publish
+  jarvis-url-app
 )
 # 공식 문서의 'releases/latest/download/agent-reach.zip' 대신 같은 릴리스 파일을 버전으로 고정한다
 # (v1.6.0 이 latest 일 때 두 주소는 같은 파일임을 확인함. 바뀔 수 있는 최신 파일을 그대로 실행하지 않기 위해).
@@ -112,6 +116,7 @@ for arg in "$@"; do
     --with-ruflo) WITH_RUFLO=1 ;;
     --with-jarvis-core) WITH_CORE=1 ;;
     --with-devices) WITH_DEVICES=1 ;;
+    --with-url-app) WITH_URL_APP=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "알 수 없는 옵션: $arg" >&2; usage >&2; exit 2 ;;
   esac
@@ -706,6 +711,24 @@ if [ "$WITH_DEVICES" -eq 1 ]; then
   say "훅은 Claude Code를 다시 시작한 뒤부터 적용됩니다."
 fi
 
+# 17) URL 앱 만들기 도구 — 구글 공식 빌드 도구(해시 고정)와 서명 키를 ~/.jarvis-url-app 에 준비한다.
+#     자바(JDK)는 설치하지 않는다 (없으면 안내만).
+URL_APP_TOOL="$TARGET/jarvis-url-app/scripts/url_app.py"
+if [ "$WITH_URL_APP" -eq 1 ]; then
+  step "17. URL 앱 만들기 도구 (jarvis-url-app)"
+  PYB="$(py_bin || true)"
+  if [ -z "$PYB" ]; then
+    fail "파이썬 3 가 없습니다 (자동으로 설치하지 않습니다). https://www.python.org 에서 설치한 뒤 다시 실행하세요. (URL 앱)"
+  elif ! command -v javac >/dev/null 2>&1 && [ ! -x "${JAVA_HOME:-/nonexistent}/bin/javac" ] && [ ! -x "${JAVA_HOME:-/nonexistent}/bin/javac.exe" ]; then
+    fail "JDK(javac)가 없습니다 (자동으로 설치하지 않습니다). JDK 17 이상을 설치한 뒤 다시 실행하세요. 윈도우: winget install Microsoft.OpenJDK.21 (URL 앱)"
+  elif [ ! -f "$URL_APP_TOOL" ]; then
+    fail "URL 앱 도구가 없습니다 ($URL_APP_TOOL). 먼저 스킬이 복사되어야 합니다."
+  else
+    "$PYB" -I "$URL_APP_TOOL" setup || fail "URL 앱 빌드 도구 설치 실패 (python $URL_APP_TOOL doctor 로 확인)"
+  fi
+  say "참고: 서명 키는 ~/.jarvis-url-app/signing 에 있습니다. 잃어버리면 만든 앱을 업데이트할 수 없으니 백업하세요."
+fi
+
 # 검증
 step "검증"
 for s in "${JARVIS_SKILLS[@]}"; do
@@ -836,6 +859,17 @@ if [ "$WITH_DEVICES" -eq 1 ]; then
     JARVIS_DEVICES_HOME="$(mktemp -d)" "$PYB" -I "$TARGET/jarvis-device-control/scripts/device_ctl.py" selftest >/tmp/jarvis-st3.$$ 2>&1 && say "OK   기기 조작 안전장치 시험: $(tail -n 1 /tmp/jarvis-st3.$$)" || fail "기기 조작 안전장치 시험 실패 ($(tail -n 1 /tmp/jarvis-st3.$$ 2>/dev/null))"
     "$PYB" -I "$TARGET/jarvis-device-control/scripts/device_guard_hook.py" selftest >/tmp/jarvis-st4.$$ 2>&1 && say "OK   기기 보호 훅 시험: $(tail -n 1 /tmp/jarvis-st4.$$)" || fail "기기 보호 훅 시험 실패 ($(tail -n 1 /tmp/jarvis-st4.$$ 2>/dev/null))"
     rm -f /tmp/jarvis-st3.$$ /tmp/jarvis-st4.$$
+  fi
+fi
+
+if [ "$WITH_URL_APP" -eq 1 ]; then
+  PYB="$(py_bin || true)"
+  if [ -z "$PYB" ] || [ ! -f "$URL_APP_TOOL" ]; then
+    fail "URL 앱 도구를 확인할 수 없음 (파이썬 또는 $URL_APP_TOOL 없음)"
+  else
+    "$PYB" -I "$URL_APP_TOOL" doctor >/tmp/jarvis-st5.$$ 2>&1 && say "OK   URL 앱 준비: $(tail -n 1 /tmp/jarvis-st5.$$)" || fail "URL 앱 준비 안 됨 ($(tail -n 1 /tmp/jarvis-st5.$$ 2>/dev/null))"
+    "$PYB" -I "$URL_APP_TOOL" selftest >/tmp/jarvis-st6.$$ 2>&1 && say "OK   URL 앱 자체 시험: $(tail -n 1 /tmp/jarvis-st6.$$)" || fail "URL 앱 자체 시험 실패 ($(tail -n 1 /tmp/jarvis-st6.$$ 2>/dev/null))"
+    rm -f /tmp/jarvis-st5.$$ /tmp/jarvis-st6.$$
   fi
 fi
 
