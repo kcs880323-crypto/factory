@@ -7,6 +7,8 @@ package app.jarvis.urlapp;
 //   워치 → 폰  메시지 /urlapp/ask {id, q}                      — 워치에서 말한 질문
 //   폰 → 워치  메시지 /urlapp/status {id, text}·/urlapp/answer {id, ok, text}
 //   워치 → 폰  메시지 /urlapp/refresh                           — 타일을 볼 때 오래된 요약이면
+//   폰 → 워치  메시지 /urlapp/alarm {act: ring|stop, id, label, at} — 폰 알람(--alarms)이 울림·멈춤 (워치도 진동)
+//   워치 → 폰  메시지 /urlapp/alarm-action {act: dismiss|snooze, id} — 워치에서 끄기·5분 뒤
 
 import android.content.Context;
 
@@ -14,4 +16,7 @@ interface WatchLink {
     void pushWidget(Context ctx, String json);
 
     void send(Context ctx, String node, String path, String json);
+
+    /** 연결된 이 앱의 워치(능력 urlapp_watch) 모두에 보낸다. */
+    void broadcast(Context ctx, String path, String json);
 }

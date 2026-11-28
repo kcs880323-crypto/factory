@@ -53,6 +53,7 @@ public class WatchAskActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         current = this;
+        askNotifyOnce(); // 폰 알람을 워치에서도 알림(끄기 / 5분 뒤)으로 보이려면 (워치 OS 4+)
         DisplayMetrics dm = getResources().getDisplayMetrics();
         int side = Math.max(dp(18), (int) (Math.min(dm.widthPixels, dm.heightPixels) * 0.12)); // 둥근 화면 가장자리
         scroll = new ScrollView(this);
@@ -324,5 +325,23 @@ public class WatchAskActivity extends Activity {
         StringBuilder s = new StringBuilder();
         for (byte x : b) s.append(String.format(Locale.ROOT, "%02x", x));
         return s.toString();
+    }
+
+    /** 알림 권한 (워치 OS 4 = 안드로이드 13+): 매니페스트에 있을 때만, 처음 한 번 묻는다. 거절해도 진동은 울린다. */
+    private void askNotifyOnce() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return;
+        String perm = "android.permission.POST_NOTIFICATIONS";
+        if (checkSelfPermission(perm) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        SharedPreferences p = getSharedPreferences("urlapp_watch_perm", MODE_PRIVATE);
+        if (p.getBoolean("notify_asked", false)) return;
+        try {
+            String[] declared = getPackageManager().getPackageInfo(getPackageName(),
+                    android.content.pm.PackageManager.GET_PERMISSIONS).requestedPermissions;
+            if (declared == null || !java.util.Arrays.asList(declared).contains(perm)) return;
+        } catch (Exception e) {
+            return;
+        }
+        p.edit().putBoolean("notify_asked", true).apply();
+        requestPermissions(new String[] {perm}, 7415);
     }
 }

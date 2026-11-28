@@ -72,6 +72,7 @@ public class AlarmService extends Service {
         if (!ringing) {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) nm.cancel(NOTE_ID);
+            WatchBridge.alarm(ctx, "stop", "", null, 0);
             String fid = AlarmSync.prefs(ctx).getString("fallback", null); // 진동 알림(대체)으로 울린 알람
             if (fid != null) {
                 AlarmSync.prefs(ctx).edit().remove("fallback").apply();
@@ -115,6 +116,7 @@ public class AlarmService extends Service {
             ringing = true;
             vibrate();
             hold();
+            WatchBridge.alarm(this, "ring", id, ringTitle, at); // 연결된 워치도 같이 진동 (--watch 앱)
             handler.removeCallbacks(timeout);
             handler.postDelayed(timeout, RING_MS);
         } else if (AlarmReceiver.ACTION_DISMISS.equals(a)) {
@@ -174,6 +176,7 @@ public class AlarmService extends Service {
         }
         current.clear();
         quiet();
+        WatchBridge.alarm(this, "stop", "", null, 0); // 워치도 멈춤
         AlarmSync.requestSync(this, snooze ? "snooze" : "dismiss", 4000); // 반복 알람은 다음 시각을 다시 읽는다
         stopFg();
         stopSelf();
@@ -184,6 +187,7 @@ public class AlarmService extends Service {
         for (Map.Entry<String, String> e : current.entrySet()) missedNote(this, e.getKey(), e.getValue(), ringAt);
         current.clear();
         quiet();
+        WatchBridge.alarm(this, "stop", "", null, 0);
         AlarmSync.requestSync(this, "missed", 4000);
         stopFg();
         stopSelf();
@@ -389,5 +393,6 @@ public class AlarmService extends Service {
         n.flags |= Notification.FLAG_INSISTENT;
         nm.notify(NOTE_ID, n);
         AlarmSync.prefs(ctx).edit().putString("fallback", id).apply(); // 끄면 사이트에도 알린다 (action)
+        WatchBridge.alarm(ctx, "ring", id, label, at);
     }
 }

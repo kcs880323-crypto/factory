@@ -3,6 +3,7 @@ package app.jarvis.urlapp;
 // 폰이 보낸 것을 워치가 받는다 (Google Play 서비스가 깨운다).
 //   데이터 /urlapp/widget {json, at}            → 보관하고 타일을 새로 그리게 한다
 //   메시지 /urlapp/status·/urlapp/answer {id, …} → 대화 화면(WatchAskActivity)에 넘긴다 (없으면 보관)
+//   메시지 /urlapp/alarm {act: ring|stop, …}     → 폰 알람과 같이 진동·알림 (WatchAlarm)
 
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
@@ -52,6 +53,8 @@ public class WatchListener extends WearableListenerService {
         String path = e.getPath();
         if ("/urlapp/status".equals(path) || "/urlapp/answer".equals(path)) {
             WatchAskActivity.fromPhone(getApplicationContext(), path, new String(e.getData(), StandardCharsets.UTF_8));
+        } else if ("/urlapp/alarm".equals(path)) { // 폰 알람이 울림·멈춤 → 워치도 같이 진동 (WatchAlarm)
+            WatchAlarm.fromPhone(getApplicationContext(), new String(e.getData(), StandardCharsets.UTF_8));
         }
     }
 }

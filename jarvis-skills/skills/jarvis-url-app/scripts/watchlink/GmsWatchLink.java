@@ -5,6 +5,9 @@ package app.jarvis.urlapp;
 
 import android.content.Context;
 
+import com.google.android.gms.wearable.CapabilityClient;
+import com.google.android.gms.wearable.CapabilityInfo;
+import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.PutDataMapRequest;
 import com.google.android.gms.wearable.Wearable;
 
@@ -25,5 +28,14 @@ public final class GmsWatchLink implements WatchLink {
     @Override
     public void send(Context ctx, String node, String path, String json) {
         Wearable.getMessageClient(ctx).sendMessage(node, path, (json == null ? "" : json).getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Override
+    public void broadcast(Context ctx, String path, String json) {
+        byte[] data = (json == null ? "" : json).getBytes(StandardCharsets.UTF_8);
+        Wearable.getCapabilityClient(ctx).getCapability("urlapp_watch", CapabilityClient.FILTER_REACHABLE)
+                .addOnSuccessListener((CapabilityInfo info) -> {
+                    for (Node n : info.getNodes()) Wearable.getMessageClient(ctx).sendMessage(n.getId(), path, data);
+                });
     }
 }

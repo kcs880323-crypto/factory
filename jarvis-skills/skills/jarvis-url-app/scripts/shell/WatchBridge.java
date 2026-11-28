@@ -37,6 +37,29 @@ final class WatchBridge {
         }
     }
 
+    /** 연결된 워치 모두에 (워치가 없거나 --watch 앱이 아니면 아무것도 안 함). */
+    static void broadcast(Context ctx, String path, String json) {
+        WatchLink l = get();
+        if (l == null) return;
+        try {
+            l.broadcast(ctx.getApplicationContext(), path, json);
+        } catch (Throwable t) {
+            android.util.Log.w("urlapp", "워치로 보내기 실패: " + t);
+        }
+    }
+
+    /** 폰 알람이 울림(ring)·멈춤(stop) → 워치도 같이 진동·멈춤. */
+    static void alarm(Context ctx, String act, String id, String label, long at) {
+        if (!available()) return;
+        try {
+            org.json.JSONObject o = new org.json.JSONObject().put("act", act).put("id", id == null ? "" : id);
+            if (label != null) o.put("label", label).put("at", at);
+            broadcast(ctx, "/urlapp/alarm", o.toString());
+        } catch (Exception ignored) {
+            // 넣을 수 없는 값 없음
+        }
+    }
+
     static void send(Context ctx, String node, String path, String json) {
         WatchLink l = get();
         if (l == null || node == null || node.isEmpty()) return;

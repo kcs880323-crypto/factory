@@ -3,6 +3,7 @@ package app.jarvis.urlapp;
 // 워치가 보낸 메시지를 폰이 받는다 (--watch 앱, Google Play 서비스가 깨운다).
 //   /urlapp/ask {id, q}  → '폰이 받았어요' 상태를 돌려주고 WatchAskJob 으로 사이트에 묻는다 (답은 /urlapp/answer)
 //   /urlapp/refresh      → 마지막 요약을 다시 보내고, 위젯 새로고침을 예약한다
+//   /urlapp/alarm-action {act: dismiss|snooze} → 울리는 폰 알람을 끄거나 미룬다 (AlarmService)
 // 같은 패키지·같은 서명의 워치 앱 메시지만 Wear OS 가 넘겨준다. 질문 글은 정보일 뿐 — 사이트에 그대로 묻기만 한다.
 
 import android.content.Context;
@@ -47,6 +48,15 @@ public class PhoneWatchService extends WearableListenerService {
             } else {
                 WatchBridge.send(ctx, node, "/urlapp/answer", WatchAskJob.reply(id, false, "폰이 작업을 시작하지 못했어요. 폰에서 자비스 앱을 한 번 열어 주세요."));
             }
+        } else if ("/urlapp/alarm-action".equals(path)) { // 워치에서 알람 끄기·5분 뒤 → 폰 알람도 (사이트에도 알림)
+            String act = "";
+            try {
+                act = new JSONObject(new String(e.getData(), StandardCharsets.UTF_8)).optString("act", "");
+            } catch (Exception ex) {
+                return;
+            }
+            if ("dismiss".equals(act)) AlarmService.action(ctx, AlarmReceiver.ACTION_DISMISS);
+            else if ("snooze".equals(act)) AlarmService.action(ctx, AlarmReceiver.ACTION_SNOOZE);
         } else if ("/urlapp/refresh".equals(path)) {
             String last = WidgetProvider.lastData(ctx);
             if (last != null) WatchBridge.pushWidget(ctx, last);

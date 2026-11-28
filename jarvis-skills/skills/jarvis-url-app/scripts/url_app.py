@@ -1131,12 +1131,28 @@ def write_resources(res, app_id, name, theme, bg, icon_bg, cards=False, update=F
 
 # ---------------------------------------------------------------- 빌드
 
-def watch_manifest_xml(app_id):
-    """워치 앱 매니페스트: 폰 앱과 같은 패키지 이름 (Data Layer 는 같은 패키지·서명끼리만). 사이트 주소는 들어 있지 않다."""
+def watch_manifest_xml(app_id, alarms=False):
+    """워치 앱 매니페스트: 폰 앱과 같은 패키지 이름 (Data Layer 는 같은 패키지·서명끼리만). 사이트 주소는 들어 있지 않다.
+    alarms(폰이 --alarms): 폰 알람이 울릴 때 워치도 진동 — 진동·화면 깨우기·알림(워치 OS 4+ 는 워치 앱을 열 때 묻는다)·
+    전체 화면 권한, 알림 단추 받는 곳·알람 창 (둘 다 내보내지 않음)."""
+    perms = "".join(f'\n    <uses-permission android:name="android.permission.{x}" />'
+                    for x in ("VIBRATE", "WAKE_LOCK", "POST_NOTIFICATIONS", "USE_FULL_SCREEN_INTENT")) if alarms else ""
+    alarm_parts = f"""
+        <receiver
+            android:name="app.jarvis.urlapp.WatchAlarmReceiver"
+            android:exported="false" />
+        <activity
+            android:name="app.jarvis.urlapp.WatchAlarmActivity"
+            android:exported="false"
+            android:taskAffinity="{app_id}.alarm"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />""" if alarms else ""
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="{app_id}">
-    <uses-feature android:name="android.hardware.type.watch" />
+    <uses-feature android:name="android.hardware.type.watch" />{perms}
     <queries>
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
@@ -1200,7 +1216,7 @@ def watch_manifest_xml(app_id):
         <activity
             android:name="com.google.android.gms.common.api.GoogleApiActivity"
             android:exported="false"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />{alarm_parts}
     </application>
 </manifest>
 """
@@ -1252,7 +1268,7 @@ def write_watch_resources(res, name, icon_bg, accent, phone_res):
 
 
 def build_watch_apk(home, tc, java, javac, ks, pw, app_id, name, icon_bg, accent, phone_res, version_code, version_name,
-                    out_dir, workdir):
+                    out_dir, workdir, alarms=False):
     """--watch: 워치 앱 APK (같은 패키지·같은 서명). 타일 + 대화 화면 + 폰과의 Data Layer. 사이트 주소는 넣지 않는다."""
     p = tool_paths(tc)
     wd = workdir / "watch"
@@ -1263,7 +1279,7 @@ def build_watch_apk(home, tc, java, javac, ks, pw, app_id, name, icon_bg, accent
     jars = [lib["jar"] for lib in libs]
     lib_zips, pkgs = lib_resources(p, wd, libs, "watch")
     run([p["aapt2"], "compile", "--dir", res, "-o", wd / "res.zip"], wd, "워치 리소스 컴파일(aapt2 compile)")
-    (wd / "AndroidManifest.xml").write_text(watch_manifest_xml(app_id), encoding="utf-8")
+    (wd / "AndroidManifest.xml").write_text(watch_manifest_xml(app_id, alarms), encoding="utf-8")
     gen = wd / "gen"
     gen.mkdir()
     unsigned = wd / "unsigned.apk"
@@ -1271,7 +1287,7 @@ def build_watch_apk(home, tc, java, javac, ks, pw, app_id, name, icon_bg, accent
          "--min-sdk-version", str(WATCH_MIN_SDK), "--target-sdk-version", str(TARGET_SDK),
          "--version-code", str(version_code), "--version-name", version_name, "--auto-add-overlay",
          "--java", gen, "--extra-packages", ":".join(pkgs), wd / "res.zip", *lib_zips], wd, "워치 앱 묶기(aapt2 link)")
-    app = app_dex(tc, javac, java, wd, "워치 앱", sorted(WATCH_DIR.glob("*.java")) + [SHELL_DIR / "CrashLog.java"],
+    app = app_dex(tc, javac, java, wd, "워치 앱", sorted(WATCH_DIR.glob("*.java")) + [SHELL_DIR / "CrashLog.java", SHELL_DIR / "AlarmPlan.java"],
                   ["app/jarvis/urlapp/"], jars, gen, pkgs,
                   WATCH_MIN_SDK)
     lib_dex = dex_jars(home, tc, java, jars, WATCH_MIN_SDK, wd)
@@ -2801,7 +2817,7 @@ def cmd_build(args):
             say("워치 앱 만드는 중")
             watch_apk = build_watch_apk(home, tc, java, javac, ks, pw, app_id, name, icon_info["icon_bg"],
                                         accent or icon_color or (theme if not is_near_white(theme) else "#2DD4DA"),
-                                        res, version_code, version_name, out_dir, workdir)
+                                        res, version_code, version_name, out_dir, workdir, alarms=bool(opt["alarms"]))
             if cert_digest(java, p["apksigner"], watch_apk, workdir) != digest:
                 raise Fail("워치 앱의 서명이 폰 앱과 다릅니다 (Data Layer 가 연결되지 않음).")
 
@@ -3484,7 +3500,7 @@ def cmd_selftest(args):
             (tmp_home / "deps" / "maven").mkdir(parents=True, exist_ok=True)
             for f in list((home / "deps" / "maven").glob("*.aar")) + list((home / "deps" / "maven").glob("*.jar")):
                 shutil.copyfile(f, tmp_home / "deps" / "maven" / f.name)  # 이미 받은 묶음 (SHA-256 은 다시 확인)
-            build(base + "/watch", "--no-fetch", "--name", "자비스", "--mic", "--widget", str(wjs), "--watch")
+            build(base + "/watch", "--no-fetch", "--name", "자비스", "--mic", "--widget", str(wjs), "--watch", "--alarms")
             recw = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/watch"))
             mfw = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", recw["apk"]], tmp_home, "xmltree")
             resw = run([tp["aapt2"], "dump", "resources", recw["apk"]], tmp_home, "resources")
@@ -3530,6 +3546,18 @@ def cmd_selftest(args):
                       "app.jarvis.urlapp.CrashLog$Init" in mfw and "app.jarvis.urlapp.CrashLog$Init" in mfww
                       and re.search(r"android:exported\(0x01010010\)=(false|\(type 0x12\)0x0\b)", crash_entry)
                       and b"Lapp/jarvis/urlapp/CrashLog;" in dexww and b"Lapp/jarvis/urlapp/CrashLog;" in dexw, crash_entry)
+                wperms = re.findall(r'android:name\(0x01010003\)="(android\.permission\.[A-Z_]+)"', mfww)
+                war = mfww[mfww.rfind("E: ", 0, mfww.find("app.jarvis.urlapp.WatchAlarmReceiver")):]
+                war = war[:war.find("E: activity") if war.find("E: activity") > 0 else len(war)]
+                waa = mfww[mfww.rfind("E: ", 0, mfww.find("app.jarvis.urlapp.WatchAlarmActivity")):]
+                check("워치 알람(--alarms): 폰 알람 때 워치도 진동 — 진동·화면 깨우기·알림·전체 화면 권한, 단추 받는 곳·알람 창(내보내지 않음), "
+                      "폰은 /urlapp/alarm 보내고 /urlapp/alarm-action 받음",
+                      all(f"android.permission.{x}" in wperms for x in ("VIBRATE", "WAKE_LOCK", "POST_NOTIFICATIONS", "USE_FULL_SCREEN_INTENT"))
+                      and re.search(r"exported\(0x[0-9a-f]+\)=(false|\(type 0x12\)0x0\b)", war) is not None
+                      and re.search(r"exported\(0x[0-9a-f]+\)=(false|\(type 0x12\)0x0\b)", waa) is not None
+                      and b"Lapp/jarvis/urlapp/WatchAlarm;" in dexww and b"Lapp/jarvis/urlapp/AlarmPlan;" in dexww
+                      and b"/urlapp/alarm-action" in dexww and b"/urlapp/alarm-action" in dexw and b"/urlapp/alarm" in dexw
+                      and "app.jarvis.urlapp.AlarmService" in mfw, (wperms, war[:300]))
                 check("워치 앱에는 사이트 주소·웹 화면 코드가 없음 (폰을 거쳐서만)", host_w not in allw
                       and b"Landroid/webkit/WebView;" not in own_dex and b"assets/urlapp.json" not in allw, "")
             gms_only = [lib["jar"] for lib in maven_libs(tmp_home, GMS_LIBS[:4])]
