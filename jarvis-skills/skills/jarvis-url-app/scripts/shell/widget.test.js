@@ -24,7 +24,8 @@ function asset(script) {
   const m = /^\s*\/\/\s*urlapp:rows\s+(\d+)\s*$/m.exec(script);
   const a = /^\s*\/\/\s*urlapp:alt-rows\s+(\d+)\s*$/m.exec(script);
   const rows = m ? m[1] : "4";
-  return RUNNER.replace(ROWS_SLOT, rows).replace(ALT_ROWS_SLOT, a ? a[1] : rows)
+  const scroll = /^\s*\/\/\s*urlapp:alt-scroll\s*$/m.test(script);
+  return RUNNER.replace(ROWS_SLOT, rows).replace(ALT_ROWS_SLOT, scroll ? "30" : a ? a[1] : rows)
     .replace(SLOT, "(\n" + script.trim().replace(/;\s*$/, "") + "\n)");
 }
 const ASSET = asset(LEDGER);
@@ -51,7 +52,7 @@ function check(label, cond, detail) {
     { id: 1, source_table: "monthly_details", date: "2026-11-03", details: "메가커피", amount: 12500, earner_name: "창수", memo: "현대카드" },
   ];
   let cjMode = "off"; // CHARLES 위젯: off | jobs | idle | login
-  let cjTodo = "none"; // 두 번째 위젯(할 일): none | site(/urlapp-todo.json) | memos(/api/memos)
+  let cjTodo = "none"; // 두 번째 위젯(할 일): none | site(/urlapp-todo.json) | memos(/api/memos) | todos(/api/todos) | many
   const cjReqs = [];
   let spMode = "none"; // 범용 위젯: /urlapp-widget.json 이 어떻게 답하는지 (none = 일반 페이지)
   let serverSession = false; // 서버(/api/session)가 로그인이라고 하는지 (보이지 않는 웹 화면에서 새로 고칠 때)
@@ -116,6 +117,17 @@ function check(label, cond, detail) {
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ title: "할 일 3", note: "오늘 1",
         rows: [{ label: "전기차 보고", value: "D-2", tone: "pos" }, { label: "견적 회신", value: "오늘" }, { label: "명함 정리", value: "" }] }));
+    }
+    if (req.url === "/api/todos" && (cjTodo === "todos" || cjTodo === "many")) {
+      const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n);
+        return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+      const list = cjTodo === "many"
+        ? Array.from({ length: 40 }, (_, i) => ({ id: i, title: `할 일 ${i + 1}`, due: d(i), completed: false }))
+        : [{ id: 1, title: "테스트", due: d(0), source: "naver", completed: false },
+          { id: 2, title: "엄마 점심", due: d(1), source: "naver", completed: false },
+          { id: 3, title: "끝난 것", due: d(0), completed: true }];
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ todos: list }));
     }
     if (req.url.startsWith("/api/memos") && cjTodo === "memos") {
       const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n);
@@ -581,7 +593,20 @@ function check(label, cond, detail) {
   check("할 일 위젯(대체): 메모장의 안 끝난 일만, 지난 것·가까운 것 먼저, 기한 없는 것은 뒤, '메모장 기준'",
     cmm.alt && cmm.alt.title === "자비스 할 일 4" && JSON.stringify(cmm.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
       ["📅 검진 예약", "1일 지남", "neg"], ["🧾 택시비 정산", "오늘", "pos"], ["💼 전기차 보고", "D-3", ""], ["📝 세탁소 찾기", "개인·기타", ""]])
-      && cmm.alt.note === "지남 1 · 메모장 기준", cmm.alt);
+      && cmm.alt.note === "지남 1 · 오늘 1 · 메모장 기준", cmm.alt);
+  cjTodo = "todos";
+  await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
+  await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
+  const ctd = await cj.evaluate(() => __w[3]);
+  check("할 일 위젯: '메모장 · TO-DO' 의 할 일 목록(/api/todos)을 찾으면 그것 (끝난 것 빼고, 오늘 먼저, '메모장 기준' 없음)",
+    ctd.alt && ctd.alt.title === "자비스 할 일 2" && JSON.stringify(ctd.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
+      ["테스트", "오늘", "pos"], ["엄마 점심", "D-1", ""]]) && ctd.alt.note === "오늘 1", ctd.alt);
+  cjTodo = "many";
+  await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
+  await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
+  const cmy = await cj.evaluate(() => __w[3]);
+  check("할 일 위젯: 많으면 넘겨 보는 목록에 30줄까지 (나머지는 '외 N개')", cmy.alt && cmy.alt.rows.length === 30
+    && cmy.alt.rows[29].label === "할 일 30" && cmy.alt.note.includes("외 10개"), [cmy.alt && cmy.alt.rows.length, cmy.alt && cmy.alt.note]);
   cjTodo = "none";
   cjMode = "siteIdle";
   await cj.evaluate(() => { __w.length = 2; window.__urlappWidgetRun(); });

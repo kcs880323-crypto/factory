@@ -17,13 +17,18 @@
 // 읽기만 한다: 작업·요청을 멈추거나 '봤음'으로 바꾸지 않는다 (GET 만). 지어낸 값은 넣지 않는다.
 // 로그인이 풀렸으면(401) 아무것도 바꾸지 않는다. 사이트 주소는 들어 있지 않다 (같은 사이트 안의 상대 주소만).
 // url_app.py build <URL> --widget widgets/charles-jobs.js
-// 두 번째 위젯 '자비스 할 일' (2026-11-28 찰스님: "위젯 두 개 — 하나는 지금 그대로, 두 번째는 자비스 안의 투두리스트"):
+// 두 번째 위젯 '자비스 할 일' (2026-11-28 찰스님: "위젯 두 개 — 하나는 지금 그대로, 두 번째는 자비스 안의 투두리스트",
+//   같은 날 "4×2 사이즈도, 메모가 많으면 스크롤해서 볼 수 있게"): 넘겨 보는 목록(30줄까지), 크기 3×3·4×2.
 //   1) GET /urlapp-todo.json → {title, rows:[{label, value, tone}], note} 를 자비스가 주면 그대로 (자비스가 정한 순서·표시)
-//   2) 없으면(옛 서버) 스마트 메모장의 안 끝난 항목: GET /api/memos?days=30 → {items:[{text, category, due(YYYY-MM-DD), done}]}
-//      — 기한 지난 것·가까운 것 먼저, 기한 없는 것은 뒤. 아래 줄에 '메모장 기준'. 읽기만 한다 (완료 처리는 앱 화면에서).
+//   2) 없으면 '메모장 · TO-DO' 의 할 일 목록을 흔한 주소에서 찾는다: /api/todos · /api/todo (배열 또는 {todos|items:[…]}),
+//      /api/memos 응답의 todos — 항목은 {text|title, due|due_date|date, done|completed}
+//   3) 그것도 없으면 스마트 메모장의 안 끝난 메모 (GET /api/memos?days=30 의 items, 아래 줄 '메모장 기준')
+//   기한 지난 것·가까운 것 먼저, 기한 없는 것은 뒤. 읽기만 한다 (완료 처리는 앱 화면에서).
 // urlapp:rows 4
 // urlapp:alt-label 자비스 할 일
 // urlapp:alt-rows 6
+// urlapp:alt-scroll
+// urlapp:alt-sizes 3x3,4x2
 // urlapp:refresh-min 10
 async function () {
   async function get(p) {
@@ -40,8 +45,20 @@ async function () {
     if (t && typeof t === "object" && Array.isArray(t.rows) && typeof t.title === "string") {
       return { title: t.title, rows: t.rows.length ? t.rows : [{ label: "할 일", value: "없음" }], note: t.note || "" };
     }
-    const m = await soft("/api/memos?days=30");
-    if (!m || !Array.isArray(m.items)) return null;
+    const text = (it) => String((it && (it.text || it.title || it.content || it.name)) || "").replace(/\s+/g, " ").trim();
+    const listOf = (j) => (Array.isArray(j) ? j : j && typeof j === "object"
+      ? (Array.isArray(j.todos) ? j.todos : Array.isArray(j.items) ? j.items : null) : null);
+    let list = null, memo = false;
+    for (const p of ["/api/todos", "/api/todo"]) {
+      const a = listOf(await soft(p));
+      if (a && a.some((it) => it && typeof it === "object" && text(it))) { list = a; break; }
+    }
+    if (!list) {
+      const m = await soft("/api/memos?days=30");
+      if (m && Array.isArray(m.todos)) list = m.todos;
+      else if (m && Array.isArray(m.items)) { list = m.items; memo = true; }
+    }
+    if (!list) return null;
     const icon = { "업무": "💼", "일정": "📅", "비용·영수증": "🧾", "블로그·여행": "✍️", "콘텐츠·아이디어": "🎬", "개인·기타": "📝" };
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -49,20 +66,23 @@ async function () {
       const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || "");
       return d ? Math.round((new Date(+d[1], +d[2] - 1, +d[3]) - today) / 86400000) : null;
     };
-    const open = m.items.filter((it) => it && !it.done && String(it.text || "").trim())
-      .map((it) => ({ it, n: left(it.due) }));
+    const done = (it) => it.done === true || it.completed === true || it.checked === true
+      || /^(done|completed|complete|완료)$/i.test(String(it.status || ""));
+    const open = list.filter((it) => it && typeof it === "object" && !done(it) && text(it))
+      .map((it) => ({ it, n: left(it.due || it.due_date || it.dueDate || it.date || it.deadline) }));
     open.sort((a, b) => (a.n == null ? 1e9 : a.n) - (b.n == null ? 1e9 : b.n));
-    const rows = open.slice(0, 6).map(({ it, n }) => ({
-      label: (icon[it.category] ? icon[it.category] + " " : "") + String(it.text).replace(/\s+/g, " ").trim(),
-      value: n == null ? (it.category || "") : n < 0 ? `${-n}일 지남` : n === 0 ? "오늘" : `D-${n}`,
+    const rows = open.slice(0, 30).map(({ it, n }) => ({
+      label: (memo && icon[it.category] ? icon[it.category] + " " : "") + text(it),
+      value: n == null ? (memo ? it.category || "" : "") : n < 0 ? `${-n}일 지남` : n === 0 ? "오늘" : `D-${n}`,
       tone: n != null && n < 0 ? "neg" : n === 0 ? "pos" : "",
     }));
     const late = open.filter((x) => x.n != null && x.n < 0).length;
+    const today0 = open.filter((x) => x.n === 0).length;
     return {
       title: `자비스 할 일 ${open.length}`,
       rows: rows.length ? rows : [{ label: "할 일", value: "없음" }],
-      note: [late ? `지남 ${late}` : "", open.length > rows.length ? `외 ${open.length - rows.length}개` : "", "메모장 기준"]
-        .filter(Boolean).join(" · "),
+      note: [late ? `지남 ${late}` : "", today0 ? `오늘 ${today0}` : "", open.length > rows.length ? `외 ${open.length - rows.length}개` : "",
+        memo ? "메모장 기준" : ""].filter(Boolean).join(" · "),
     };
   }
   const todoP = todos().catch(() => null);

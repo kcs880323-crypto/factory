@@ -109,6 +109,11 @@ WIDGET_ROWS_SLOT = "/*__WIDGET_ROWS__*/4"
 WIDGET_ROWS_RE = re.compile(r"^\s*//\s*urlapp:rows\s+(\d+)\s*$", re.M)
 WIDGET_ALT_ROWS_RE = re.compile(r"^\s*//\s*urlapp:alt-rows\s+(\d+)\s*$", re.M)
 WIDGET_ALT_ROWS_SLOT = "/*__WIDGET_ALT_ROWS__*/0"
+# 두 번째 위젯을 넘겨 보는 목록으로 ("// urlapp:alt-scroll" — 줄이 많으면 손가락으로 스크롤, 최대 ALT_SCROLL_ROWS 줄)
+# 과 크기별 ("// urlapp:alt-sizes 3x3,4x2" — 첫 크기가 기본, 나머지는 같은 내용의 다른 크기, 3개까지). 2026-11-28 '자비스 할 일'
+WIDGET_ALT_SCROLL_RE = re.compile(r"^\s*//\s*urlapp:alt-scroll\s*$", re.M)
+WIDGET_ALT_SIZES_RE = re.compile(r"^\s*//\s*urlapp:alt-sizes[ \t]+([^\n]+?)\s*$", re.M)
+ALT_SCROLL_ROWS = 30
 WIDGET_REFRESH_RE = re.compile(r"^\s*//\s*urlapp:refresh-min\s+(\d+)\s*$", re.M)
 WIDGET_LABEL_RE = re.compile(r"^\s*//\s*urlapp:(label|alt-label)[ \t]+(\S[^\n]*?)\s*$", re.M)
 ICON_TOOL = HERE / "UrlAppIcon.java"
@@ -736,7 +741,7 @@ def android_string(s):
 
 def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
                  view_hosts=(), update=False, widget_extra_sizes=0, mic=False, notify=False, hotword=False,
-                 voice_icon=False, watch=False):
+                 voice_icon=False, watch=False, widget_alt_extra=0, widget_alt_scroll=False):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -769,6 +774,15 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
         receiver = widget_receiver("WidgetProvider", "@string/widget_name" if widget_label else "@string/app_name")
         if widget_alt:
             receiver += widget_receiver("WidgetProviderAlt", "@string/widget_alt_name", "urlapp_widget_alt_info")
+            for i in range(2, 2 + min(widget_alt_extra, 2)):  # 두 번째 위젯의 다른 크기 (예: 4×2)
+                receiver += widget_receiver(f"WidgetProviderAlt{i}", "@string/widget_alt_name", f"urlapp_widget_alt{i}_info")
+            if widget_alt_scroll:
+                # 넘겨 보는 목록의 줄을 런처에 주는 곳 (안드로이드 11 이하 — 12+ 는 위젯에 줄을 바로 넣는다). 시스템만 묶는다
+                receiver += """
+        <service
+            android:name="app.jarvis.urlapp.WidgetListService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />"""
         for i in range(2, 2 + min(widget_extra_sizes, 3)):  # 같은 내용의 다른 크기 (위젯 목록에 크기별로)
             receiver += widget_receiver(f"WidgetProviderS{i}", "@string/widget_name" if widget_label else "@string/app_name",
                                         f"urlapp_widget_s{i}_info")
@@ -1356,6 +1370,16 @@ def parse_widget_sizes(text):
     return out
 
 
+def widget_alt_options(script_text):
+    """두 번째 위젯의 스크롤 여부와 크기들: (scroll, [(가로, 세로), …]) — 크기가 없으면 []."""
+    scroll = bool(WIDGET_ALT_SCROLL_RE.search(script_text or ""))
+    m = WIDGET_ALT_SIZES_RE.search(script_text or "")
+    sizes = parse_widget_sizes(m.group(1)) if m else []
+    if len(sizes) > 3:
+        raise Fail("위젯 스크립트의 urlapp:alt-sizes 는 3개까지입니다.")
+    return scroll, sizes
+
+
 def size_rows(size, rows):
     """그 크기에 들어가는 줄 수: 세로 한 칸에 약 2줄, 가로 2칸이면 1줄 덜 (제목·아래 줄 자리).
     세로 1칸(4×1 등)은 가로 한 줄 모양이라 첫 줄 하나만."""
@@ -1401,7 +1425,7 @@ def widget_labels(script_text):
 
 
 def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_rows=None, dark_bg=None,
-                           sizes=(), mic=False):
+                           sizes=(), mic=False, alt_scroll=False, alt_sizes=()):
     """홈 화면 위젯의 모양 (RemoteViews 로 그릴 수 있는 LinearLayout·TextView·ImageView 만 쓴다).
     dark_bg 가 있으면(--widget-style dark) 기기의 밝은/어두운 모드와 상관없이 그 바탕색의 어두운 위젯으로 만든다.
     rows: 줄 수. 4줄이 넘으면 처음 크기를 세 칸 높이로 한다 (이미 놓인 위젯은 사용자가 늘린다).
@@ -1475,10 +1499,34 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     <corners android:radius="22dp" />
 </shape>
 """)
-    def layout(n, name, info, size=None):
+    def layout(n, name, info, size=None, scroll=False):
         compact = bool(size and size[0] <= 2)  # 가로 2칸: 글자를 줄이고 앱 아이콘을 뺀다
         label_sp, value_sp, pad = (12, 14, 12) if compact else (13, 16, 16)
-        rows_xml = "".join(f"""
+        # 넘겨 보는 목록 (두 번째 위젯의 alt-scroll): 줄 대신 ListView 하나 — 줄은 urlapp_widget_item 모양으로 그린다
+        list_xml = """
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        <ListView
+            android:id="@+id/w_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@null"
+            android:dividerHeight="0dp"
+            android:fadingEdgeLength="14dp"
+            android:requiresFadingEdge="vertical"
+            android:scrollbars="vertical" />
+        <TextView
+            android:id="@+id/w_empty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="@string/widget_hint"
+            android:textColor="@color/widget_label"
+            android:textSize="13sp" />
+    </FrameLayout>"""
+        rows_xml = list_xml if scroll else "".join(f"""
     <LinearLayout
         android:id="@+id/w_row{i}"
         android:layout_width="match_parent"
@@ -1673,7 +1721,7 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
 </LinearLayout>
 </FrameLayout>
 """)
-        tall = n > 4
+        tall = n > 4 or scroll
         cw, ch = size or (3, 3 if tall else 2)
         # 기본 크기. 예전 계산(n칸 = 70n-30dp)은 칸이 좁던 시절 값이라, 칸이 넓은 요즘 런처(삼성 4·5열 등)에서는
         # 4칸 위젯이 3칸에 들어가 '3×2'로 보였다 (2026-11-20 사용자 "4X2 위젯도 만들어줘"). 4·5열 격자 모두에서
@@ -1711,8 +1759,48 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             counts += f'    <integer name="urlapp_widget_s{i}_oneline">1</integer>\n'
     if alt_label:
         alt_n = alt_rows or rows
-        layout(alt_n, "urlapp_widget_alt", "urlapp_widget_alt_info")
-        counts += f'    <integer name="urlapp_widget_alt_rows">{alt_n}</integer>\n'
+        layout(alt_n, "urlapp_widget_alt", "urlapp_widget_alt_info", alt_sizes[0] if alt_sizes else None, alt_scroll)
+        # 목록 모양에는 고정 줄(w_row1…)이 없다 — 줄 수 0 (위젯이 모양에 없는 줄을 건드리면 홈 화면에서 깨진다)
+        counts += f'    <integer name="urlapp_widget_alt_rows">{0 if alt_scroll else alt_n}</integer>\n'
+        if alt_scroll:
+            counts += '    <integer name="urlapp_widget_alt_list">1</integer>\n'
+        for i, size in enumerate(alt_sizes[1:3], start=2):  # 두 번째 위젯의 다른 크기 (예: 4×2)
+            n_i = alt_n if alt_scroll else size_rows(size, alt_n)
+            layout(n_i, f"urlapp_widget_alt{i}", f"urlapp_widget_alt{i}_info", size, alt_scroll)
+            counts += f'    <integer name="urlapp_widget_alt{i}_rows">{0 if alt_scroll else n_i}</integer>\n'
+            if alt_scroll:
+                counts += f'    <integer name="urlapp_widget_alt{i}_list">1</integer>\n'
+        if alt_scroll:  # 목록 한 줄의 모양
+            w("layout/urlapp_widget_item.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_item"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:minHeight="34dp"
+    android:orientation="horizontal"
+    android:paddingTop="5dp"
+    android:paddingBottom="5dp">
+    <TextView
+        android:id="@+id/w_item_label"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textColor="@color/widget_title"
+        android:textSize="14sp" />
+    <TextView
+        android:id="@+id/w_item_value"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:maxLines="1"
+        android:textColor="@color/widget_value"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+</LinearLayout>
+""")
     w("values/widget_rows.xml", '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n' + counts + "</resources>\n")
 
 
@@ -1740,7 +1828,8 @@ def widget_asset(script_text, params=()):
     if runner.count(WIDGET_SLOT) != 1 or runner.count(WIDGET_ROWS_SLOT) != 1 or runner.count(WIDGET_ALT_ROWS_SLOT) != 1:
         raise Fail("widget-runner.js 의 자리 표시가 없습니다.")
     runner = runner.replace(WIDGET_ROWS_SLOT, str(widget_rows(script_text)))
-    runner = runner.replace(WIDGET_ALT_ROWS_SLOT, str(widget_rows(script_text, alt=True)))
+    alt_n = ALT_SCROLL_ROWS if widget_alt_options(script_text)[0] else widget_rows(script_text, alt=True)
+    runner = runner.replace(WIDGET_ALT_ROWS_SLOT, str(alt_n))
     return runner.replace(WIDGET_SLOT, "(\n" + body + "\n)")
 
 
@@ -2240,6 +2329,7 @@ def cmd_build(args):
             widget_label, widget_alt_label = widget_labels(widget_text)
 
         widget_sizes = parse_widget_sizes(opt["widget_sizes"]) if widget_js else []
+        alt_scroll, alt_sizes = widget_alt_options(widget_text) if (widget_js and widget_alt_label) else (False, [])
 
         watch = bool(opt["watch"])  # 워치 앱 (타일 + 음성 질문)
 
@@ -2353,7 +2443,8 @@ def cmd_build(args):
             if opt["widget_style"] == "dark":  # 바탕색이 어두우면 그 색, 밝으면 기본 어두운 색
                 dark_bg = bg if is_dark(bg) else "#0F172A"
             write_widget_resources(res, widget_accent, widget_n, widget_label, widget_alt_label,
-                                   widget_rows(widget_text, alt=True), dark_bg, widget_sizes, bool(opt["mic"]))
+                                   widget_rows(widget_text, alt=True), dark_bg, widget_sizes, bool(opt["mic"]),
+                                   alt_scroll, alt_sizes)
 
         # 설정과 매니페스트
         version_code = int(prev.get("version_code", 0)) + 1
@@ -2401,7 +2492,9 @@ def cmd_build(args):
                                                                   widget_extra_sizes=max(0, len(widget_sizes) - 1),
                                                                   mic=bool(opt["mic"]), notify=bool(opt["notify"]),
                                                                   hotword=bool(hotword), voice_icon=bool(voice_icon),
-                                                                  watch=watch),
+                                                                  watch=watch,
+                                                                  widget_alt_extra=max(0, len(alt_sizes) - 1),
+                                                                  widget_alt_scroll=alt_scroll),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -2485,6 +2578,9 @@ def cmd_build(args):
         kinds = (f" 2종: '{widget_label or name}', '{widget_alt_label}'" if widget_alt_label else "")
         if widget_sizes:
             kinds += " 크기별: " + ", ".join(f"{w}×{h}" for w, h in widget_sizes)
+        if alt_scroll or alt_sizes:
+            kinds += f" ('{widget_alt_label}'" + (": 넘겨 보는 목록" if alt_scroll else "") + (
+                (", 크기별: " if alt_scroll else ": 크기별: ") + ", ".join(f"{w}×{h}" for w, h in alt_sizes) if alt_sizes else "") + ")"
         if widget_refresh:
             kinds += f", 새로고침 단추 + 화면이 켜져 있을 때 {widget_refresh}분마다 자동 새로고침"
         if opt["mic"]:
@@ -2914,6 +3010,42 @@ def cmd_selftest(args):
                   and re.search(r"integer/urlapp_widget_alt_rows\n\s+\(\) 4", res56) is not None
                   and re.search(r"integer/urlapp_widget_rows\n\s+\(\) 6", res56) is not None
                   and "var ALT_ROWS = 4 ||" in a56, alt_info[-300:])
+            # 넘겨 보는 목록 + 크기별 두 번째 위젯 (2026-11-28 '자비스 할 일': 3×3·4×2, 많으면 스크롤)
+            w7 = site / "widget7.js"
+            w7.write_text("// urlapp:alt-label 할 일\n// urlapp:alt-scroll\n// urlapp:alt-sizes 3x3,4x2\n"
+                          "async function () { return null; }", encoding="utf-8")
+            build(base + "/widget7", "--no-fetch", "--widget", str(w7))
+            rec57 = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/widget7"))
+            res57 = run([tp["aapt2"], "dump", "resources", rec57["apk"]], tmp_home, "dump resources")
+            mf57 = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", rec57["apk"]], tmp_home, "xmltree")
+            lay57 = run([tp["aapt2"], "dump", "xmltree", "--file", "res/layout/urlapp_widget_alt.xml", rec57["apk"]], tmp_home, "xmltree")
+            i57 = {k: run([tp["aapt2"], "dump", "xmltree", "--file", f"res/xml/{k}.xml", rec57["apk"]], tmp_home, "xmltree")
+                   for k in ("urlapp_widget_alt_info", "urlapp_widget_alt2_info")}
+            cells57 = {k: re.findall(r"targetCell(?:Width|Height)\(0x[0-9a-f]+\)=(?:\(type 0x10\)0x)?(\d+)", v) for k, v in i57.items()}
+            with zipfile.ZipFile(rec57["apk"]) as z:
+                a57 = z.read("assets/urlapp-widget.js").decode("utf-8")
+                dex57 = b"".join(z.read(n) for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", n))
+            si57 = mf57.rfind("E: service", 0, max(mf57.find("app.jarvis.urlapp.WidgetListService"), 0))
+            se57 = mf57.find(" E: ", si57 + 12)
+            svc = mf57[si57:se57 if se57 > 0 else len(mf57)] if si57 >= 0 else ""
+            # 목록 모양에도 그리는 코드가 만지는 id 가 모두 있고, 고정 줄(w_row1)은 없다 (줄 수 0)
+            idhex57 = dict((n, h) for h, n in re.findall(r"resource (0x[0-9a-f]+) id/(w_[a-z0-9_]+)", res57))
+            # w_refresh·w_mic 는 그 기능이 있는 앱에만 id 가 생긴다 (id 가 없으면 그리는 코드가 건너뜀) — 있으면 목록 모양에도 있어야 한다
+            miss57 = [n for n in ("w_root", "w_bg", "w_title", "w_note", "w_refresh", "w_mic", "w_list", "w_empty")
+                      if (n in idhex57 or n not in ("w_refresh", "w_mic")) and (n not in idhex57 or f"=@{idhex57[n]}" not in lay57)]
+            check("빌드 5-7: alt-scroll·alt-sizes → 두 번째 위젯이 넘겨 보는 목록(ListView·한 줄 모양·30줄) + 3×3·4×2 두 크기",
+                  "ListView" in lay57 and "id/w_list" in res57 and "id/w_item" in res57 and "layout/urlapp_widget_item" in res57
+                  and re.search(r"integer/urlapp_widget_alt_list\n\s+\(\) 1", res57) is not None
+                  and re.search(r"integer/urlapp_widget_alt2_list\n\s+\(\) 1", res57) is not None
+                  and re.search(r"integer/urlapp_widget_alt_rows\n\s+\(\) 0", res57) is not None
+                  and re.search(r"integer/urlapp_widget_alt2_rows\n\s+\(\) 0", res57) is not None
+                  and not miss57 and f"=@{idhex57.get('w_row1', 'x')}" not in lay57
+                  and "app.jarvis.urlapp.WidgetProviderAlt2" in mf57 and "var ALT_ROWS = 30 ||" in a57
+                  and cells57 == {"urlapp_widget_alt_info": ["3", "3"], "urlapp_widget_alt2_info": ["4", "2"]}
+                  and b"Lapp/jarvis/urlapp/WidgetListService;" in dex57, (cells57, miss57, lay57[:300]))
+            check("빌드 5-7: 목록 줄을 주는 서비스는 시스템만 묶음 (BIND_REMOTEVIEWS, 내보내지 않음), 목록 없는 앱에는 없음",
+                  "android.permission.BIND_REMOTEVIEWS" in svc and re.search(r"exported\(0x01010010\)=(false|\(type 0x12\)0x0\b)", svc)
+                  and "WidgetListService" not in mf56 and "WidgetProviderAlt2" not in mf56, svc)
             cfg56 = json.loads(zipfile.ZipFile(rec56["apk"]).read("assets/urlapp.json"))
             cfg5 = json.loads(zipfile.ZipFile(rec5["apk"]).read("assets/urlapp.json"))
             check("빌드 5-6: urlapp:refresh-min 10 → 새로고침 단추·10분 자동 (기본 위젯은 0)",

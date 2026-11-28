@@ -19,6 +19,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
+import android.net.Uri;
+import android.os.Build;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.view.View;
@@ -53,8 +55,8 @@ public class WidgetProvider extends AppWidgetProvider {
 
     /** 이 앱에 들어 있을 수 있는 위젯 종류 (매니페스트에 없는 것은 놓인 것이 없다). */
     private static final Class<?>[] KINDS = {WidgetProvider.class, WidgetProviderAlt.class, WidgetProviderS2.class,
-            WidgetProviderS3.class, WidgetProviderS4.class};
-    private static final String[] KIND_NAMES = {"", "alt", "s2", "s3", "s4"};
+            WidgetProviderS3.class, WidgetProviderS4.class, WidgetProviderAlt2.class, WidgetProviderAlt3.class};
+    private static final String[] KIND_NAMES = {"", "alt", "s2", "s3", "s4", "alt2", "alt3"};
 
     @Override
     public void onUpdate(Context ctx, AppWidgetManager mgr, int[] ids) {
@@ -238,10 +240,48 @@ public class WidgetProvider extends AppWidgetProvider {
     private static void update(Context ctx, AppWidgetManager mgr, Class<?> cls, String kind) {
         try {
             int[] ids = mgr.getAppWidgetIds(new ComponentName(ctx, cls));
-            if (ids != null && ids.length > 0) mgr.updateAppWidget(ids, build(ctx, kind));
+            if (ids != null && ids.length > 0) {
+                mgr.updateAppWidget(ids, build(ctx, kind));
+                // 넘겨 보는 목록 (안드로이드 11 이하는 WidgetListService 가 줄을 준다 → 새 값으로 다시 읽게)
+                int list = id(ctx.getResources(), ctx.getPackageName(), "w_list");
+                if (list != 0 && Build.VERSION.SDK_INT < 31) mgr.notifyAppWidgetViewDataChanged(ids, list);
+            }
         } catch (RuntimeException e) {
             // 매니페스트에 없는 위젯
         }
+    }
+
+    /** 이 종류(모양)가 넘겨 보는 목록인지 (url_app.py 가 "<모양>_list" = 1 로 적는다). */
+    static boolean isList(Context ctx, String kind) {
+        Resources res = ctx.getResources();
+        String name = kind == null || kind.isEmpty() ? "urlapp_widget" : "urlapp_widget_" + kind;
+        return integer(res, ctx.getPackageName(), name + "_list", 0) == 1 && id(res, ctx.getPackageName(), "w_list") != 0;
+    }
+
+    /** 저장한 요약에서 그 종류가 그릴 값 (두 번째 위젯 종류는 "alt"). 없으면 null. */
+    static JSONObject dataFor(Context ctx, String kind) {
+        try {
+            String raw = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("data", null);
+            if (raw == null) return null;
+            JSONObject data = new JSONObject(raw);
+            return kind != null && kind.startsWith("alt") ? data.optJSONObject("alt") : data;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 목록 한 줄 (label · value, tone 색). */
+    static RemoteViews itemView(Context ctx, JSONObject r) {
+        Resources res = ctx.getResources();
+        String pkg = ctx.getPackageName();
+        RemoteViews it = new RemoteViews(pkg, res.getIdentifier("urlapp_widget_item", "layout", pkg));
+        it.setTextViewText(id(res, pkg, "w_item_label"), r.optString("label", ""));
+        it.setTextViewText(id(res, pkg, "w_item_value"), r.optString("value", ""));
+        String tone = r.optString("tone", "");
+        it.setTextColor(id(res, pkg, "w_item_value"), "pos".equals(tone) ? color(res, pkg, "widget_accent", 0xFF4F46E5)
+                : "neg".equals(tone) ? color(res, pkg, "widget_negative", 0xFFE11D48) : color(res, pkg, "widget_value", 0xFF0F172A));
+        it.setOnClickFillInIntent(id(res, pkg, "w_item"), new Intent()); // 줄을 눌러도 앱이 열린다 (목록의 틀 PendingIntent)
+        return it;
     }
 
     private static int id(Resources res, String pkg, String name) {
@@ -271,7 +311,7 @@ public class WidgetProvider extends AppWidgetProvider {
     static RemoteViews build(Context ctx, String kind) {
         Resources res = ctx.getResources();
         String pkg = ctx.getPackageName();
-        boolean alt = "alt".equals(kind);
+        boolean alt = kind != null && kind.startsWith("alt"); // 두 번째 위젯 (alt·alt2·alt3 = 같은 값, 크기만 다름)
         // 종류마다 자기 모양(urlapp_widget_alt·_s2·_s3, 줄 수가 다를 수 있음)으로. 없으면 첫 위젯 모양.
         String name = kind == null || kind.isEmpty() ? "urlapp_widget" : "urlapp_widget_" + kind;
         int layout = res.getIdentifier(name, "layout", pkg);
@@ -284,6 +324,9 @@ public class WidgetProvider extends AppWidgetProvider {
         if (bg != 0) v.setInt(bg, "setImageAlpha", bgAlpha(transparency(ctx)));
         // 그 모양에 있는 줄 수 (줄 id 는 모양들이 같이 쓰므로, 모양에 없는 줄을 건드리면 위젯이 깨진다)
         int count = integer(res, pkg, name + "_rows", MAX_ROWS);
+        // 넘겨 보는 목록 모양에는 고정 줄이 없다 (줄 id 는 다른 모양에 있어 0 이 아니므로 여기서 막는다)
+        boolean listMode = id(res, pkg, "w_list") != 0 && integer(res, pkg, name + "_list", 0) == 1;
+        if (listMode) count = 0;
         SharedPreferences p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         boolean ko = "ko".equals(Locale.getDefault().getLanguage());
 
@@ -380,6 +423,28 @@ public class WidgetProvider extends AppWidgetProvider {
         PendingIntent pi = PendingIntent.getActivity(ctx, 0, open,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         v.setOnClickPendingIntent(id(res, pkg, "w_root"), pi);
+
+        // 넘겨 보는 목록 (두 번째 위젯의 alt-scroll): 줄이 많으면 손가락으로 스크롤
+        int list = id(res, pkg, "w_list");
+        if (listMode) {
+            v.setEmptyView(list, id(res, pkg, "w_empty"));
+            // 줄이 없을 때 가운데 글: 아직 못 읽었으면 아래 줄과 같은 안내, 읽었는데 비었으면 '없음'
+            v.setTextViewText(id(res, pkg, "w_empty"), data == null ? note : (ko ? "없음" : "Nothing here"));
+            // 줄을 누르면 앱을 연다 (줄마다 빈 fill-in → 같은 열기). fill-in 을 받으려면 바꿀 수 있는(MUTABLE) 틀이어야 한다
+            v.setPendingIntentTemplate(list, PendingIntent.getActivity(ctx, 7, new Intent(open),
+                    PendingIntent.FLAG_MUTABLE | PendingIntent.FLAG_UPDATE_CURRENT));
+            if (Build.VERSION.SDK_INT >= 31) {
+                RemoteViews.RemoteCollectionItems.Builder b = new RemoteViews.RemoteCollectionItems.Builder();
+                for (int i = 0; rows != null && i < rows.length(); i++) {
+                    JSONObject r = rows.optJSONObject(i);
+                    if (r != null) b.addItem(i, itemView(ctx, r));
+                }
+                v.setRemoteAdapter(list, b.setViewTypeCount(1).setHasStableIds(true).build());
+            } else {
+                Intent svc = new Intent(ctx, WidgetListService.class).setData(Uri.parse("urlapp-widget://list/" + kind));
+                v.setRemoteAdapter(list, svc);
+            }
+        }
         return v;
     }
 }
