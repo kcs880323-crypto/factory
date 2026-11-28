@@ -68,7 +68,7 @@ public class WidgetListService extends RemoteViewsService {
 
         @Override
         public int getViewTypeCount() {
-            return 1;
+            return 2; // 카드 · 묶음 제목 줄
         }
 
         @Override

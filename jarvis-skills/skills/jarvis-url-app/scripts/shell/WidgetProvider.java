@@ -270,18 +270,44 @@ public class WidgetProvider extends AppWidgetProvider {
         }
     }
 
-    /** 목록 한 줄 (label · value, tone 색). */
+    /** 카드 목록의 한 줄. group 이 있으면 묶음 제목 줄(예: '28. 금  오늘'), 아니면 카드 (막대·글·둘째 줄·값). */
     static RemoteViews itemView(Context ctx, JSONObject r) {
         Resources res = ctx.getResources();
         String pkg = ctx.getPackageName();
+        String group = r.optString("group", "");
+        if (!group.isEmpty() && res.getIdentifier("urlapp_widget_group", "layout", pkg) != 0) {
+            RemoteViews g = new RemoteViews(pkg, res.getIdentifier("urlapp_widget_group", "layout", pkg));
+            g.setTextViewText(id(res, pkg, "w_group_title"), group);
+            g.setTextViewText(id(res, pkg, "w_group_sub"), r.optString("sub", ""));
+            g.setOnClickFillInIntent(id(res, pkg, "w_group"), new Intent());
+            return g;
+        }
         RemoteViews it = new RemoteViews(pkg, res.getIdentifier("urlapp_widget_item", "layout", pkg));
         it.setTextViewText(id(res, pkg, "w_item_label"), r.optString("label", ""));
         it.setTextViewText(id(res, pkg, "w_item_value"), r.optString("value", ""));
         String tone = r.optString("tone", "");
-        it.setTextColor(id(res, pkg, "w_item_value"), "pos".equals(tone) ? color(res, pkg, "widget_accent", 0xFF4F46E5)
-                : "neg".equals(tone) ? color(res, pkg, "widget_negative", 0xFFE11D48) : color(res, pkg, "widget_value", 0xFF0F172A));
-        it.setOnClickFillInIntent(id(res, pkg, "w_item"), new Intent()); // 줄을 눌러도 앱이 열린다 (목록의 틀 PendingIntent)
+        int sub = id(res, pkg, "w_item_sub");
+        if (sub != 0) {
+            String st = r.optString("sub", "");
+            it.setTextViewText(sub, st);
+            it.setViewVisibility(sub, st.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+        int bar = id(res, pkg, "w_item_bar");
+        if (bar != 0) { // 왼쪽 막대: 지남 분홍 · 오늘 초록 · 예정 파랑 · 기한 없음 회색
+            String c = "neg".equals(tone) ? "widget_bar_neg" : "pos".equals(tone) ? "widget_bar_pos"
+                    : "dim".equals(tone) ? "widget_bar_dim" : "widget_bar_up";
+            it.setInt(bar, "setColorFilter", color(res, pkg, c, 0xFF5B8DEF));
+        }
+        it.setTextColor(id(res, pkg, "w_item_value"), "pos".equals(tone) ? color(res, pkg, "widget_list_pos", 0xFF1E9E64)
+                : "neg".equals(tone) ? color(res, pkg, "widget_list_neg", 0xFFE5484D) : color(res, pkg, "widget_list_sub", 0xFF868C96));
+        it.setOnClickFillInIntent(id(res, pkg, "w_item"), new Intent()); // 카드를 눌러도 앱이 열린다 (목록의 틀 PendingIntent)
         return it;
+    }
+
+    /** 카드 목록 머리 줄의 오늘 날짜 (예: '11.28. 금'). */
+    static String headDate(long now, Locale loc) {
+        boolean ko = "ko".equals(loc.getLanguage());
+        return new SimpleDateFormat(ko ? "M.d. E" : "EEE, MMM d", ko ? Locale.KOREAN : loc).format(new Date(now));
     }
 
     private static int id(Resources res, String pkg, String name) {
@@ -427,6 +453,8 @@ public class WidgetProvider extends AppWidgetProvider {
         // 넘겨 보는 목록 (두 번째 위젯의 alt-scroll): 줄이 많으면 손가락으로 스크롤
         int list = id(res, pkg, "w_list");
         if (listMode) {
+            int date = id(res, pkg, "w_date");
+            if (date != 0) v.setTextViewText(date, headDate(System.currentTimeMillis(), Locale.getDefault()));
             v.setEmptyView(list, id(res, pkg, "w_empty"));
             // 줄이 없을 때 가운데 글: 아직 못 읽었으면 아래 줄과 같은 안내, 읽었는데 비었으면 '없음'
             v.setTextViewText(id(res, pkg, "w_empty"), data == null ? note : (ko ? "없음" : "Nothing here"));
@@ -439,7 +467,7 @@ public class WidgetProvider extends AppWidgetProvider {
                     JSONObject r = rows.optJSONObject(i);
                     if (r != null) b.addItem(i, itemView(ctx, r));
                 }
-                v.setRemoteAdapter(list, b.setViewTypeCount(1).setHasStableIds(true).build());
+                v.setRemoteAdapter(list, b.setViewTypeCount(2).setHasStableIds(true).build()); // 카드 · 묶음 제목 줄
             } else {
                 Intent svc = new Intent(ctx, WidgetListService.class).setData(Uri.parse("urlapp-widget://list/" + kind));
                 v.setRemoteAdapter(list, svc);

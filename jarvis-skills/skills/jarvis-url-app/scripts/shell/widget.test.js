@@ -25,7 +25,7 @@ function asset(script) {
   const a = /^\s*\/\/\s*urlapp:alt-rows\s+(\d+)\s*$/m.exec(script);
   const rows = m ? m[1] : "4";
   const scroll = /^\s*\/\/\s*urlapp:alt-scroll\s*$/m.test(script);
-  return RUNNER.replace(ROWS_SLOT, rows).replace(ALT_ROWS_SLOT, scroll ? "30" : a ? a[1] : rows)
+  return RUNNER.replace(ROWS_SLOT, rows).replace(ALT_ROWS_SLOT, scroll ? "40" : a ? a[1] : rows)
     .replace(SLOT, "(\n" + script.trim().replace(/;\s*$/, "") + "\n)");
 }
 const ASSET = asset(LEDGER);
@@ -583,30 +583,40 @@ function check(label, cond, detail) {
   await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
   const ct = await cj.evaluate(() => __w[3]);
-  check("할 일 위젯: 자비스가 /urlapp-todo.json 을 주면 그 줄 그대로, 제목은 'TO-DO LIST'·개수는 아래 줄 '미완료 N' (첫 위젯은 예전과 같음)",
-    ct.alt && ct.alt.title === "TO-DO LIST" && ct.alt.note === "미완료 3 · 오늘 1" && ct.alt.rows.length === 3 && ct.alt.rows[0].label === "전기차 보고"
-      && ct.title === "자비스 · 진행 중 1" && ct.rows[0].value === "83%", ct);
+  // 카드 목록 모양 (네이버 캘린더 '목록' 위젯처럼): 묶음 제목 줄은 '#' + (오늘·내일·모레 / 지난 할 일 / 기한 없음 / 날짜)
+  const shapeOf = (rows) => rows.map((r) => r.group
+    ? "#" + (r.group === "지난 할 일" || r.group === "기한 없음" ? r.group : r.sub || "date")
+    : [r.label, r.value, r.tone, r.sub || ""].join("|"));
+  const headOk = (rows) => rows.filter((r) => r.group && r.group !== "지난 할 일" && r.group !== "기한 없음")
+    .every((r) => /^(\d+\.)?\d+\. [일월화수목금토]$/.test(r.group));
+  check("할 일 위젯: /urlapp-todo.json 을 날짜 묶음 + 카드로 (제목 'TO-DO LIST', 아래 줄 '미완료 N'), 첫 위젯은 예전과 같음",
+    ct.alt && ct.alt.title === "TO-DO LIST" && ct.alt.note === "미완료 3 · 오늘 1" && headOk(ct.alt.rows)
+      && JSON.stringify(shapeOf(ct.alt.rows)) === JSON.stringify(["#오늘", "견적 회신||pos|", "#모레", "전기차 보고|||", "#기한 없음", "명함 정리||dim|"])
+      && ct.title === "자비스 · 진행 중 1" && ct.rows[0].value === "83%", ct.alt);
   cjTodo = "memos";
   await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
   const cmm = await cj.evaluate(() => __w[3]);
-  check("할 일 위젯(대체): 메모장의 안 끝난 일만, 지난 것·가까운 것 먼저, 기한 없는 것은 뒤, '메모장 기준'",
-    cmm.alt && cmm.alt.title === "TO-DO LIST" && JSON.stringify(cmm.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
-      ["📅 검진 예약", "1일 지남", "neg"], ["🧾 택시비 정산", "오늘", "pos"], ["💼 전기차 보고", "D-3", ""], ["📝 세탁소 찾기", "개인·기타", ""]])
-      && cmm.alt.note === "미완료 4 · 지남 1 · 오늘 1 · 메모장 기준", cmm.alt);
+  check("할 일 위젯(대체): 메모장의 안 끝난 일만, 지난 할 일 → 오늘 → 날짜 → 기한 없음 묶음, 카드 둘째 줄은 분류, '메모장 기준'",
+    cmm.alt && cmm.alt.title === "TO-DO LIST" && headOk(cmm.alt.rows) && JSON.stringify(shapeOf(cmm.alt.rows)) === JSON.stringify([
+      "#지난 할 일", "검진 예약|1일 지남|neg|📅 일정", "#오늘", "택시비 정산||pos|🧾 비용·영수증", "#date", "전기차 보고|||💼 업무",
+      "#기한 없음", "세탁소 찾기||dim|📝 개인·기타"])
+      && cmm.alt.rows[0].sub === "1개" && cmm.alt.note === "미완료 4 · 지남 1 · 오늘 1 · 메모장 기준", cmm.alt);
   cjTodo = "todos";
   await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
   const ctd = await cj.evaluate(() => __w[3]);
-  check("할 일 위젯: '메모장 · TO-DO' 의 할 일 목록(/api/todos)을 찾으면 그것 (끝난 것 빼고, 오늘 먼저, '메모장 기준' 없음)",
-    ctd.alt && ctd.alt.title === "TO-DO LIST" && JSON.stringify(ctd.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
-      ["테스트", "오늘", "pos"], ["엄마 점심", "D-1", ""]]) && ctd.alt.note === "미완료 2 · 오늘 1", ctd.alt);
+  check("할 일 위젯: '메모장 · TO-DO' 의 할 일 목록(/api/todos) — 끝난 것 빼고, 오늘·내일 묶음, 카드 둘째 줄 '네이버'",
+    ctd.alt && ctd.alt.title === "TO-DO LIST" && JSON.stringify(shapeOf(ctd.alt.rows)) === JSON.stringify([
+      "#오늘", "테스트||pos|네이버", "#내일", "엄마 점심|||네이버"]) && ctd.alt.note === "미완료 2 · 오늘 1", ctd.alt);
   cjTodo = "many";
   await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
   const cmy = await cj.evaluate(() => __w[3]);
-  check("할 일 위젯: 많으면 넘겨 보는 목록에 30줄까지 (나머지는 '외 N개')", cmy.alt && cmy.alt.rows.length === 30
-    && cmy.alt.rows[29].label === "할 일 30" && cmy.alt.note.includes("외 10개"), [cmy.alt && cmy.alt.rows.length, cmy.alt && cmy.alt.note]);
+  const cards40 = cmy.alt ? cmy.alt.rows.filter((r) => !r.group) : [];
+  check("할 일 위젯: 많으면 넘겨 보는 목록에 묶음 제목 줄 포함 40줄까지 (날짜가 모두 다르면 카드 20개, 나머지는 '외 N개')",
+    cmy.alt && cmy.alt.rows.length === 40 && cards40.length === 20 && cards40[19].label === "할 일 20"
+      && cmy.alt.note.includes("외 20개"), [cmy.alt && cmy.alt.rows.length, cards40.length, cmy.alt && cmy.alt.note]);
   cjTodo = "none";
   cjMode = "siteIdle";
   await cj.evaluate(() => { __w.length = 2; window.__urlappWidgetRun(); });

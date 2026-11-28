@@ -113,7 +113,7 @@ WIDGET_ALT_ROWS_SLOT = "/*__WIDGET_ALT_ROWS__*/0"
 # 과 크기별 ("// urlapp:alt-sizes 3x3,4x2" — 첫 크기가 기본, 나머지는 같은 내용의 다른 크기, 3개까지). 2026-11-28 '자비스 할 일'
 WIDGET_ALT_SCROLL_RE = re.compile(r"^\s*//\s*urlapp:alt-scroll\s*$", re.M)
 WIDGET_ALT_SIZES_RE = re.compile(r"^\s*//\s*urlapp:alt-sizes[ \t]+([^\n]+?)\s*$", re.M)
-ALT_SCROLL_ROWS = 30
+ALT_SCROLL_ROWS = 40  # 카드 목록: 할 일 30개 + 날짜 묶음 제목 줄
 WIDGET_REFRESH_RE = re.compile(r"^\s*//\s*urlapp:refresh-min\s+(\d+)\s*$", re.M)
 WIDGET_LABEL_RE = re.compile(r"^\s*//\s*urlapp:(label|alt-label)[ \t]+(\S[^\n]*?)\s*$", re.M)
 ICON_TOOL = HERE / "UrlAppIcon.java"
@@ -1507,7 +1507,9 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp">
         <ListView
             android:id="@+id/w_list"
             android:layout_width="match_parent"
@@ -1523,7 +1525,7 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             android:layout_height="match_parent"
             android:gravity="center"
             android:text="@string/widget_hint"
-            android:textColor="@color/widget_label"
+            android:textColor="@color/widget_list_sub"
             android:textSize="13sp" />
     </FrameLayout>"""
         rows_xml = list_xml if scroll else "".join(f"""
@@ -1572,7 +1574,81 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             android:src="@drawable/urlapp_widget_mic"
             android:visibility="gone" />""" if mic else ""
         # 바탕은 따로 그린 그림(w_bg) — 위젯 설정의 투명도를 그 그림의 알파로 (RemoteViews 는 배경 알파를 못 바꾼다)
-        if size and size[1] == 1:
+        if scroll:
+            # 카드 목록 (2026-11-28 사용자: 네이버 캘린더 '목록' 위젯처럼) — 흰 머리 줄 [아이콘] 제목 날짜 [새로고침][마이크],
+            # 아래는 옅은 회색 바탕에 날짜 묶음 제목 줄(urlapp_widget_group)과 왼쪽 색 막대가 있는 흰 카드(urlapp_widget_item).
+            # 머리 줄 높이(52dp)는 바탕 그림(urlapp_widget_list_bg)의 흰 부분 높이와 같아야 한다.
+            # 그리는 코드가 만지는 id(w_title·w_date·w_note·w_refresh·w_mic·w_list·w_empty)는 모두 있어야 한다 (없으면 위젯이 깨짐).
+            w(f"layout/{name}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+<ImageView
+    android:id="@+id/w_bg"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:importantForAccessibility="no"
+    android:scaleType="fitXY"
+    android:src="@drawable/urlapp_widget_list_bg" />
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="52dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="{8 if mic else 10}dp">{icon_xml}
+        <TextView
+            android:id="@+id/w_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/app_name"
+            android:textColor="@color/widget_list_title"
+            android:textSize="17sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/w_date"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/widget_list_title"
+            android:textSize="16sp" />
+        <ImageView
+            android:id="@+id/w_refresh"
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:padding="6dp"
+            android:contentDescription="@string/widget_refresh"
+            android:src="@drawable/urlapp_widget_refresh_list"
+            android:visibility="gone" />{mic_xml}
+    </LinearLayout>{list_xml}
+    <TextView
+        android:id="@+id/w_note"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingStart="16dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:text="@string/widget_hint"
+        android:textColor="@color/widget_list_sub"
+        android:textSize="10sp" />
+</LinearLayout>
+</FrameLayout>
+""")
+        elif size and size[1] == 1:
             # 세로 1칸 (예: 4×1, 2026-11-20 사용자 요청): 가로 한 줄 — [아이콘] 제목 / 첫 줄(또는 안내) [새로고침][마이크].
             # 그리는 코드가 만지는 id(w_title·w_row1·w_label1·w_value1·w_note·w_refresh·w_mic)는 모두 있어야 한다 (없으면 위젯이 깨짐).
             w(f"layout/{name}.xml", f"""<?xml version="1.0" encoding="utf-8"?>
@@ -1773,35 +1849,155 @@ def write_widget_resources(res, accent, rows=4, label=None, alt_label=None, alt_
             counts += f'    <integer name="urlapp_widget_alt{i}_rows">{0 if alt_scroll else n_i}</integer>\n'
             if alt_scroll:
                 counts += f'    <integer name="urlapp_widget_alt{i}_list">1</integer>\n'
-        if alt_scroll:  # 목록 한 줄의 모양
-            w("layout/urlapp_widget_item.xml", f"""<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+        if alt_scroll:  # 카드 목록의 한 줄 (카드) · 묶음 제목 줄 · 색 · 그림
+            list_colors = {
+                "values": {"widget_list_head": "#FFFFFF", "widget_list_body": "#F1F2F5", "widget_list_card": "#FFFFFF",
+                           "widget_list_line": "#E4E6EA", "widget_list_title": "#1F2329", "widget_list_sub": "#868C96",
+                           "widget_list_neg": "#E5484D", "widget_list_pos": "#1E9E64", "widget_bar_neg": "#F2729B",
+                           "widget_bar_pos": "#2DB87C", "widget_bar_up": "#5B8DEF", "widget_bar_dim": "#B6BDC8"},
+                "values-night": {"widget_list_head": "#24272C", "widget_list_body": "#16181B", "widget_list_card": "#272A30",
+                                 "widget_list_line": "#33373D", "widget_list_title": "#F1F3F5", "widget_list_sub": "#9AA1AB",
+                                 "widget_list_neg": "#FF6B81", "widget_list_pos": "#4CD69A", "widget_bar_neg": "#F2729B",
+                                 "widget_bar_pos": "#3CCB8C", "widget_bar_up": "#6E9BF2", "widget_bar_dim": "#6B7280"},
+            }
+            for folder, vals in list_colors.items():
+                w(f"{folder}/widget_list_colors.xml", colors(vals))
+            w("drawable/urlapp_widget_list_bg.xml", """<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_list_body" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+    <item android:gravity="top" android:height="52dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_list_head" />
+            <corners android:topLeftRadius="22dp" android:topRightRadius="22dp"
+                android:bottomLeftRadius="0dp" android:bottomRightRadius="0dp" />
+        </shape>
+    </item>
+    <item android:gravity="top" android:top="52dp" android:height="1dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/widget_list_line" />
+        </shape>
+    </item>
+</layer-list>
+""")
+            w("drawable/urlapp_widget_card.xml", """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@color/widget_list_card" />
+    <corners android:radius="12dp" />
+</shape>
+""")
+            w("drawable/urlapp_widget_bar.xml", """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFFFFFFF" />
+    <corners android:radius="2dp" />
+</shape>
+""")
+            w("drawable/urlapp_widget_refresh_list.xml", """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp" android:height="20dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="@color/widget_list_sub"
+        android:pathData="M17.65,6.35C16.2,4.9 14.21,4 12,4c-4.42,0 -7.99,3.58 -7.99,8s3.57,8 7.99,8c3.73,0 6.84,-2.55 7.73,-6h-2.08c-0.82,2.33 -3.04,4 -5.65,4 -3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6c1.66,0 3.14,0.69 4.22,1.78L13,11h7V4l-2.35,2.35z" />
+</vector>
+""")
+            # 카드: 바깥 틀(w_item, 위아래 여백 — 목록은 줄의 margin 을 무시한다) 안에 흰 둥근 카드.
+            # 왼쪽 막대(w_item_bar)는 흰 그림을 코드가 tone 색으로 칠한다 (setColorFilter).
+            w("layout/urlapp_widget_item.xml", """<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/w_item"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:gravity="center_vertical"
-    android:minHeight="34dp"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/urlapp_widget_card"
+        android:gravity="center_vertical"
+        android:minHeight="50dp"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="11dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="11dp">
+        <ImageView
+            android:id="@+id/w_item_bar"
+            android:layout_width="4dp"
+            android:layout_height="match_parent"
+            android:minHeight="26dp"
+            android:importantForAccessibility="no"
+            android:scaleType="fitXY"
+            android:src="@drawable/urlapp_widget_bar" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/w_item_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/widget_list_title"
+                android:textSize="15sp" />
+            <TextView
+                android:id="@+id/w_item_sub"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/widget_list_sub"
+                android:textSize="12sp"
+                android:visibility="gone" />
+        </LinearLayout>
+        <TextView
+            android:id="@+id/w_item_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:maxLines="1"
+            android:textColor="@color/widget_list_sub"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</FrameLayout>
+""")
+            # 묶음 제목 줄 (예: '28. 금  오늘', '지난 할 일  2개', '기한 없음')
+            w("layout/urlapp_widget_group.xml", """<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_group"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:baselineAligned="true"
     android:orientation="horizontal"
-    android:paddingTop="5dp"
+    android:paddingStart="6dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="6dp"
     android:paddingBottom="5dp">
     <TextView
-        android:id="@+id/w_item_label"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:ellipsize="end"
-        android:maxLines="2"
-        android:textColor="@color/widget_title"
-        android:textSize="14sp" />
-    <TextView
-        android:id="@+id/w_item_value"
+        android:id="@+id/w_group_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
         android:maxLines="1"
-        android:textColor="@color/widget_value"
-        android:textSize="13sp"
+        android:textColor="@color/widget_list_title"
+        android:textSize="15sp"
         android:textStyle="bold" />
+    <TextView
+        android:id="@+id/w_group_sub"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_weight="1"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="@color/widget_list_sub"
+        android:textSize="12sp" />
 </LinearLayout>
 """)
     w("values/widget_rows.xml", '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n' + counts + "</resources>\n")
@@ -3034,16 +3230,18 @@ def cmd_selftest(args):
             # 목록 모양에도 그리는 코드가 만지는 id 가 모두 있고, 고정 줄(w_row1)은 없다 (줄 수 0)
             idhex57 = dict((n, h) for h, n in re.findall(r"resource (0x[0-9a-f]+) id/(w_[a-z0-9_]+)", res57))
             # w_refresh·w_mic 는 그 기능이 있는 앱에만 id 가 생긴다 (id 가 없으면 그리는 코드가 건너뜀) — 있으면 목록 모양에도 있어야 한다
-            miss57 = [n for n in ("w_root", "w_bg", "w_title", "w_note", "w_refresh", "w_mic", "w_list", "w_empty")
+            miss57 = [n for n in ("w_root", "w_bg", "w_title", "w_date", "w_note", "w_refresh", "w_mic", "w_list", "w_empty")
                       if (n in idhex57 or n not in ("w_refresh", "w_mic")) and (n not in idhex57 or f"=@{idhex57[n]}" not in lay57)]
-            check("빌드 5-7: alt-scroll·alt-sizes → 두 번째 위젯이 넘겨 보는 목록(ListView·한 줄 모양·30줄) + 3×3·4×2 두 크기",
+            check("빌드 5-7: alt-scroll·alt-sizes → 두 번째 위젯이 넘겨 보는 카드 목록(ListView·카드·묶음 제목 줄·40줄) + 3×3·4×2 두 크기",
                   "ListView" in lay57 and "id/w_list" in res57 and "id/w_item" in res57 and "layout/urlapp_widget_item" in res57
                   and re.search(r"integer/urlapp_widget_alt_list\n\s+\(\) 1", res57) is not None
                   and re.search(r"integer/urlapp_widget_alt2_list\n\s+\(\) 1", res57) is not None
                   and re.search(r"integer/urlapp_widget_alt_rows\n\s+\(\) 0", res57) is not None
                   and re.search(r"integer/urlapp_widget_alt2_rows\n\s+\(\) 0", res57) is not None
                   and not miss57 and f"=@{idhex57.get('w_row1', 'x')}" not in lay57
-                  and "app.jarvis.urlapp.WidgetProviderAlt2" in mf57 and "var ALT_ROWS = 30 ||" in a57
+                  and "app.jarvis.urlapp.WidgetProviderAlt2" in mf57 and "var ALT_ROWS = 40 ||" in a57
+                  and "layout/urlapp_widget_group" in res57 and "drawable/urlapp_widget_list_bg" in res57
+                  and "id/w_item_bar" in res57 and "id/w_item_sub" in res57 and "color/widget_bar_neg" in res57
                   and cells57 == {"urlapp_widget_alt_info": ["3", "3"], "urlapp_widget_alt2_info": ["4", "2"]}
                   and b"Lapp/jarvis/urlapp/WidgetListService;" in dex57, (cells57, miss57, lay57[:300]))
             check("빌드 5-7: 목록 줄을 주는 서비스는 시스템만 묶음 (BIND_REMOTEVIEWS, 내보내지 않음), 목록 없는 앱에는 없음",

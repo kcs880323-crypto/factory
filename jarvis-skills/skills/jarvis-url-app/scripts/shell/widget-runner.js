@@ -8,6 +8,7 @@
 //   "// urlapp:rows N" 으로 8줄까지), note: "...", alt: {같은 모양}} 또는 null(갱신 안 함)
 //   alt 는 두 번째 위젯(스크립트에 "// urlapp:alt-label 이름" 이 있으면 위젯 목록에 따로 생김)이 그린다.
 //   두 번째 위젯의 줄 수는 "// urlapp:alt-rows N" (4줄 이하면 처음 크기 3×2, 넘으면 3×3).
+//   넘겨 보는 목록("// urlapp:alt-scroll")은 카드 목록으로 그린다: 줄에 sub(카드 둘째 줄)·group(묶음 제목 줄, 예: '28. 금')을 둘 수 있다.
 //   notify: [{id, title, body, open}] 를 함께 돌려주면 앱의 알림 기능(--notify)이 처음 보는 id 만 폰 알림으로 띄운다
 //   (위젯 새로고침·앱을 볼 때·15분 알림 확인 때마다 — 사이트를 고치지 않고 기존 API 로 알림을 만들 때).
 // 다시 읽는 때: 페이지를 연 직후, 앱을 보는 동안 2분마다, 사이트가 무언가를 저장한 직후(POST·PUT·PATCH·DELETE fetch 가 끝난 뒤),
@@ -35,7 +36,11 @@
   }
   function shape(d, max) {
     var rows = Array.isArray(d.rows) ? d.rows.slice(0, max).map(function (r) {
-      return { label: clip(r && r.label, 24), value: clip(r && r.value, 24), tone: clip(r && r.tone, 3) };
+      var o = { label: clip(r && r.label, 24), value: clip(r && r.value, 24), tone: clip(r && r.tone, 3) };
+      // 카드 목록 위젯(넘겨 보는 목록)만 쓰는 칸: sub = 카드의 둘째 줄, group = 날짜 같은 묶음 제목 줄 (있을 때만 넘긴다)
+      if (r && r.sub != null && r.sub !== "") o.sub = clip(r.sub, 40);
+      if (r && r.group != null && r.group !== "") o.group = clip(r.group, 24);
+      return o;
     }) : [];
     return { title: clip(d.title, 30), rows: rows, note: clip(d.note, 30) };
   }

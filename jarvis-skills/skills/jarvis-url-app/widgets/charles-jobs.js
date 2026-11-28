@@ -42,14 +42,71 @@ async function () {
 
   // 두 번째 위젯: 할 일 목록 (없거나 못 읽으면 null → 그 위젯은 바꾸지 않는다).
   // 제목은 늘 'TO-DO LIST' (2026-11-28 찰스님: "'할 일 2' 말고 TO-DO LIST 이런 식으로") — 개수는 아래 줄 맨 앞 '미완료 N'.
+  // 모양은 네이버 캘린더 '목록' 위젯처럼 (같은 날 "위젯 스타일을 이렇게"): 날짜 묶음 제목 줄({group:'28. 금', sub:'오늘'})
+  // 아래에 카드({label, sub, value, tone}) — tone 은 왼쪽 막대 색: neg 지남 · pos 오늘 · '' 예정 · dim 기한 없음.
   const TODO_TITLE = "TO-DO LIST";
+  const MAX_TODO = 30, MAX_ROWS_ALL = 40; // 카드 30개 + 묶음 제목 줄 (실행기의 두 번째 위젯 줄 수 40)
   const todoNote = (count, rest) => [count > 0 ? `미완료 ${count}` : "", ...rest].filter(Boolean).join(" · ");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const WD = ["일", "월", "화", "수", "목", "금", "토"];
+  const NEAR = { 0: "오늘", 1: "내일", 2: "모레" };
+  const dayHead = (n) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + n);
+    const same = d.getMonth() === today.getMonth() && d.getFullYear() === today.getFullYear();
+    return `${same ? "" : d.getMonth() + 1 + "."}${d.getDate()}. ${WD[d.getDay()]}`;
+  };
+  // 자비스가 준 값('오늘'·'내일'·'D-2'·'3일 지남'·'')에서 오늘로부터 며칠인지 (모르면 null)
+  const offsetOf = (v) => {
+    v = String(v || "").trim();
+    if (v === "오늘" || /^D-?day$/i.test(v)) return 0;
+    if (v in { "내일": 1 }) return 1;
+    let m = /^D-(\d+)$/i.exec(v);
+    if (m) return +m[1];
+    m = /^(\d+)일\s*지남$/.exec(v);
+    return m ? -m[1] : null;
+  };
+  // items: [{label, n(오늘로부터 며칠, 없으면 null), sub, value?}] → 묶음 제목 줄 + 카드 (지남 → 가까운 날 → 기한 없음)
+  function cards(items) {
+    items = items.slice().sort((a, b) => (a.n == null ? 1e9 : a.n) - (b.n == null ? 1e9 : b.n));
+    const late = items.filter((x) => x.n != null && x.n < 0).length;
+    const rows = [];
+    let last = null, shown = 0;
+    for (const it of items) {
+      const key = it.n == null ? "none" : it.n < 0 ? "late" : String(it.n);
+      const need = key !== last ? 2 : 1;
+      if (shown >= MAX_TODO || rows.length + need > MAX_ROWS_ALL) break;
+      if (key !== last) {
+        last = key;
+        rows.push(key === "late" ? { group: "지난 할 일", sub: `${late}개`, label: "", value: "" }
+          : key === "none" ? { group: "기한 없음", label: "", value: "" }
+          : { group: dayHead(it.n), sub: NEAR[it.n] || "", label: "", value: "" });
+      }
+      rows.push({
+        label: it.label,
+        sub: it.sub || "",
+        value: it.n != null && it.n < 0 ? `${-it.n}일 지남` : it.n == null ? it.value || "" : "",
+        tone: it.n == null ? "dim" : it.n < 0 ? "neg" : it.n === 0 ? "pos" : "",
+      });
+      shown++;
+    }
+    return { rows: rows.length ? rows : [{ label: "할 일 없음", value: "", tone: "dim" }], shown, late,
+      today: items.filter((x) => x.n === 0).length };
+  }
   async function todos() {
     const t = await soft("/urlapp-todo.json");
     if (t && typeof t === "object" && Array.isArray(t.rows) && typeof t.title === "string") {
-      const n = /(\d+)/.exec(t.title); // 자비스 제목의 개수 ('할 일 2'), 없으면 줄 수
-      return { title: TODO_TITLE, rows: t.rows.length ? t.rows : [{ label: "할 일", value: "없음" }],
-        note: todoNote(t.rows.length ? (n ? +n[1] : t.rows.length) : 0, [t.note || ""]) };
+      const items = t.rows.filter((r) => r && typeof r === "object" && String(r.label || "").trim())
+        .map((r) => {
+          const n = offsetOf(r.value);
+          return { label: String(r.label), n, value: n == null ? String(r.value || "") : "", sub: r.sub || "" };
+        });
+      const c = cards(items);
+      const m = /(\d+)/.exec(t.title); // 자비스 제목의 개수 ('할 일 2'), 없으면 줄 수
+      const count = items.length ? (m ? +m[1] : items.length) : 0;
+      return { title: TODO_TITLE, rows: c.rows,
+        note: todoNote(count, [count > c.shown && c.shown < items.length ? `외 ${items.length - c.shown}개` : "", t.note || ""]) };
     }
     const text = (it) => String((it && (it.text || it.title || it.content || it.name)) || "").replace(/\s+/g, " ").trim();
     const listOf = (j) => (Array.isArray(j) ? j : j && typeof j === "object"
@@ -66,29 +123,33 @@ async function () {
     }
     if (!list) return null;
     const icon = { "업무": "💼", "일정": "📅", "비용·영수증": "🧾", "블로그·여행": "✍️", "콘텐츠·아이디어": "🎬", "개인·기타": "📝" };
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const left = (s) => {
       const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || "");
       return d ? Math.round((new Date(+d[1], +d[2] - 1, +d[3]) - today) / 86400000) : null;
     };
+    const clock = (s) => { // 기한에 시각이 있으면 '오후 1:00'
+      const m = /T(\d{2}):(\d{2})/.exec(s || "");
+      if (!m || (m[1] === "00" && m[2] === "00")) return "";
+      const h = +m[1];
+      return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${m[2]}`;
+    };
+    const SRC = { naver: "네이버", google: "구글", outlook: "아웃룩" };
     const done = (it) => it.done === true || it.completed === true || it.checked === true
       || /^(done|completed|complete|완료)$/i.test(String(it.status || ""));
-    const open = list.filter((it) => it && typeof it === "object" && !done(it) && text(it))
-      .map((it) => ({ it, n: left(it.due || it.due_date || it.dueDate || it.date || it.deadline) }));
-    open.sort((a, b) => (a.n == null ? 1e9 : a.n) - (b.n == null ? 1e9 : b.n));
-    const rows = open.slice(0, 30).map(({ it, n }) => ({
-      label: (memo && icon[it.category] ? icon[it.category] + " " : "") + text(it),
-      value: n == null ? (memo ? it.category || "" : "") : n < 0 ? `${-n}일 지남` : n === 0 ? "오늘" : `D-${n}`,
-      tone: n != null && n < 0 ? "neg" : n === 0 ? "pos" : "",
-    }));
-    const late = open.filter((x) => x.n != null && x.n < 0).length;
-    const today0 = open.filter((x) => x.n === 0).length;
+    const open = list.filter((it) => it && typeof it === "object" && !done(it) && text(it)).map((it) => {
+      const due = it.due || it.due_date || it.dueDate || it.date || it.deadline;
+      const src = SRC[String(it.source || "").toLowerCase()] || "";
+      return {
+        label: text(it), n: left(due),
+        sub: memo ? [icon[it.category] || "", it.category || ""].filter(Boolean).join(" ") : [clock(due), src].filter(Boolean).join(" · "),
+      };
+    });
+    const c = cards(open);
     return {
       title: TODO_TITLE,
-      rows: rows.length ? rows : [{ label: "할 일", value: "없음" }],
-      note: todoNote(open.length, [late ? `지남 ${late}` : "", today0 ? `오늘 ${today0}` : "",
-        open.length > rows.length ? `외 ${open.length - rows.length}개` : "", memo ? "메모장 기준" : ""]),
+      rows: c.rows,
+      note: todoNote(open.length, [c.late ? `지남 ${c.late}` : "", c.today ? `오늘 ${c.today}` : "",
+        open.length > c.shown ? `외 ${open.length - c.shown}개` : "", memo ? "메모장 기준" : ""]),
     };
   }
   const todoP = todos().catch(() => null);
