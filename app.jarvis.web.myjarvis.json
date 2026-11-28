@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 28,
- "version_name": "1.28",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v28.bin",
- "sha256": "4f4f18feaa954728aa691ac82eeda00317097b690509d4ef71f9d2c1702851b3",
+ "version_code": 29,
+ "version_name": "1.29",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v29.bin",
+ "sha256": "a4f8a933a1ec2575d51e41c9478bd66dfbaea1832a48ecff4649dea1ca1b115d",
  "size": 2296835,
- "notes": "알람: 앱이 꺼져 있거나 화면이 꺼져 있어도 정각에 강한 진동 + 끄기/5분 뒤 (시계 앱처럼)",
- "published_at": "2026-11-28 04:04",
+ "notes": "알람이 울릴 때 갤럭시 워치도 같이 진동 (워치에서 끄기/5분 뒤 가능 — 워치 앱도 1.29로)",
+ "published_at": "2026-11-28 04:22",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "48a96803115a567d4535cc1a0f6c29bd80026883de14b14d16195bbcafd0ce8c"
+ "apk_sha256": "a3d7f3fa556384d54bef98134b2c23b0a7fd6f2ca0636ba79841933eda322222"
 }
