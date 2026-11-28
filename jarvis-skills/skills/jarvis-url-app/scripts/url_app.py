@@ -741,7 +741,7 @@ def android_string(s):
 
 def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widget_label=False, widget_alt=False,
                  view_hosts=(), update=False, widget_extra_sizes=0, mic=False, notify=False, hotword=False,
-                 voice_icon=False, watch=False, widget_alt_extra=0, widget_alt_scroll=False):
+                 voice_icon=False, watch=False, widget_alt_extra=0, widget_alt_scroll=False, alarms=False):
     """cards: None(없음) | "intent"(MacroDroid 가 보내 줌) | "listener"(앱이 직접 알림 읽기).
     widget_label: 첫 위젯에 따로 이름(@string/widget_name)이 있는지. widget_alt: 두 번째 위젯(@string/widget_alt_name)."""
     orient = {"portrait": "portrait", "landscape": "sensorLandscape"}.get(orientation)
@@ -852,7 +852,7 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             android:name="app.jarvis.urlapp.UpdateReceiver"
             android:exported="false" />"""
     # --notify: 알림 권한(안드로이드 13+ 은 처음 열 때 묻는다), 폰을 다시 켜도 15분 확인을 잇는 권한, 확인 작업
-    if notify:
+    if notify or alarms:
         if "POST_NOTIFICATIONS" not in card_perm:
             card_perm += '\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />'
         card_perm += '\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />'
@@ -861,6 +861,45 @@ def manifest_xml(app_id, cleartext, orientation, widget=False, cards=None, widge
             android:name="app.jarvis.urlapp.NotifyJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE" />"""
+    # --alarms: 사이트의 /urlapp-alarms.json 알람을 정각에 (시계 앱처럼). 정확한 알람(안드로이드 13+ 은 USE_EXACT_ALARM 이 설치 때
+    # 허락됨, 12 는 SCHEDULE_EXACT_ALARM), 울리는 동안의 전경 서비스(알람을 이어 가는 systemExempted, 안 되면 shortService),
+    # 진동·화면 깨우기, 잠금 화면 위 전체 화면 창, 재부팅·시각 변경 뒤 다시 걸기
+    if alarms:
+        for perm in ("VIBRATE", "WAKE_LOCK", "USE_FULL_SCREEN_INTENT", "FOREGROUND_SERVICE",
+                     "FOREGROUND_SERVICE_SYSTEM_EXEMPTED", "USE_EXACT_ALARM"):
+            if f'"android.permission.{perm}"' not in card_perm:
+                card_perm += f'\n    <uses-permission android:name="android.permission.{perm}" />'
+        card_perm += ('\n    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"'
+                      ' android:maxSdkVersion="32" />')
+        card_parts += f"""
+        <service
+            android:name="app.jarvis.urlapp.AlarmService"
+            android:exported="false"
+            android:foregroundServiceType="systemExempted|shortService" />
+        <receiver
+            android:name="app.jarvis.urlapp.AlarmReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="app.jarvis.urlapp.AlarmReceiver$Boot"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <activity
+            android:name="app.jarvis.urlapp.AlarmActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:taskAffinity="{app_id}.alarm"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />"""
     # --mic: 마이크 권한(앱이 처음 쓸 때 묻는다)과 폰의 음성 인식·읽어 주기 서비스를 찾는 허락 (안드로이드 11+)
     queries = ""
     if mic:
@@ -1302,6 +1341,13 @@ HOTWORD_ICON = """<?xml version="1.0" encoding="utf-8"?>
 </vector>
 """
 
+ALARM_ICON = """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M22,5.72l-4.6,-3.86 -1.29,1.53 4.6,3.86L22,5.72zM7.88,3.39L6.6,1.86 2,5.71l1.29,1.53 4.59,-3.85zM12.5,8L11,8v6l4.75,2.85 0.75,-1.23 -4,-2.37L12.5,8zM12,4c-4.97,0 -9,4.03 -9,9s4.02,9 9,9c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9zM12,20c-3.87,0 -7,-3.13 -7,-7s3.13,-7 7,-7 7,3.13 7,7 -3.13,7 -7,7z" />
+</vector>
+"""  # 알람 알림 아이콘 (Material Icons "alarm", Apache-2.0)
 NOTIFY_ICON = """<?xml version="1.0" encoding="utf-8"?>
 <!-- 앱 알림의 작은 아이콘 (종 모양, Material Icons "notifications", Apache-2.0) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
@@ -2446,11 +2492,11 @@ def save_registry(home, reg):
 
 EXPLICIT_KEYS = ("name", "icon", "icon_color", "accent", "widget", "widget_param", "cards", "cards_via", "color", "bg", "orientation", "external", "allow_host", "desktop",
                  "fullscreen", "keep_awake", "dark", "id", "update_url", "live", "widget_style", "mic", "widget_sizes", "notify",
-                 "update_encrypt", "hotword", "hotword_phrase", "voice_icon", "voice_icon_name", "watch", "start_tab")
+                 "update_encrypt", "hotword", "hotword_phrase", "voice_icon", "voice_icon_name", "watch", "start_tab", "alarms")
 DEFAULTS = {"orientation": "auto", "external": "browser", "allow_host": [], "desktop": False,
             "fullscreen": False, "keep_awake": False, "dark": "auto", "live": False, "widget_style": "auto", "mic": False, "notify": False,
             "update_encrypt": False, "hotword": False, "hotword_phrase": [], "voice_icon": False, "voice_icon_name": None, "watch": False,
-            "start_tab": None}
+            "start_tab": None, "alarms": False}
 
 
 def cmd_build(args):
@@ -2636,6 +2682,9 @@ def cmd_build(args):
         if opt["notify"]:
             (res / "drawable").mkdir(exist_ok=True)
             (res / "drawable" / "urlapp_notify.xml").write_text(NOTIFY_ICON, encoding="utf-8")
+        if opt["alarms"]:
+            (res / "drawable").mkdir(exist_ok=True)
+            (res / "drawable" / "urlapp_alarm.xml").write_text(ALARM_ICON, encoding="utf-8")
         widget_accent = accent or icon_color or (theme if not is_near_white(theme) else "#1A73E8")
         if widget_js:
             dark_bg = None
@@ -2653,7 +2702,8 @@ def cmd_build(args):
                "theme_color_dark": None if opt["color"] else site["theme_dark"],
                "desktop": bool(opt["desktop"]),
                "fullscreen": bool(opt["fullscreen"]), "keep_awake": bool(opt["keep_awake"]), "dark": opt["dark"],
-               "live": bool(opt["live"]), "mic": bool(opt["mic"]), "notify": bool(opt["notify"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0}
+               "live": bool(opt["live"]), "mic": bool(opt["mic"]), "notify": bool(opt["notify"]), "accent": accent, "widget_refresh_min": widget_refresh if widget_js else 0,
+               "alarms": bool(opt["alarms"])}
         if hotword:
             cfg["hotword"] = hotword
         if watch:
@@ -2693,7 +2743,7 @@ def cmd_build(args):
                                                                   hotword=bool(hotword), voice_icon=bool(voice_icon),
                                                                   watch=watch,
                                                                   widget_alt_extra=max(0, len(alt_sizes) - 1),
-                                                                  widget_alt_scroll=alt_scroll),
+                                                                  widget_alt_scroll=alt_scroll, alarms=bool(opt["alarms"])),
                                                      encoding="utf-8")
 
         say("APK 만드는 중")
@@ -2787,6 +2837,9 @@ def cmd_build(args):
         say(f"  홈 화면 위젯: 있음{kinds} (설치 후 홈 화면을 길게 눌러 '위젯'에서 이 앱을 고른다. 앱을 열 때마다 새로 읽는다)")
     if opt["notify"]:
         say("  앱 알림: 있음 (사이트의 /urlapp-notify.json 을 15분마다, 웹 알림 → 폰 알림. 안드로이드 13+ 은 처음 열 때 권한을 묻는다)")
+    if opt["alarms"]:
+        say("  알람: 있음 (사이트의 /urlapp-alarms.json 을 앱을 열 때·15분마다·재부팅 뒤·사이트의 urlappSyncAlarms() 때 읽어 정각에 — "
+            "화면이 꺼져 있어도 강한 반복 진동 + 알림(끄기 / 5분 뒤) + 잠금 화면 창, 끄기·미루기는 POST /api/alarms 로 사이트에도)")
     if update_url:
         say(f"  앱 안 업데이트: {update_url}" + (" (암호화: 열쇠는 ~/.jarvis-url-app/update-keys/ 와 앱 안에만)"
                                               if opt["update_encrypt"] else ""))
@@ -3525,6 +3578,44 @@ def cmd_selftest(args):
             check("알림: 권한·재부팅 뒤 이어 하기·확인 작업·도우미·아이콘·설정", mfe.count('="android.permission.POST_NOTIFICATIONS"') == 1
                   and "android.permission.RECEIVE_BOOT_COMPLETED" in mfe and "app.jarvis.urlapp.NotifyJob" in mfe
                   and "assets/urlapp-notify.js" in names_e and "drawable/urlapp_notify" in rese and cfge.get("notify") is True)
+            check("알림만 있는 앱에는 알람 부품·정확한 알람 권한이 없음", "AlarmService" not in mfe and "USE_EXACT_ALARM" not in mfe
+                  and cfge.get("alarms") is False, cfge.get("alarms"))
+            # --alarms: 사이트의 알람을 정각에 (시계 앱처럼 진동·끄기/5분 뒤)
+            build(base + "/alarm", "--no-fetch", "--alarms")
+            reca = next(v for v in load_registry(tmp_home)["apps"].values() if v["url"].endswith("/alarm"))
+            mfa = run([tp["aapt2"], "dump", "xmltree", "--file", "AndroidManifest.xml", reca["apk"]], tmp_home, "xmltree")
+            resa = run([tp["aapt2"], "dump", "resources", reca["apk"]], tmp_home, "resources")
+            with zipfile.ZipFile(reca["apk"]) as z:
+                cfga = json.loads(z.read("assets/urlapp.json"))
+                dexa = b"".join(z.read(n) for n in z.namelist() if re.fullmatch(r"classes\d*\.dex", n))
+
+            def block(mf, name):
+                i = mf.find(f'"{name}"')
+                j = mf.rfind("E: ", 0, i)
+                k = re.search(r"\n\s+E: (?:receiver|service|activity|provider|meta-data|activity-alias)", mf[i:])
+                return mf[j:i + k.start()] if i >= 0 and k else mf[j:] if i >= 0 else ""
+            svc_a, rx_a, boot_a, act_a = (block(mfa, "app.jarvis.urlapp." + n) for n in
+                                          ("AlarmService", "AlarmReceiver", "AlarmReceiver$Boot", "AlarmActivity"))
+            no_exp = r"exported\(0x[0-9a-f]+\)=(false|\(type 0x12\)0x0\b)"
+            perms_a = re.findall(r'android:name\(0x01010003\)="(android\.permission\.[A-Z_]+)"', mfa)
+            check("알람: 정확한 알람(13+ USE_EXACT_ALARM, 12 SCHEDULE_EXACT_ALARM 은 maxSdk 32)·전경 서비스(systemExempted)·진동·"
+                  "화면 깨우기·전체 화면·알림·재부팅 권한",
+                  all(f"android.permission.{x}" in perms_a for x in ("USE_EXACT_ALARM", "SCHEDULE_EXACT_ALARM", "FOREGROUND_SERVICE",
+                      "FOREGROUND_SERVICE_SYSTEM_EXEMPTED", "VIBRATE", "WAKE_LOCK", "USE_FULL_SCREEN_INTENT", "POST_NOTIFICATIONS",
+                      "RECEIVE_BOOT_COMPLETED")) and perms_a.count("android.permission.POST_NOTIFICATIONS") == 1
+                  and re.search(r'SCHEDULE_EXACT_ALARM"[^\n]*\n\s+A: [^\n]*maxSdkVersion\(0x[0-9a-f]+\)=(?:\(type 0x10\)0x20|32)', mfa)
+                  is not None, perms_a)
+            check("알람: 울리는 서비스(내보내지 않음, systemExempted|shortService)·받는 곳(내보내지 않음)·재부팅 받는 곳(시스템 방송만)·"
+                  "잠금 화면 창(내보내지 않음)·15분 확인 작업·아이콘·설정",
+                  re.search(no_exp, svc_a) is not None and "foregroundServiceType" in svc_a
+                  and re.search(no_exp, rx_a) is not None and "intent-filter" not in rx_a
+                  and all(x in boot_a for x in ("android.intent.action.BOOT_COMPLETED", "android.intent.action.TIME_SET",
+                                                "android.intent.action.TIMEZONE_CHANGED", "android.intent.action.MY_PACKAGE_REPLACED"))
+                  and re.search(no_exp, act_a) is not None and "app.jarvis.urlapp.NotifyJob" in mfa
+                  and "drawable/urlapp_alarm" in resa and cfga.get("alarms") is True and cfga.get("notify") is False
+                  and all(f"Lapp/jarvis/urlapp/{c};".encode() in dexa for c in ("AlarmService", "AlarmSync", "AlarmPlan",
+                                                                              "AlarmActivity", "AlarmReceiver$Boot")),
+                  [svc_a[:300], rx_a[:200], act_a[:200]])
             keyfile = tmp_home / "update-keys" / (ide + ".key")
             check("암호화 업데이트: 열쇠 파일(나만 읽기)과 앱 안 열쇠가 같음", keyfile.is_file()
                   and (os.name == "nt" or (keyfile.stat().st_mode & 0o077) == 0)
@@ -3723,6 +3814,9 @@ def build_parser():
                    help="앱을 열 때 사이트의 이 탭(단추 글자)을 한 번 눌러 준다 — 주소로 탭을 고를 수 없는 사이트용 "
                         "(예: '변동지출', 폰·태블릿에서 글자가 다르면 '변동지출|변동지출 관리'). 앱을 처음 열 때와 10분 넘게 나가 있다 "
                         "돌아올 때. 'none' 이면 끈다")
+    b.add_argument("--alarms", action=argparse.BooleanOptionalAction, default=None,
+                   help="사이트의 알람(/urlapp-alarms.json: {alarms:[{id, label, fire_ms}]})을 폰의 정각 알람으로 — 앱이 꺼져 있거나 "
+                        "화면이 꺼져 있어도 시계 앱처럼 강한 반복 진동 + 알림(끄기 / 5분 뒤). 끄기·미루기는 POST /api/alarms 로 사이트에도 알린다")
     b.add_argument("--voice-icon", dest="voice_icon", action=argparse.BooleanOptionalAction, default=None,
                    help="대화 창을 바로 여는 두 번째 앱 아이콘 (--mic 필요). 빅스비 빠른 명령어·'OO 열어줘'로 부를 때 쓴다")
     b.add_argument("--voice-icon-name", dest="voice_icon_name",

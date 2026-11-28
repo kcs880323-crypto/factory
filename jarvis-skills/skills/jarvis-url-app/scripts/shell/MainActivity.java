@@ -397,6 +397,7 @@ public class MainActivity extends Activity {
         if (speechJs != null) web.addJavascriptInterface(new SpeechBridge(), "UrlAppSpeech");
         notifyJs = readAssetOrNull("urlapp-notify.js");
         if (notifyJs != null) web.addJavascriptInterface(new NotifyBridge(), "UrlAppNotify");
+        if (AlarmSync.enabled(this)) web.addJavascriptInterface(new AlarmBridge(), "UrlAppAlarms");
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -772,7 +773,18 @@ public class MainActivity extends Activity {
         String token = JSONObject.quote(dlToken);
         if (downloadJs != null) web.evaluateJavascript(downloadJs.replace("\"__URLAPP_TOKEN__\"", token), null);
         if (widgetJs != null) web.evaluateJavascript(widgetJs.replace("\"__URLAPP_TOKEN__\"", token), null);
+        if (AlarmSync.enabled(this)) { // 사이트가 알람을 고친 뒤 부르면 곧바로 다시 읽는다
+            web.evaluateJavascript("window.urlappSyncAlarms=function(){try{UrlAppAlarms.sync();return true;}catch(e){return false;}};", null);
+        }
         injectSpeech(url);
+    }
+
+    /** 네이티브 알람: 사이트가 window.urlappSyncAlarms() 로 '알람을 고쳤으니 다시 읽어 달라'고 할 때. 읽기만 한다. */
+    private final class AlarmBridge {
+        @JavascriptInterface
+        public void sync() {
+            AlarmSync.requestSync(getApplicationContext(), "web", 1500);
+        }
     }
 
     /** 음성·알림 도우미는 되도록 일찍 (사이트가 그 기능을 찾기 전에). 두 번 넣어도 한 번만 돈다. */
@@ -797,7 +809,7 @@ public class MainActivity extends Activity {
 
     /** 알림 권한 묻기 (안드로이드 13+). force 가 아니면 처음 한 번만. 다른 권한을 묻는 중이면 다음에. */
     private void askNotify(boolean force) {
-        if (notifyJs == null) return;
+        if (notifyJs == null && !AlarmSync.enabled(this)) return; // 알람만 있는 앱도 알림 권한이 있어야 '끄기' 알림이 보인다
         if (Build.VERSION.SDK_INT < 33 || !"default".equals(notifyState()) && !force) {
             sendNotifyState();
             return;
@@ -1390,6 +1402,12 @@ public class MainActivity extends Activity {
             WidgetProvider.refresh(this);      // 혹시 남아 있는 "새로고침 중…"을 지운다
         }
         if (AppUpdater.enabled(this)) AppUpdater.check(this, false); // 새 버전 확인 (6시간에 한 번, 새 버전이면 묻는다)
+        if (AlarmSync.enabled(this)) {
+            AlarmSync.requestSync(this, "앱 열기", 0); // 알람 목록을 읽어 정각 예약 (서버의 /urlapp-alarms.json)
+            NotifyJob.schedule(this);                   // 앱을 안 열어도 15분마다 다시 읽기
+            if (AlarmService.ringing) startActivity(new Intent(this, AlarmActivity.class)); // 울리는 중이면 끄기 화면
+            if (notifyJs == null && web != null) web.postDelayed(() -> askNotify(false), 1500);
+        }
         if (notifyJs != null && web != null) {
             NotifyJob.schedule(this); // 15분마다 사이트 알림 확인 (이미 걸려 있으면 그대로)
             web.postDelayed(() -> askNotify(false), 1500); // 알림 권한: 처음 한 번만 묻는다 (안드로이드 13+)

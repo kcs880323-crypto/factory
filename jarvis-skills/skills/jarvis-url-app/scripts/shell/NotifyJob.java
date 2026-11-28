@@ -62,7 +62,7 @@ public class NotifyJob extends JobService {
 
     /** 15분마다 확인하기 (이미 걸려 있으면 그대로). */
     static void schedule(Context ctx) {
-        if (!enabled(ctx)) return;
+        if (!enabled(ctx) && !AlarmSync.enabled(ctx)) return; // 알람(--alarms)도 15분마다 다시 읽는다
         JobScheduler js = (JobScheduler) ctx.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (js == null) return;
         for (JobInfo j : js.getAllPendingJobs()) if (j.getId() == JOB) return;
@@ -77,7 +77,8 @@ public class NotifyJob extends JobService {
     public boolean onStartJob(JobParameters p) {
         Context app = getApplicationContext();
         new Thread(() -> {
-            check(app);
+            if (enabled(app)) check(app);
+            if (AlarmSync.enabled(app)) AlarmSync.sync(app, "15분 확인"); // 알람 목록 (반복 알람의 다음 시각 등)
             HotwordService.remind(app, false); // 켜 둔 '하이 자비스'가 꺼져 있으면 '다시 켜기' 알림 (6시간에 한 번)
             // 위젯 스크립트가 있는 앱은 그 스크립트도 돌린다 (보이지 않는 웹 화면, 45초 안에 끝남): 위젯을 새로 고치고,
             // 스크립트가 돌려준 notify 도 알림으로 띄운다 — 화면이 꺼져 있어도 15분마다.
@@ -221,7 +222,7 @@ public class NotifyJob extends JobService {
         if (nm != null) nm.cancel(CHANNEL, key.hashCode());
     }
 
-    private static byte[] readAll(InputStream in, int max) throws java.io.IOException {
+    static byte[] readAll(InputStream in, int max) throws java.io.IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         int n;
