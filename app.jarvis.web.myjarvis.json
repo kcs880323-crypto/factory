@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 21,
- "version_name": "1.21",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v21.bin",
- "sha256": "cbbc8327c78c4bf716280164b9d792efe31c28e21066f7f4c731f46290b38873",
- "size": 2263181,
- "notes": "음성 창에서 내가 한 긴 말이 잘리던 것을 스크롤로 고침. 이어 묻는 말을 같은 대화로 보게 함",
- "published_at": "2026-11-22 07:14",
+ "version_code": 22,
+ "version_name": "1.22",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v22.bin",
+ "sha256": "cea0139cfc31dad4207be216e176748cb1a812d8aed1bd46ec2eb41b4f58f104",
+ "size": 2271531,
+ "notes": "위젯 2종: 지금 하는 일(그대로) + 새 '자비스 할 일' 위젯",
+ "published_at": "2026-11-28 02:28",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "a613be451c954fc5f307a317e348843a7d13972b18fdde6dceb282b921fed364"
+ "apk_sha256": "9db4b59a8468e0c76f4196e4b80d3408317856055305ca6886445c0bc59f47a5"
 }
