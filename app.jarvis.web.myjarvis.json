@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 26,
- "version_name": "1.26",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v26.bin",
- "sha256": "9596a3704ffcbff4dda4612645dc3bd771eccdd48d59df0fa18059993e86115e",
- "size": 2279962,
- "notes": "할 일 위젯 제목을 'TO-DO LIST'로 (개수는 아래 줄 '미완료 N')",
- "published_at": "2026-11-28 03:13",
+ "version_code": 27,
+ "version_name": "1.27",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v27.bin",
+ "sha256": "ebb182f5760feab8a3d3aa9540e9d22410f94a5d9242cfc3fd73dbb2f624536b",
+ "size": 2284472,
+ "notes": "TO-DO LIST 위젯을 카드 목록 모양으로 (날짜별 묶음, 왼쪽 색 막대, 흰 머리 줄에 오늘 날짜)",
+ "published_at": "2026-11-28 03:42",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "a208ceca6c05905c3109b0acb4d454528229bedd36134d09bef0e607c1dfbbcc"
+ "apk_sha256": "1b2090842cb636f99418cef19d6c93aafa6077f6b6346e773cb85d94fc5093b0"
 }
