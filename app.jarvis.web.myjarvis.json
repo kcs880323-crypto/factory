@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 22,
- "version_name": "1.22",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v22.bin",
- "sha256": "cea0139cfc31dad4207be216e176748cb1a812d8aed1bd46ec2eb41b4f58f104",
- "size": 2271531,
- "notes": "위젯 2종: 지금 하는 일(그대로) + 새 '자비스 할 일' 위젯",
- "published_at": "2026-11-28 02:28",
+ "version_code": 24,
+ "version_name": "1.24",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v24.bin",
+ "sha256": "56609171de4a356d33ff51752a7c3e1440eefbd3d91761674572cfb700b8ab74",
+ "size": 2275866,
+ "notes": "두 번째 위젯 '자비스 할 일': 넘겨 보는 목록(최대 30줄)과 4×2 크기 추가, 할 일 목록 읽기 개선",
+ "published_at": "2026-11-28 02:51",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "9db4b59a8468e0c76f4196e4b80d3408317856055305ca6886445c0bc59f47a5"
+ "apk_sha256": "4303accf371eeded374fbb73934f1a1b34077329596963043251684b745376d4"
 }
