@@ -51,6 +51,7 @@ function check(label, cond, detail) {
     { id: 1, source_table: "monthly_details", date: "2026-11-03", details: "메가커피", amount: 12500, earner_name: "창수", memo: "현대카드" },
   ];
   let cjMode = "off"; // CHARLES 위젯: off | jobs | idle | login
+  let cjTodo = "none"; // 두 번째 위젯(할 일): none | site(/urlapp-todo.json) | memos(/api/memos)
   const cjReqs = [];
   let spMode = "none"; // 범용 위젯: /urlapp-widget.json 이 어떻게 답하는지 (none = 일반 페이지)
   let serverSession = false; // 서버(/api/session)가 로그인이라고 하는지 (보이지 않는 웹 화면에서 새로 고칠 때)
@@ -110,6 +111,23 @@ function check(label, cond, detail) {
         + '\'<div class="card"><h3>보고서 정리</h3><progress value="3" max="4"></progress></div>'
         + '<div class="card"><span>코드 리뷰</span><div role="progressbar" aria-valuenow="40"></div><span>40%</span></div>\';},800);'
         + '</script></body></html>');
+    }
+    if (req.url === "/urlapp-todo.json" && cjTodo === "site") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ title: "할 일 3", note: "오늘 1",
+        rows: [{ label: "전기차 보고", value: "D-2", tone: "pos" }, { label: "견적 회신", value: "오늘" }, { label: "명함 정리", value: "" }] }));
+    }
+    if (req.url.startsWith("/api/memos") && cjTodo === "memos") {
+      const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n);
+        return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ report: "…", items: [
+        { id: "a1", category: "개인·기타", text: "세탁소   찾기", due: "", done: false },
+        { id: "a2", category: "업무", text: "전기차 보고", due: d(3), done: false },
+        { id: "a3", category: "일정", text: "검진 예약", due: d(-1), done: false },
+        { id: "a4", category: "업무", text: "끝난 일", due: d(0), done: true },
+        { id: "a5", category: "비용·영수증", text: "택시비 정산", due: d(0), done: false },
+        { id: "a6", category: "업무", text: "", due: d(1), done: false }] }));
     }
     if ((req.url === "/urlapp-widget.json" || req.url === "/urlapp-notify.json") && cjMode === "siteIdle") {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -547,6 +565,24 @@ function check(label, cond, detail) {
   check("CHARLES: 자비스가 /urlapp-widget.json 을 주면 그 값(작업창과 같은 83%)을 그대로, 알림은 자비스 목록에 맡김",
     cs.title === "자비스 · 진행 중 1" && cs.rows.length === 1 && cs.rows[0].value === "83%" && cs.notify.length === 0
       && !cjReqs.some((r) => r.includes("/api/")), { cs, cjReqs });
+  check("CHARLES: 할 일 목록을 줄 곳이 없으면 두 번째 위젯은 안 바꿈 (첫 위젯은 그대로)", !("alt" in cs) && !("alt" in c1), cs.alt);
+  // 두 번째 위젯 '자비스 할 일' (2026-11-28): 자비스가 /urlapp-todo.json 을 주면 그대로, 없으면 스마트 메모장의 안 끝난 일
+  cjTodo = "site";
+  await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
+  await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
+  const ct = await cj.evaluate(() => __w[3]);
+  check("할 일 위젯: 자비스가 /urlapp-todo.json 을 주면 그대로 (첫 위젯은 예전과 같음)",
+    ct.alt && ct.alt.title === "할 일 3" && ct.alt.note === "오늘 1" && ct.alt.rows.length === 3 && ct.alt.rows[0].label === "전기차 보고"
+      && ct.title === "자비스 · 진행 중 1" && ct.rows[0].value === "83%", ct);
+  cjTodo = "memos";
+  await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
+  await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
+  const cmm = await cj.evaluate(() => __w[3]);
+  check("할 일 위젯(대체): 메모장의 안 끝난 일만, 지난 것·가까운 것 먼저, 기한 없는 것은 뒤, '메모장 기준'",
+    cmm.alt && cmm.alt.title === "자비스 할 일 4" && JSON.stringify(cmm.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
+      ["📅 검진 예약", "1일 지남", "neg"], ["🧾 택시비 정산", "오늘", "pos"], ["💼 전기차 보고", "D-3", ""], ["📝 세탁소 찾기", "개인·기타", ""]])
+      && cmm.alt.note === "지남 1 · 메모장 기준", cmm.alt);
+  cjTodo = "none";
   cjMode = "siteIdle";
   await cj.evaluate(() => { __w.length = 2; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 3, null, { timeout: 5000 });

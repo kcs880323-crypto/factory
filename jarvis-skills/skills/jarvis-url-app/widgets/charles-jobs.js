@@ -17,7 +17,13 @@
 // 읽기만 한다: 작업·요청을 멈추거나 '봤음'으로 바꾸지 않는다 (GET 만). 지어낸 값은 넣지 않는다.
 // 로그인이 풀렸으면(401) 아무것도 바꾸지 않는다. 사이트 주소는 들어 있지 않다 (같은 사이트 안의 상대 주소만).
 // url_app.py build <URL> --widget widgets/charles-jobs.js
+// 두 번째 위젯 '자비스 할 일' (2026-11-28 찰스님: "위젯 두 개 — 하나는 지금 그대로, 두 번째는 자비스 안의 투두리스트"):
+//   1) GET /urlapp-todo.json → {title, rows:[{label, value, tone}], note} 를 자비스가 주면 그대로 (자비스가 정한 순서·표시)
+//   2) 없으면(옛 서버) 스마트 메모장의 안 끝난 항목: GET /api/memos?days=30 → {items:[{text, category, due(YYYY-MM-DD), done}]}
+//      — 기한 지난 것·가까운 것 먼저, 기한 없는 것은 뒤. 아래 줄에 '메모장 기준'. 읽기만 한다 (완료 처리는 앱 화면에서).
 // urlapp:rows 4
+// urlapp:alt-label 자비스 할 일
+// urlapp:alt-rows 6
 // urlapp:refresh-min 10
 async function () {
   async function get(p) {
@@ -27,6 +33,47 @@ async function () {
     return r.json();
   }
   const soft = (p) => get(p).catch(() => null); // 기능이 없거나 꺼져 있으면 그 부분만 뺀다
+
+  // 두 번째 위젯: 할 일 목록 (없거나 못 읽으면 null → 그 위젯은 바꾸지 않는다)
+  async function todos() {
+    const t = await soft("/urlapp-todo.json");
+    if (t && typeof t === "object" && Array.isArray(t.rows) && typeof t.title === "string") {
+      return { title: t.title, rows: t.rows.length ? t.rows : [{ label: "할 일", value: "없음" }], note: t.note || "" };
+    }
+    const m = await soft("/api/memos?days=30");
+    if (!m || !Array.isArray(m.items)) return null;
+    const icon = { "업무": "💼", "일정": "📅", "비용·영수증": "🧾", "블로그·여행": "✍️", "콘텐츠·아이디어": "🎬", "개인·기타": "📝" };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const left = (s) => {
+      const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || "");
+      return d ? Math.round((new Date(+d[1], +d[2] - 1, +d[3]) - today) / 86400000) : null;
+    };
+    const open = m.items.filter((it) => it && !it.done && String(it.text || "").trim())
+      .map((it) => ({ it, n: left(it.due) }));
+    open.sort((a, b) => (a.n == null ? 1e9 : a.n) - (b.n == null ? 1e9 : b.n));
+    const rows = open.slice(0, 6).map(({ it, n }) => ({
+      label: (icon[it.category] ? icon[it.category] + " " : "") + String(it.text).replace(/\s+/g, " ").trim(),
+      value: n == null ? (it.category || "") : n < 0 ? `${-n}일 지남` : n === 0 ? "오늘" : `D-${n}`,
+      tone: n != null && n < 0 ? "neg" : n === 0 ? "pos" : "",
+    }));
+    const late = open.filter((x) => x.n != null && x.n < 0).length;
+    return {
+      title: `자비스 할 일 ${open.length}`,
+      rows: rows.length ? rows : [{ label: "할 일", value: "없음" }],
+      note: [late ? `지남 ${late}` : "", open.length > rows.length ? `외 ${open.length - rows.length}개` : "", "메모장 기준"]
+        .filter(Boolean).join(" · "),
+    };
+  }
+  const todoP = todos().catch(() => null);
+  const main = await jobs();
+  if (!main) return null; // 로그인 전·서버에 닿지 않음: 두 위젯 모두 바꾸지 않는다
+  const alt = await todoP;
+  if (alt) main.alt = alt;
+  return main;
+
+  // 첫 번째 위젯: 지금 하는 일 (예전과 같음)
+  async function jobs() {
   // 0) 자비스가 주는 위젯 정보·알림 목록 (작업창과 같은 값)
   let siteWidget = null, siteNotify = false;
   try {
@@ -147,4 +194,5 @@ async function () {
     note: notes.join(" · "),
     notify,
   };
+  }
 }
