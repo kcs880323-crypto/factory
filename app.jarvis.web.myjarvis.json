@@ -1,12 +1,12 @@
 {
  "package": "app.jarvis.web.myjarvis",
- "version_code": 27,
- "version_name": "1.27",
- "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v27.bin",
- "sha256": "ebb182f5760feab8a3d3aa9540e9d22410f94a5d9242cfc3fd73dbb2f624536b",
- "size": 2284472,
- "notes": "TO-DO LIST 위젯을 카드 목록 모양으로 (날짜별 묶음, 왼쪽 색 막대, 흰 머리 줄에 오늘 날짜)",
- "published_at": "2026-11-28 03:42",
+ "version_code": 28,
+ "version_name": "1.28",
+ "apk": "https://raw.githubusercontent.com/kcs880323-crypto/factory/app-releases/app.jarvis.web.myjarvis-v28.bin",
+ "sha256": "4f4f18feaa954728aa691ac82eeda00317097b690509d4ef71f9d2c1702851b3",
+ "size": 2296835,
+ "notes": "알람: 앱이 꺼져 있거나 화면이 꺼져 있어도 정각에 강한 진동 + 끄기/5분 뒤 (시계 앱처럼)",
+ "published_at": "2026-11-28 04:04",
  "encrypted": "aes-256-gcm",
- "apk_sha256": "1b2090842cb636f99418cef19d6c93aafa6077f6b6346e773cb85d94fc5093b0"
+ "apk_sha256": "48a96803115a567d4535cc1a0f6c29bd80026883de14b14d16195bbcafd0ce8c"
 }
