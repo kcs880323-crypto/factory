@@ -24,6 +24,7 @@
 //      /api/memos 응답의 todos — 항목은 {text|title, due|due_date|date, done|completed}
 //   3) 그것도 없으면 스마트 메모장의 안 끝난 메모 (GET /api/memos?days=30 의 items, 아래 줄 '메모장 기준')
 //   기한 지난 것·가까운 것 먼저, 기한 없는 것은 뒤. 읽기만 한다 (완료 처리는 앱 화면에서).
+//   제목은 늘 'TO-DO LIST', 개수는 아래 줄 맨 앞 '미완료 N' (같은 날 "'할 일 2' 말고 TO-DO LIST 로").
 // urlapp:rows 4
 // urlapp:alt-label 자비스 할 일
 // urlapp:alt-rows 6
@@ -39,11 +40,16 @@ async function () {
   }
   const soft = (p) => get(p).catch(() => null); // 기능이 없거나 꺼져 있으면 그 부분만 뺀다
 
-  // 두 번째 위젯: 할 일 목록 (없거나 못 읽으면 null → 그 위젯은 바꾸지 않는다)
+  // 두 번째 위젯: 할 일 목록 (없거나 못 읽으면 null → 그 위젯은 바꾸지 않는다).
+  // 제목은 늘 'TO-DO LIST' (2026-11-28 찰스님: "'할 일 2' 말고 TO-DO LIST 이런 식으로") — 개수는 아래 줄 맨 앞 '미완료 N'.
+  const TODO_TITLE = "TO-DO LIST";
+  const todoNote = (count, rest) => [count > 0 ? `미완료 ${count}` : "", ...rest].filter(Boolean).join(" · ");
   async function todos() {
     const t = await soft("/urlapp-todo.json");
     if (t && typeof t === "object" && Array.isArray(t.rows) && typeof t.title === "string") {
-      return { title: t.title, rows: t.rows.length ? t.rows : [{ label: "할 일", value: "없음" }], note: t.note || "" };
+      const n = /(\d+)/.exec(t.title); // 자비스 제목의 개수 ('할 일 2'), 없으면 줄 수
+      return { title: TODO_TITLE, rows: t.rows.length ? t.rows : [{ label: "할 일", value: "없음" }],
+        note: todoNote(t.rows.length ? (n ? +n[1] : t.rows.length) : 0, [t.note || ""]) };
     }
     const text = (it) => String((it && (it.text || it.title || it.content || it.name)) || "").replace(/\s+/g, " ").trim();
     const listOf = (j) => (Array.isArray(j) ? j : j && typeof j === "object"
@@ -79,10 +85,10 @@ async function () {
     const late = open.filter((x) => x.n != null && x.n < 0).length;
     const today0 = open.filter((x) => x.n === 0).length;
     return {
-      title: `자비스 할 일 ${open.length}`,
+      title: TODO_TITLE,
       rows: rows.length ? rows : [{ label: "할 일", value: "없음" }],
-      note: [late ? `지남 ${late}` : "", today0 ? `오늘 ${today0}` : "", open.length > rows.length ? `외 ${open.length - rows.length}개` : "",
-        memo ? "메모장 기준" : ""].filter(Boolean).join(" · "),
+      note: todoNote(open.length, [late ? `지남 ${late}` : "", today0 ? `오늘 ${today0}` : "",
+        open.length > rows.length ? `외 ${open.length - rows.length}개` : "", memo ? "메모장 기준" : ""]),
     };
   }
   const todoP = todos().catch(() => null);

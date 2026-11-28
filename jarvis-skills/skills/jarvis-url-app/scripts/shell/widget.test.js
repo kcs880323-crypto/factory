@@ -583,24 +583,24 @@ function check(label, cond, detail) {
   await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
   const ct = await cj.evaluate(() => __w[3]);
-  check("할 일 위젯: 자비스가 /urlapp-todo.json 을 주면 그대로 (첫 위젯은 예전과 같음)",
-    ct.alt && ct.alt.title === "할 일 3" && ct.alt.note === "오늘 1" && ct.alt.rows.length === 3 && ct.alt.rows[0].label === "전기차 보고"
+  check("할 일 위젯: 자비스가 /urlapp-todo.json 을 주면 그 줄 그대로, 제목은 'TO-DO LIST'·개수는 아래 줄 '미완료 N' (첫 위젯은 예전과 같음)",
+    ct.alt && ct.alt.title === "TO-DO LIST" && ct.alt.note === "미완료 3 · 오늘 1" && ct.alt.rows.length === 3 && ct.alt.rows[0].label === "전기차 보고"
       && ct.title === "자비스 · 진행 중 1" && ct.rows[0].value === "83%", ct);
   cjTodo = "memos";
   await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
   const cmm = await cj.evaluate(() => __w[3]);
   check("할 일 위젯(대체): 메모장의 안 끝난 일만, 지난 것·가까운 것 먼저, 기한 없는 것은 뒤, '메모장 기준'",
-    cmm.alt && cmm.alt.title === "자비스 할 일 4" && JSON.stringify(cmm.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
+    cmm.alt && cmm.alt.title === "TO-DO LIST" && JSON.stringify(cmm.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
       ["📅 검진 예약", "1일 지남", "neg"], ["🧾 택시비 정산", "오늘", "pos"], ["💼 전기차 보고", "D-3", ""], ["📝 세탁소 찾기", "개인·기타", ""]])
-      && cmm.alt.note === "지남 1 · 오늘 1 · 메모장 기준", cmm.alt);
+      && cmm.alt.note === "미완료 4 · 지남 1 · 오늘 1 · 메모장 기준", cmm.alt);
   cjTodo = "todos";
   await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
   const ctd = await cj.evaluate(() => __w[3]);
   check("할 일 위젯: '메모장 · TO-DO' 의 할 일 목록(/api/todos)을 찾으면 그것 (끝난 것 빼고, 오늘 먼저, '메모장 기준' 없음)",
-    ctd.alt && ctd.alt.title === "자비스 할 일 2" && JSON.stringify(ctd.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
-      ["테스트", "오늘", "pos"], ["엄마 점심", "D-1", ""]]) && ctd.alt.note === "오늘 1", ctd.alt);
+    ctd.alt && ctd.alt.title === "TO-DO LIST" && JSON.stringify(ctd.alt.rows.map((r) => [r.label, r.value, r.tone])) === JSON.stringify([
+      ["테스트", "오늘", "pos"], ["엄마 점심", "D-1", ""]]) && ctd.alt.note === "미완료 2 · 오늘 1", ctd.alt);
   cjTodo = "many";
   await cj.evaluate(() => { __w.length = 3; window.__urlappWidgetRun(); });
   await cj.waitForFunction(() => __w.length === 4, null, { timeout: 5000 });
